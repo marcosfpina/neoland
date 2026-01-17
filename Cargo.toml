@@ -41,8 +41,8 @@ candle-nn = "0.8"
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 hf-hub = "0.3"
 # Integration Dependencies (Path-based)
-securellm-core = { path = "../arch/securellm-bridge/crates/core" }
-intelagent-core = { path = "../arch/phantom/intelagent/crates/core" }
+securellm-core = { path = "../securellm-bridge/crates/core" }
+intelagent-core = { path = "../phantom/intelagent/crates/core" }
 
 
 [build-dependencies]

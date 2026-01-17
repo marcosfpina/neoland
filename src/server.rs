@@ -6,7 +6,7 @@ use llamachat::llama_service_server::{LlamaService, LlamaServiceServer};
 use llamachat::{ChatRequest, ChatResponse, AddDocumentRequest, AddDocumentResponse, SearchRequest, SearchResponse};
 use tokio_stream::wrappers::ReceiverStream;
 use std::sync::{Arc, Mutex};
-use crate::engine::LocalEngine;
+use crate::engine::{LocalEngine, GenerationConfig};
 use crate::nlp::VectorStore;
 use securellm_core; // Integration
 use intelagent_core::{TaskId, QualityGate}; // Integration
@@ -74,7 +74,41 @@ impl LlamaService for MyLlamaService {
         let req = request.into_inner();
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let state = self.state.clone();
-        
+
+        // Parse config from request
+        let mut config = GenerationConfig::default();
+
+        if let Some(temp) = req.temperature {
+            config.temperature = temp as f64;
+        }
+        if let Some(top_p) = req.top_p {
+            config.top_p = top_p as f64;
+        }
+        if let Some(max_tokens) = req.max_tokens {
+            config.max_tokens = max_tokens as usize;
+        }
+        if let Some(rep_penalty) = req.repetition_penalty {
+            config.repetition_penalty = rep_penalty;
+        }
+        if let Some(ctx_k) = req.context_top_k {
+            config.context_top_k = ctx_k as usize;
+        }
+        if let Some(ctx_threshold) = req.context_similarity_threshold {
+            config.context_similarity_threshold = ctx_threshold;
+        }
+        if let Some(disable_ctx) = req.disable_context {
+            config.disable_context = disable_ctx;
+        }
+        if let Some(sys_prompt) = req.system_prompt {
+            config.system_prompt = Some(sys_prompt);
+        }
+        if let Some(enable_cmds) = req.enable_commands {
+            config.enable_commands = enable_cmds;
+        }
+        if !req.allowed_commands.is_empty() {
+            config.allowed_commands = req.allowed_commands.clone();
+        }
+
         tokio::task::spawn_blocking(move || {
             let mut engine_guard = state.engine.lock().unwrap();
             if engine_guard.is_none() {
@@ -88,12 +122,74 @@ impl LlamaService for MyLlamaService {
             }
             if let Some(engine) = engine_guard.as_mut() {
                 let vs_guard = state.vector_store.lock().unwrap();
-                let _ = engine.generate_stream(&req.prompt, Some(&vs_guard), |token| {
-                    let _ = tx.blocking_send(Ok(ChatResponse {
-                        is_command: token.contains("[[CMD:"),
-                        content: token,
-                    }));
-                });
+
+                // Send metadata first
+                let metadata = llamachat::ResponseMetadata {
+                    temperature_used: config.temperature as f32,
+                    top_p_used: config.top_p as f32,
+                    max_tokens_used: config.max_tokens as i32,
+                    context_docs_count: 0, // Will be updated after generation
+                    context_doc_ids: vec![],
+                    system_prompt_used: config
+                        .system_prompt
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string()),
+                    commands_enabled: config.enable_commands,
+                };
+
+                let _ = tx.blocking_send(Ok(ChatResponse {
+                    content: String::new(),
+                    is_command: false,
+                    metadata: Some(metadata.clone()),
+                }));
+
+                match engine.generate_stream(&req.prompt, Some(&vs_guard), &config, |token| {
+                    // Filter commands if needed
+                    let should_send = if token.contains("[[CMD:") {
+                        if !config.enable_commands {
+                            false
+                        } else if !config.allowed_commands.is_empty() {
+                            // Check if command is in whitelist
+                            config.allowed_commands.iter().any(|cmd| token.contains(cmd))
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    };
+
+                    if should_send {
+                        let _ = tx.blocking_send(Ok(ChatResponse {
+                            is_command: token.contains("[[CMD:"),
+                            content: token,
+                            metadata: None,
+                        }));
+                    }
+                }) {
+                    Ok(context_doc_ids) => {
+                        // Send final metadata update with context info
+                        let final_metadata = llamachat::ResponseMetadata {
+                            temperature_used: config.temperature as f32,
+                            top_p_used: config.top_p as f32,
+                            max_tokens_used: config.max_tokens as i32,
+                            context_docs_count: context_doc_ids.len() as i32,
+                            context_doc_ids: context_doc_ids.clone(),
+                            system_prompt_used: config
+                                .system_prompt
+                                .clone()
+                                .unwrap_or_else(|| "default".to_string()),
+                            commands_enabled: config.enable_commands,
+                        };
+                        let _ = tx.blocking_send(Ok(ChatResponse {
+                            content: "[[METADATA_UPDATE]]".to_string(),
+                            is_command: false,
+                            metadata: Some(final_metadata),
+                        }));
+                    }
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(Status::internal(e.to_string())));
+                    }
+                }
             }
         });
         Ok(Response::new(ReceiverStream::new(rx)))
@@ -133,10 +229,13 @@ async fn rest_chat_handler(
     Json(req): Json<RestChatRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
-    
+
     // Get last user message
     let prompt = req.messages.last().map(|m| m.content.clone()).unwrap_or_default();
-    
+
+    // Use default config for REST (could be extended later)
+    let config = GenerationConfig::default();
+
     tokio::task::spawn_blocking(move || {
         let mut engine_guard = state.engine.lock().unwrap();
         if engine_guard.is_none() {
@@ -146,7 +245,7 @@ async fn rest_chat_handler(
         }
         if let Some(engine) = engine_guard.as_mut() {
             let vs_guard = state.vector_store.lock().unwrap();
-            let _ = engine.generate_stream(&prompt, Some(&vs_guard), |token| {
+            let _ = engine.generate_stream(&prompt, Some(&vs_guard), &config, |token| {
                 let response = RestChatResponse {
                     choices: vec![RestChoice {
                         delta: Some(RestDelta { content: token }),

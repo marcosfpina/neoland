@@ -7,9 +7,12 @@ use gtk4::{
     prelude::*,
     Box as GtkBox, Button, CssProvider, Entry, Label,
     ScrolledWindow, TextBuffer, TextView, Orientation, Switch, StyleContext,
+    Scale, SpinButton, Adjustment, CheckButton, Expander,
 };
 use libadwaita as adw;
 use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
+use std::rc::Rc;
 use tokio::sync::mpsc;
 // use tonic::transport::Channel;
 
@@ -22,6 +25,37 @@ use llamachat::ChatRequest;
 
 const APP_ID: &str = "com.exemplo.llamachat";
 const SERVER_URL: &str = "http://[::1]:50051";
+
+#[derive(Clone)]
+struct QueryConfig {
+    temperature: f32,
+    top_p: f32,
+    max_tokens: i32,
+    repetition_penalty: f32,
+    context_top_k: i32,
+    context_similarity_threshold: f32,
+    disable_context: bool,
+    system_prompt: String,
+    enable_commands: bool,
+    allowed_commands: String,
+}
+
+impl Default for QueryConfig {
+    fn default() -> Self {
+        Self {
+            temperature: 0.7,
+            top_p: 0.9,
+            max_tokens: 600,
+            repetition_penalty: 1.1,
+            context_top_k: 2,
+            context_similarity_threshold: 0.3,
+            disable_context: false,
+            system_prompt: String::new(),
+            enable_commands: true,
+            allowed_commands: String::new(),
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -95,16 +129,180 @@ fn build_ui(app: &adw::Application) {
         .build();
     main_box.append(&flap);
 
-    // SIDEBAR
-    let sidebar_box = GtkBox::new(Orientation::Vertical, 0);
-    sidebar_box.set_width_request(280); 
-    sidebar_box.add_css_class("sidebar"); 
-    
-    let status_label = Label::new(Some("CONECTADO AO SERVIDOR"));
-    status_label.set_margin_top(20);
+    // Configuration state
+    let query_config = Rc::new(RefCell::new(QueryConfig::default()));
+
+    // SIDEBAR - Advanced Controls
+    let sidebar_scroll = ScrolledWindow::builder()
+        .width_request(320)
+        .vexpand(true)
+        .build();
+
+    let sidebar_box = GtkBox::new(Orientation::Vertical, 10);
+    sidebar_box.set_margin_start(15);
+    sidebar_box.set_margin_end(15);
+    sidebar_box.set_margin_top(10);
+    sidebar_box.set_margin_bottom(10);
+    sidebar_box.add_css_class("sidebar");
+
+    let status_label = Label::new(Some("🔌 CONECTADO AO SERVIDOR"));
     status_label.add_css_class("caption-heading");
-    status_label.set_opacity(0.7);
+    status_label.set_opacity(0.8);
     sidebar_box.append(&status_label);
+
+    // Separator
+    let separator1 = gtk4::Separator::new(Orientation::Horizontal);
+    separator1.set_margin_top(10);
+    separator1.set_margin_bottom(10);
+    sidebar_box.append(&separator1);
+
+    // ==================== GENERATION PARAMETERS ====================
+    let gen_params_label = Label::new(Some("⚙️ Parâmetros de Geração"));
+    gen_params_label.set_halign(gtk4::Align::Start);
+    gen_params_label.add_css_class("heading");
+    sidebar_box.append(&gen_params_label);
+
+    // Temperature slider
+    let temp_box = create_labeled_slider(
+        "Temperature",
+        0.0, 2.0, 0.7,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().temperature = value as f32;
+        })
+    );
+    sidebar_box.append(&temp_box);
+
+    // Top P slider
+    let top_p_box = create_labeled_slider(
+        "Top P",
+        0.0, 1.0, 0.9,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().top_p = value as f32;
+        })
+    );
+    sidebar_box.append(&top_p_box);
+
+    // Max Tokens spinner
+    let max_tokens_box = create_labeled_spinner(
+        "Max Tokens",
+        1.0, 2000.0, 600.0,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().max_tokens = value as i32;
+        })
+    );
+    sidebar_box.append(&max_tokens_box);
+
+    // Repetition Penalty slider
+    let rep_penalty_box = create_labeled_slider(
+        "Repetition Penalty",
+        1.0, 2.0, 1.1,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().repetition_penalty = value as f32;
+        })
+    );
+    sidebar_box.append(&rep_penalty_box);
+
+    // Separator
+    let separator2 = gtk4::Separator::new(Orientation::Horizontal);
+    separator2.set_margin_top(10);
+    separator2.set_margin_bottom(10);
+    sidebar_box.append(&separator2);
+
+    // ==================== CONTEXT CONTROL ====================
+    let context_label = Label::new(Some("📚 Controle de Contexto"));
+    context_label.set_halign(gtk4::Align::Start);
+    context_label.add_css_class("heading");
+    sidebar_box.append(&context_label);
+
+    // Context Top K spinner
+    let ctx_top_k_box = create_labeled_spinner(
+        "Documentos (Top K)",
+        0.0, 10.0, 2.0,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().context_top_k = value as i32;
+        })
+    );
+    sidebar_box.append(&ctx_top_k_box);
+
+    // Context Similarity Threshold slider
+    let ctx_threshold_box = create_labeled_slider(
+        "Similaridade Mínima",
+        0.0, 1.0, 0.3,
+        clone!(@strong query_config => move |value| {
+            query_config.borrow_mut().context_similarity_threshold = value as f32;
+        })
+    );
+    sidebar_box.append(&ctx_threshold_box);
+
+    // Disable Context checkbox
+    let disable_ctx_check = CheckButton::with_label("Desabilitar Contexto");
+    disable_ctx_check.connect_toggled(clone!(@strong query_config => move |btn| {
+        query_config.borrow_mut().disable_context = btn.is_active();
+    }));
+    sidebar_box.append(&disable_ctx_check);
+
+    // Separator
+    let separator3 = gtk4::Separator::new(Orientation::Horizontal);
+    separator3.set_margin_top(10);
+    separator3.set_margin_bottom(10);
+    sidebar_box.append(&separator3);
+
+    // ==================== SYSTEM PROMPT ====================
+    let sys_prompt_expander = Expander::new(Some("🖊️ System Prompt Customizado"));
+    let sys_prompt_buffer = TextBuffer::new(None);
+    let sys_prompt_view = TextView::builder()
+        .buffer(&sys_prompt_buffer)
+        .wrap_mode(gtk4::WrapMode::WordChar)
+        .height_request(100)
+        .margin_top(5)
+        .build();
+    sys_prompt_buffer.connect_changed(clone!(@strong query_config => move |buffer| {
+        let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+        query_config.borrow_mut().system_prompt = text.to_string();
+    }));
+    let sys_prompt_scroll = ScrolledWindow::builder()
+        .child(&sys_prompt_view)
+        .height_request(100)
+        .build();
+    sys_prompt_expander.set_child(Some(&sys_prompt_scroll));
+    sidebar_box.append(&sys_prompt_expander);
+
+    // Separator
+    let separator4 = gtk4::Separator::new(Orientation::Horizontal);
+    separator4.set_margin_top(10);
+    separator4.set_margin_bottom(10);
+    sidebar_box.append(&separator4);
+
+    // ==================== COMMAND CONTROL ====================
+    let cmd_label = Label::new(Some("⚡ Execução de Comandos"));
+    cmd_label.set_halign(gtk4::Align::Start);
+    cmd_label.add_css_class("heading");
+    sidebar_box.append(&cmd_label);
+
+    // Enable Commands checkbox
+    let enable_cmds_check = CheckButton::with_label("Habilitar Comandos");
+    enable_cmds_check.set_active(true);
+    enable_cmds_check.connect_toggled(clone!(@strong query_config => move |btn| {
+        query_config.borrow_mut().enable_commands = btn.is_active();
+    }));
+    sidebar_box.append(&enable_cmds_check);
+
+    // Allowed Commands entry
+    let allowed_cmds_box = GtkBox::new(Orientation::Vertical, 5);
+    let allowed_cmds_label = Label::new(Some("Comandos Permitidos (separados por vírgula):"));
+    allowed_cmds_label.set_halign(gtk4::Align::Start);
+    allowed_cmds_label.set_opacity(0.7);
+    allowed_cmds_label.add_css_class("caption");
+    let allowed_cmds_entry = Entry::new();
+    allowed_cmds_entry.set_placeholder_text(Some("move_ws,scratchpad"));
+    allowed_cmds_entry.connect_changed(clone!(@strong query_config => move |entry| {
+        query_config.borrow_mut().allowed_commands = entry.text().to_string();
+    }));
+    allowed_cmds_box.append(&allowed_cmds_label);
+    allowed_cmds_box.append(&allowed_cmds_entry);
+    sidebar_box.append(&allowed_cmds_box);
+
+    sidebar_scroll.set_child(Some(&sidebar_box));
 
     // CHAT AREA
     let chat_box = GtkBox::new(Orientation::Vertical, 0);
@@ -142,13 +340,14 @@ fn build_ui(app: &adw::Application) {
     send_btn.add_css_class("suggested-action");
     
     // Send Logic
-    send_btn.connect_clicked(clone!(@weak entry, @weak text_buffer => move |_| {
+    send_btn.connect_clicked(clone!(@weak entry, @weak text_buffer, @strong query_config => move |_| {
         let message = entry.text().to_string();
         if !message.is_empty() {
             append_message(&text_buffer, "user", &message);
             entry.set_text("");
-            
-            send_message_grpc(message, text_buffer.clone());
+
+            let config = query_config.borrow().clone();
+            send_message_grpc(message, text_buffer.clone(), config);
         }
     }));
 
@@ -165,7 +364,7 @@ fn build_ui(app: &adw::Application) {
     chat_box.append(&input_container);
 
     flap.set_content(Some(&chat_box));
-    flap.set_flap(Some(&sidebar_box));
+    flap.set_flap(Some(&sidebar_scroll));
 
     window.set_content(Some(&main_box));
     window.present();
@@ -207,8 +406,7 @@ fn try_execute_command(buffer: &TextBuffer, command_str: &str) {
     }
 }
 
-fn send_message_grpc(message: String, buffer: TextBuffer) {
-    // We use glib::MainContext::spawn_local to handle async within GTK
+fn send_message_grpc(message: String, buffer: TextBuffer, config: QueryConfig) {
     glib::MainContext::default().spawn_local(async move {
         let mut client = match LlamaServiceClient::connect(SERVER_URL).await {
             Ok(c) => c,
@@ -218,23 +416,71 @@ fn send_message_grpc(message: String, buffer: TextBuffer) {
             }
         };
 
+        // Parse allowed commands
+        let allowed_commands: Vec<String> = if !config.allowed_commands.is_empty() {
+            config.allowed_commands
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        } else {
+            vec![]
+        };
+
         let request = ChatRequest {
             prompt: message,
             model_id: "qwen-1.8b".to_string(),
             use_local: true,
+            temperature: Some(config.temperature),
+            top_p: Some(config.top_p),
+            max_tokens: Some(config.max_tokens),
+            repetition_penalty: Some(config.repetition_penalty),
+            context_top_k: Some(config.context_top_k),
+            context_similarity_threshold: Some(config.context_similarity_threshold),
+            disable_context: Some(config.disable_context),
+            system_prompt: if !config.system_prompt.is_empty() {
+                Some(config.system_prompt)
+            } else {
+                None
+            },
+            enable_commands: Some(config.enable_commands),
+            allowed_commands,
+            session_id: None,
+            streaming: Some(true),
         };
 
         match client.chat_stream(request).await {
             Ok(response) => {
                 let mut stream = response.into_inner();
                 let mut response_buffer = String::new();
-                
+                let mut first_message = true;
+
                 while let Ok(Some(chunk)) = stream.message().await {
+                    // Handle metadata if present
+                    if let Some(metadata) = &chunk.metadata {
+                        if first_message {
+                            let metadata_str = format!(
+                                "\n[Metadata: Temp={:.2}, TopP={:.2}, MaxTokens={}, Docs={}, CmdsEnabled={}]\n",
+                                metadata.temperature_used,
+                                metadata.top_p_used,
+                                metadata.max_tokens_used,
+                                metadata.context_docs_count,
+                                metadata.commands_enabled
+                            );
+                            append_message(&buffer, "system", &metadata_str);
+                            first_message = false;
+                        }
+                    }
+
+                    // Skip metadata-only messages
+                    if chunk.content == "[[METADATA_UPDATE]]" {
+                        continue;
+                    }
+
                     response_buffer.push_str(&chunk.content);
-                    
+
                     // Command detection
                     if chunk.is_command {
-                        // In a real app, we'd handle the full command after stream ends or with markers
                         if let Some(start) = response_buffer.find("[[CMD:") {
                             if let Some(end) = response_buffer[start..].find("]]") {
                                 let cmd = &response_buffer[start..start + end + 2];
@@ -252,4 +498,68 @@ fn send_message_grpc(message: String, buffer: TextBuffer) {
             }
         }
     });
+}
+
+// Helper function to create a labeled slider
+fn create_labeled_slider<F>(label: &str, min: f64, max: f64, default: f64, callback: F) -> GtkBox
+where
+    F: Fn(f64) + 'static,
+{
+    let container = GtkBox::new(Orientation::Vertical, 5);
+
+    let label_box = GtkBox::new(Orientation::Horizontal, 5);
+    let label_widget = Label::new(Some(label));
+    label_widget.set_halign(gtk4::Align::Start);
+    label_widget.set_opacity(0.9);
+
+    let value_label = Label::new(Some(&format!("{:.2}", default)));
+    value_label.set_halign(gtk4::Align::End);
+    value_label.set_hexpand(true);
+    value_label.set_opacity(0.7);
+
+    label_box.append(&label_widget);
+    label_box.append(&value_label);
+
+    let adjustment = Adjustment::new(default, min, max, 0.01, 0.1, 0.0);
+    let scale = Scale::new(Orientation::Horizontal, Some(&adjustment));
+    scale.set_draw_value(false);
+    scale.set_hexpand(true);
+
+    scale.connect_value_changed(clone!(@weak value_label => move |scale| {
+        let value = scale.value();
+        value_label.set_text(&format!("{:.2}", value));
+        callback(value);
+    }));
+
+    container.append(&label_box);
+    container.append(&scale);
+
+    container
+}
+
+// Helper function to create a labeled spinner
+fn create_labeled_spinner<F>(label: &str, min: f64, max: f64, default: f64, callback: F) -> GtkBox
+where
+    F: Fn(f64) + 'static,
+{
+    let container = GtkBox::new(Orientation::Horizontal, 10);
+
+    let label_widget = Label::new(Some(label));
+    label_widget.set_halign(gtk4::Align::Start);
+    label_widget.set_hexpand(true);
+    label_widget.set_opacity(0.9);
+
+    let adjustment = Adjustment::new(default, min, max, 1.0, 10.0, 0.0);
+    let spinner = SpinButton::new(Some(&adjustment), 1.0, 0);
+    spinner.set_width_request(100);
+
+    spinner.connect_value_changed(move |spinner| {
+        let value = spinner.value();
+        callback(value);
+    });
+
+    container.append(&label_widget);
+    container.append(&spinner);
+
+    container
 }

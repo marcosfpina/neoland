@@ -2,31 +2,11 @@
   "mcpServers": {
     "securellm-mcp": {
       "command": "node",
-      "args": [
-        "/home/kernelcore/arch/securellm-mcp/build/src/index.js"
-      ],
+      "args": ["/home/kernelcore/arch/securellm-mcp/build/src/index.js"],
       "env": {
         "PROJECT_ROOT": "/nix/store/7hhp5bx0czr0r0jbbkbjhrlk8g9bg66d-securellm-bridge-mcp-2.0.0/bin/securellm-mcp",
         "KNOWLEDGE_DB_PATH": "/home/kernelcore/.local/share/securellm/knowledge.db",
-        "ENABLE_KNOWLEDGE": "true""alwaysAllow": [
-          "emergency_status",
-          "system_health_check",
-          "thermal_check",
-          "safe_rebuild_check",
-          "rebuild_safety_check",
-          "provider_test",
-          "security_audit",
-          "rate_limit_check",
-          "build_and_test",
-          "provider_config_validate",
-          "crypto_key_generate",
-          "create_session",
-          "save_knowledge",
-          "search_knowledge",
-          "load_session",
-          "list_sessions",
-          "get_recent_knowledge"
-        ]
+        "ENABLE_KNOWLEDGE": "true"
       }
     }
   }
