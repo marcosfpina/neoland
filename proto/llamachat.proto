@@ -17,11 +17,46 @@ message ChatRequest {
   string prompt = 1;
   string model_id = 2;
   bool use_local = 3;
+
+  // Advanced generation parameters
+  optional float temperature = 4;        // Default: 0.7
+  optional float top_p = 5;              // Default: 0.9
+  optional int32 max_tokens = 6;         // Default: 256
+  optional float repetition_penalty = 7; // Default: 1.1
+
+  // Context control parameters
+  optional int32 context_top_k = 8;           // Number of docs to retrieve. Default: 2
+  optional float context_similarity_threshold = 9; // Min similarity score. Default: 0.3
+  optional bool disable_context = 10;         // Disable vector store context injection
+
+  // System prompt override
+  optional string system_prompt = 11;    // Custom system prompt (overrides default)
+
+  // Command execution control
+  optional bool enable_commands = 12;    // Allow command execution. Default: true
+  repeated string allowed_commands = 13; // Whitelist of allowed commands (empty = all)
+
+  // Session management
+  optional string session_id = 14;       // For conversation continuity
+  optional bool streaming = 15;          // Enable token-by-token streaming. Default: true
 }
 
 message ChatResponse {
   string content = 1;
   bool is_command = 2; // Se o conteúdo for um comando [[CMD:...]]
+
+  // Metadata about the response (sent once at start of stream)
+  optional ResponseMetadata metadata = 3;
+}
+
+message ResponseMetadata {
+  float temperature_used = 1;
+  float top_p_used = 2;
+  int32 max_tokens_used = 3;
+  int32 context_docs_count = 4;
+  repeated string context_doc_ids = 5;
+  string system_prompt_used = 6;
+  bool commands_enabled = 7;
 }
 
 message AddDocumentRequest {
