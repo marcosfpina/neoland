@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package llamachat;
+
+service LlamaService {
+  // Stream de chat para inferência
+  rpc ChatStream (ChatRequest) returns (stream ChatResponse);
+  
+  // Adicionar documentos ao Vector Store
+  rpc AddDocument (AddDocumentRequest) returns (AddDocumentResponse);
+  
+  // Busca semântica manual
+  rpc Search (SearchRequest) returns (SearchResponse);
+}
+
+message ChatRequest {
+  string prompt = 1;
+  string model_id = 2;
+  bool use_local = 3;
+}
+
+message ChatResponse {
+  string content = 1;
+  bool is_command = 2; // Se o conteúdo for um comando [[CMD:...]]
+}
+
+message AddDocumentRequest {
+  string content = 1;
+  string metadata = 2;
+}
+
+message AddDocumentResponse {
+  string id = 1;
+  bool success = 2;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 top_k = 2;
+}
+
+message SearchResponse {
+  repeated Document results = 1;
+}
+
+message Document {
+  string id = 1;
+  string content = 2;
+  float score = 3;
+}
