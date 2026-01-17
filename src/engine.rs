@@ -116,7 +116,7 @@ Always output commands in format [[CMD:action:args]] when executing system actio
         let mut tokens = tokens.get_ids().to_vec();
 
         // Create logits processor with config parameters
-        let logits_processor = LogitsProcessor::new(
+        let mut logits_processor = LogitsProcessor::new(
             299792458,
             Some(config.temperature),
             Some(config.top_p),

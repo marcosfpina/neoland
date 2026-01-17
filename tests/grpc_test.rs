@@ -25,6 +25,18 @@ async fn test_grpc_chat_stream() {
                 prompt: "Olá, como você pode me ajudar?".to_string(),
                 model_id: "test".to_string(),
                 use_local: true,
+                temperature: None,
+                top_p: None,
+                max_tokens: None,
+                repetition_penalty: None,
+                context_top_k: None,
+                context_similarity_threshold: None,
+                disable_context: None,
+                system_prompt: None,
+                enable_commands: None,
+                allowed_commands: vec![],
+                session_id: None,
+                streaming: None,
             };
             
             let response = client.chat_stream(request).await.expect("RPC failed");
