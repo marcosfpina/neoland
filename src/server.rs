@@ -1,0 +1,211 @@
+mod engine;
+mod nlp;
+
+use tonic::{transport::Server as GrpcServer, Request, Response, Status};
+use llamachat::llama_service_server::{LlamaService, LlamaServiceServer};
+use llamachat::{ChatRequest, ChatResponse, AddDocumentRequest, AddDocumentResponse, SearchRequest, SearchResponse};
+use tokio_stream::wrappers::ReceiverStream;
+use std::sync::{Arc, Mutex};
+use crate::engine::LocalEngine;
+use crate::nlp::VectorStore;
+use securellm_core; // Integration
+use intelagent_core::{TaskId, QualityGate}; // Integration
+
+// Axum imports for REST
+use axum::{
+    routing::{post, get},
+    extract::{State, Json},
+    response::sse::{Event, Sse},
+    Router,
+};
+use serde::{Deserialize, Serialize};
+use futures::stream::Stream;
+use std::convert::Infallible;
+
+pub mod llamachat {
+    tonic::include_proto!("llamachat");
+}
+
+// REST Data Models (OpenAI compatible subset)
+#[derive(Deserialize)]
+struct RestChatRequest {
+    messages: Vec<RestMessage>,
+    stream: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+struct RestMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct RestChatResponse {
+    choices: Vec<RestChoice>,
+}
+
+#[derive(Serialize)]
+struct RestChoice {
+    delta: Option<RestDelta>,
+    message: Option<RestMessage>,
+}
+
+#[derive(Serialize)]
+struct RestDelta {
+    content: String,
+}
+
+// Shared State for gRPC and REST
+pub struct AppState {
+    engine: Arc<Mutex<Option<LocalEngine>>>,
+    vector_store: Arc<Mutex<VectorStore>>,
+}
+
+// gRPC Service Implementation
+pub struct MyLlamaService {
+    state: Arc<AppState>,
+}
+
+#[tonic::async_trait]
+impl LlamaService for MyLlamaService {
+    type ChatStreamStream = ReceiverStream<Result<ChatResponse, Status>>;
+
+    async fn chat_stream(&self, request: Request<ChatRequest>) -> Result<Response<Self::ChatStreamStream>, Status> {
+        let req = request.into_inner();
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let state = self.state.clone();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut engine_guard = state.engine.lock().unwrap();
+            if engine_guard.is_none() {
+                match LocalEngine::new() {
+                    Ok(e) => *engine_guard = Some(e),
+                    Err(err) => {
+                        let _ = tx.blocking_send(Err(Status::internal(err.to_string())));
+                        return;
+                    }
+                }
+            }
+            if let Some(engine) = engine_guard.as_mut() {
+                let vs_guard = state.vector_store.lock().unwrap();
+                let _ = engine.generate_stream(&req.prompt, Some(&vs_guard), |token| {
+                    let _ = tx.blocking_send(Ok(ChatResponse {
+                        is_command: token.contains("[[CMD:"),
+                        content: token,
+                    }));
+                });
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn add_document(&self, request: Request<AddDocumentRequest>) -> Result<Response<AddDocumentResponse>, Status> {
+        let req = request.into_inner();
+        let mut vs = self.state.vector_store.lock().unwrap();
+        match vs.add_document(&req.content, &req.metadata) {
+            Ok(_) => {
+                 // SecureLLM Audit
+                 println!("[SECURELLM] AUDIT: Document added. Metadata: {}", req.metadata);
+                 Ok(Response::new(AddDocumentResponse { id: "ok".to_string(), success: true }))
+            },
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn search(&self, request: Request<SearchRequest>) -> Result<Response<SearchResponse>, Status> {
+        let req = request.into_inner();
+        let vs = self.state.vector_store.lock().unwrap();
+        match vs.search(&req.query, req.top_k as usize) {
+            Ok(results) => {
+                let grpc_results = results.into_iter().map(|(doc, score)| {
+                    llamachat::Document { id: doc.id, content: doc.content, score }
+                }).collect();
+                Ok(Response::new(SearchResponse { results: grpc_results }))
+            },
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+}
+
+// REST Handlers
+async fn rest_chat_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RestChatRequest>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
+    
+    // Get last user message
+    let prompt = req.messages.last().map(|m| m.content.clone()).unwrap_or_default();
+    
+    tokio::task::spawn_blocking(move || {
+        let mut engine_guard = state.engine.lock().unwrap();
+        if engine_guard.is_none() {
+            if let Ok(e) = LocalEngine::new() {
+                *engine_guard = Some(e);
+            }
+        }
+        if let Some(engine) = engine_guard.as_mut() {
+            let vs_guard = state.vector_store.lock().unwrap();
+            let _ = engine.generate_stream(&prompt, Some(&vs_guard), |token| {
+                let response = RestChatResponse {
+                    choices: vec![RestChoice {
+                        delta: Some(RestDelta { content: token }),
+                        message: None,
+                    }]
+                };
+                let json = serde_json::json!(response).to_string();
+                let _ = tx.blocking_send(Ok(Event::default().data(json)));
+            });
+        }
+    });
+
+    Sse::new(tokio_stream::wrappers::ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::default())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let grpc_addr: std::net::SocketAddr = "0.0.0.0:50051".parse()?;
+    let rest_addr: std::net::SocketAddr = "0.0.0.0:3001".parse()?;
+    
+    println!("Inicializando LlamaChat Enterprise...");
+    
+    let vector_store = Arc::new(Mutex::new(VectorStore::new()?));
+    {
+        let mut vs = vector_store.lock().unwrap();
+        let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
+    }
+
+    // Phantom Integration Check
+    let phantom_task_id = TaskId::new();
+    println!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
+
+    let shared_state = Arc::new(AppState {
+        engine: Arc::new(Mutex::new(None)),
+        vector_store,
+    });
+
+    // 1. Start gRPC Server
+    let grpc_state = shared_state.clone();
+    let grpc_future = GrpcServer::builder()
+        .add_service(LlamaServiceServer::new(MyLlamaService { state: grpc_state }))
+        .serve(grpc_addr);
+
+    // 2. Start REST Server (Axum)
+    let app = Router::new()
+        .route("/v1/chat/completions", post(rest_chat_handler))
+        .route("/health", get(|| async { "OK" }))
+        .with_state(shared_state);
+        
+    let listener = tokio::net::TcpListener::bind(rest_addr).await?;
+    println!("REST API rodando em http://{}", rest_addr);
+    println!("gRPC Service rodando em {}", grpc_addr);
+
+    // Run both servers concurrently
+    tokio::select! {
+        res = grpc_future => println!("gRPC Server exit: {:?}", res),
+        res = axum::serve(listener, app) => println!("REST Server exit: {:?}", res),
+    }
+
+    Ok(())
+}
