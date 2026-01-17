@@ -1,0 +1,49 @@
+[package]
+name = "llamachat-poc"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "llamachat-client"
+path = "src/main.rs"
+
+[[bin]]
+name = "llamachat-server"
+path = "src/server.rs"
+
+[dependencies]
+gtk4 = "0.9"
+libadwaita = "0.7"
+glib = "0.19"
+gio = "0.19"
+
+reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
+async-channel = "2.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+
+# gRPC & Async
+tonic = "0.12"
+prost = "0.13"
+tokio = { version = "1.40", features = ["full"] }
+tokio-stream = "0.1"
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+futures = "0.3"
+
+# Local Inference Engine (Candle)
+candle-core = "0.8"
+candle-transformers = "0.8"
+candle-nn = "0.8"
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+hf-hub = "0.3"
+# Integration Dependencies (Path-based)
+securellm-core = { path = "../arch/securellm-bridge/crates/core" }
+intelagent-core = { path = "../arch/phantom/intelagent/crates/core" }
+
+
+[build-dependencies]
+tonic-build = "0.12"
