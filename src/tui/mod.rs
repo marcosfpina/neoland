@@ -1,0 +1,208 @@
+// TUI module for Neoland
+// Terminal User Interface using ratatui + crossterm
+
+pub mod app;
+pub mod ui;
+pub mod events;
+pub mod presets;
+
+use app::AppState;
+use events::{handle_events, AppEvent};
+use ui::render;
+
+use anyhow::Result;
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
+
+/// Executa o cliente TUI
+pub async fn run_client(server_url: &str) -> Result<()> {
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create app state
+    let mut app = AppState::new(server_url.to_string());
+
+    // Main event loop
+    loop {
+        terminal.draw(|f| render(f, &app))?;
+
+        if let Some(event) = handle_events(&mut app)? {
+            match event {
+                AppEvent::Quit => break,
+                AppEvent::SendMessage => {
+                    if !app.input_buffer.is_empty() {
+                        // Send message to server
+                        send_message_to_server(&mut app).await?;
+                    }
+                }
+                AppEvent::ClearChat => {
+                    app.messages.clear();
+                    app.add_system_message("🗑️ Chat limpo");
+                }
+                AppEvent::ApplyPreset(preset_name) => {
+                    app.apply_preset(&preset_name);
+                }
+                AppEvent::ToggleSidebar => {
+                    app.sidebar_visible = !app.sidebar_visible;
+                }
+                AppEvent::Input(c) => {
+                    app.input_buffer.push(c);
+                }
+                AppEvent::Backspace => {
+                    app.input_buffer.pop();
+                }
+                AppEvent::ScrollUp => {
+                    if app.scroll_offset > 0 {
+                        app.scroll_offset -= 1;
+                    }
+                }
+                AppEvent::ScrollDown => {
+                    app.scroll_offset += 1;
+                }
+            }
+        }
+    }
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    Ok(())
+}
+
+/// Envia mensagem para o servidor (ml-offload-api ou gRPC fallback)
+async fn send_message_to_server(app: &mut AppState) -> Result<()> {
+    use crate::ml_offload::{MLOffloadClient, ChatCompletionRequest, ChatMessage};
+
+    let message = app.input_buffer.clone();
+    app.add_user_message(&message);
+    app.input_buffer.clear();
+
+    // Try ml-offload-api first (port 9000)
+    let ml_client = MLOffloadClient::new("http://localhost:9000".into());
+    
+    match ml_client.health().await {
+        Ok(_) => {
+            // ml-offload-api available - use it
+            let request = ChatCompletionRequest {
+                model: "auto".into(),  // Let ml-offload-api choose best backend
+                messages: vec![ChatMessage {
+                    role: "user".into(),
+                    content: message.clone(),
+                }],
+                temperature: Some(app.config.temperature),
+                max_tokens: Some(app.config.max_tokens as u32),
+                stream: None,
+                stop: None,
+                top_p: Some(app.config.top_p),
+            };
+
+            match ml_client.chat_completion(request).await {
+                Ok(response) => {
+                    if let Some(choice) = response.choices.first() {
+                        app.add_assistant_message(&choice.message.content);
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    app.add_system_message(&format!("⚠️ ml-offload-api error: {}, trying gRPC fallback...", e));
+                }
+            }
+        }
+        Err(_) => {
+            app.add_system_message("⚠️ ml-offload-api offline, using gRPC fallback...");
+        }
+    }
+
+    // Fallback to local gRPC server
+    use crate::llamachat::llama_service_client::LlamaServiceClient;
+    use crate::llamachat::ChatRequest;
+
+    let mut client = LlamaServiceClient::connect(app.server_url.clone()).await?;
+
+    let config = app.config.clone();
+    let request = ChatRequest {
+        prompt: message.clone(),
+        model_id: "qwen-1.8b".to_string(),
+        use_local: true,
+        temperature: Some(config.temperature),
+        top_p: Some(config.top_p),
+        max_tokens: Some(config.max_tokens),
+        repetition_penalty: Some(config.repetition_penalty),
+        typical_p: Some(config.typical_p),
+        epsilon_cutoff: Some(config.epsilon_cutoff),
+        eta_cutoff: Some(config.eta_cutoff),
+        tail_free_sampling: Some(config.tail_free_sampling),
+        top_a: Some(config.top_a),
+        context_top_k: Some(config.context_top_k),
+        context_similarity_threshold: Some(config.context_similarity_threshold),
+        disable_context: Some(config.disable_context),
+        system_prompt: if !config.system_prompt.is_empty() {
+            Some(config.system_prompt.clone())
+        } else {
+            None
+        },
+        enable_commands: Some(config.enable_commands),
+        allowed_commands: config
+            .allowed_commands
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+        session_id: None,
+        streaming: Some(true),
+    };
+
+    // Stream response from gRPC fallback
+    let mut stream = match client.chat_stream(request).await {
+        Ok(s) => s.into_inner(),
+        Err(e) => {
+            app.add_system_message(&format!("⚠️ Local gRPC failed: {}, trying SecureLLM Proxy...", e));
+            
+            // 3. Fallback to SecureLLM Proxy (Remote + Audit)
+            use crate::llm::SecureLLMProxy;
+            
+            // TODO: Load API Key from secure storage/env
+            match SecureLLMProxy::new("openai", None) {
+                Ok(proxy) => {
+                     match proxy.send_secure(&message).await {
+                        Ok(response) => {
+                            app.add_assistant_message(&response);
+                            return Ok(());
+                        },
+                        Err(err) => {
+                             app.add_system_message(&format!("❌ SecureLLM Proxy failed: {}", err));
+                        }
+                     }
+                },
+                Err(err) => {
+                    app.add_system_message(&format!("❌ SecureLLM init failed: {}", err));
+                }
+            }
+            return Ok(());
+        }
+    };
+
+    let mut response_text = String::new();
+
+    while let Ok(Some(chunk)) = stream.message().await {
+        if chunk.content == "[[METADATA_UPDATE]]" {
+            continue;
+        }
+        response_text.push_str(&chunk.content);
+        // TODO: Update UI in real-time (need streaming support in AppState)
+    }
+
+    app.add_assistant_message(&response_text);
+
+    Ok(())
+}

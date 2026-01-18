@@ -1,60 +1,83 @@
-use std::process::Command;
-use std::sync::Once;
+// Hyprland Operations Module
+// Re-implementado usando crate `hyprland-ipc` do ai-agent-os
 
-static HYPRLAND_INIT: Once = Once::new();
+use anyhow::Result;
+use hyprland_ipc::{HyprlandClient, Workspace, Window};
 
-pub struct HyprlandOps;
+pub struct HyprlandIPC {
+    client: HyprlandClient,
+}
 
-impl HyprlandOps {
-    /// Inicializa regras base para a aplicação
-    pub fn init_rules(app_id: &str) {
-        HYPRLAND_INIT.call_once(|| {
-            // Regex: class:^(app.id)$
-            // Format string: r"class:\^({})$" -> {} será substituído pelo app_id
-            let class_regex = format!(r"class:\^({})$", app_id.replace(".", "\\."));
-
-            // 1. Força flutuante
-            let _ = Self::dispatch("exec", &format!("hyprctl keyword windowrulev2 \"float, {}\"", class_regex));
-            let _ = Self::dispatch("exec", &format!("hyprctl keyword windowrulev2 \"center, {}\"", class_regex));
-            let _ = Self::dispatch("exec", &format!("hyprctl keyword windowrulev2 \"size 1200 800, {}\"", class_regex));
-
-            // 2. Opacidade
-            let _ = Self::dispatch("exec", &format!("hyprctl keyword windowrulev2 \"opacity 0.90 0.90, {}\"", class_regex));
-            
-            // 3. Animação
-            let _ = Self::dispatch("exec", &format!("hyprctl keyword windowrulev2 \"animation popin 80%, {}\"", class_regex));
-
-            println!("Hyprland rules injected for {}", app_id);
-        });
+impl HyprlandIPC {
+    pub async fn new() -> Result<Self> {
+        let client = HyprlandClient::new()?;
+        Ok(Self { client })
     }
 
-    #[allow(dead_code)]
-    pub fn bind_global_shortcut(mods: &str, key: &str, action: &str) {
-        let _ = Self::dispatch("keyword", &format!("bind {}, {}, {}", mods, key, action));
+    /// Envia comando raw para Hyprland
+    pub async fn dispatch(&self, command: &str) -> Result<String> {
+        self.client.dispatch(command).await
     }
 
-    pub fn move_to_workspace(id: i32) {
-        let _ = Self::dispatch("dispatch", &format!("movetoworkspace {}, activewindow", id));
+    /// Obtém workspace ativo
+    pub async fn get_active_workspace(&self) -> Result<Workspace> {
+        self.client.get_active_workspace().await
     }
 
-    pub fn toggle_scratchpad() {
-        let _ = Self::dispatch("dispatch", "movetoworkspace special:llamachat, activewindow");
-        let _ = Self::dispatch("dispatch", "togglespecialworkspace llamachat");
+    /// Obtém todas janelas
+    pub async fn get_clients(&self) -> Result<Vec<Window>> {
+        self.client.get_clients().await
     }
 
-    fn dispatch(cmd: &str, args: &str) -> std::io::Result<()> {
-        let mut command = Command::new("hyprctl");
-        let parts: Vec<&str> = args.splitn(2, ' ').collect();
-        command.arg(cmd);
-        if !parts.is_empty() {
-             command.arg(args);
-        }
-        match command.spawn() {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                eprintln!("Hyprland error: {}", e);
-                Err(e)
-            }
-        }
+    // ===========================================
+    // Window Management (Convenience Methods)
+    // ===========================================
+
+    /// Define opacidade da janela (0.0 a 1.0)
+    pub async fn set_window_opacity(&self, address: &str, opacity: f32) -> Result<()> {
+        let cmd = format!("setprop address:{} alpha {}", address, opacity);
+        self.dispatch(&cmd).await?;
+        Ok(())
+    }
+
+    /// Define opacidade da janela ativa
+    pub async fn set_active_opacity(&self, opacity: f32) -> Result<()> {
+        let cmd = format!("setprop active alpha {}", opacity);
+        self.dispatch(&cmd).await?;
+        Ok(())
+    }
+
+    /// Toggle floating mode
+    pub async fn toggle_float(&self, address: Option<&str>) -> Result<()> {
+        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch togglefloating {}", target)).await?;
+        Ok(())
+    }
+
+    /// Centraliza janela
+    pub async fn center_window(&self, address: Option<&str>) -> Result<()> {
+        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch centerwindow {}", target)).await?;
+        Ok(())
+    }
+
+    /// Move para workspace
+    pub async fn move_to_workspace(&self, workspace_id: i32, address: Option<&str>) -> Result<()> {
+        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch movetoworkspace {},{}", workspace_id, target)).await?;
+        Ok(())
+    }
+
+    /// Move para scratchpad (special workspace)
+    pub async fn move_to_scratchpad(&self, address: Option<&str>) -> Result<()> {
+        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch movetoworkspace special:scratch_neoland,{}", target)).await?;
+        Ok(())
+    }
+
+    /// Toggle scratchpad
+    pub async fn toggle_scratchpad(&self) -> Result<()> {
+        self.dispatch("dispatch togglespecialworkspace scratch_neoland").await?;
+        Ok(())
     }
 }

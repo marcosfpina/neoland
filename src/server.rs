@@ -8,8 +8,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use std::sync::{Arc, Mutex};
 use crate::engine::{LocalEngine, GenerationConfig};
 use crate::nlp::VectorStore;
-use securellm_core; // Integration
-use intelagent_core::{TaskId, QualityGate}; // Integration
+// Integration dependencies (currently used for demonstration)
+// use securellm_core;
+use intelagent_core::TaskId;
 
 // Axum imports for REST
 use axum::{
@@ -30,6 +31,7 @@ pub mod llamachat {
 #[derive(Deserialize)]
 struct RestChatRequest {
     messages: Vec<RestMessage>,
+    #[allow(dead_code)] // Will be used for non-streaming responses
     stream: Option<bool>,
 }
 
@@ -277,12 +279,15 @@ async fn rest_chat_handler(
         .keep_alive(axum::response::sse::KeepAlive::default())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let grpc_addr: std::net::SocketAddr = "0.0.0.0:50051".parse()?;
-    let rest_addr: std::net::SocketAddr = "0.0.0.0:3001".parse()?;
+pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    use tracing::{info, warn};
     
-    println!("Inicializando LlamaChat Enterprise...");
+    let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
+    let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
+    
+    info!("🚀 Inicializando Neoland Server...");
+    info!("📡 gRPC endpoint: {}", grpc_addr);
+    info!("🌐 REST endpoint: {}", rest_addr);
     
     let vector_store = Arc::new(Mutex::new(VectorStore::new()?));
     {
@@ -292,7 +297,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Phantom Integration Check
     let phantom_task_id = TaskId::new();
-    println!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
+    info!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
 
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
@@ -312,13 +317,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(shared_state);
         
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;
-    println!("REST API rodando em http://{}", rest_addr);
-    println!("gRPC Service rodando em {}", grpc_addr);
+    info!("✅ REST API rodando em http://{}", rest_addr);
+    info!("✅ gRPC Service rodando em {}", grpc_addr);
 
     // Run both servers concurrently
     tokio::select! {
-        res = grpc_future => println!("gRPC Server exit: {:?}", res),
-        res = axum::serve(listener, app) => println!("REST Server exit: {:?}", res),
+        res = grpc_future => info!("gRPC Server exit: {:?}", res),
+        res = axum::serve(listener, app) => info!("REST Server exit: {:?}", res),
     }
 
     Ok(())
