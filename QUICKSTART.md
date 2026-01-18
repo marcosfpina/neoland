@@ -1,236 +1,278 @@
-# Neoland - CLI Unificado 🚀
+# Neoland Quick Start Guide
 
-## Execução Rápida
+**Last Updated**: 2026-01-18
 
-### Opção 1: Nova CLI (Recomendado)
+Get up and running with Neoland in under 5 minutes.
 
-**Servidor**:
+---
+
+## Prerequisites
+
+- NixOS or Nix package manager
+- 2GB free RAM (for local inference)
+- Terminal emulator
+
+---
+
+## Installation
+
+### Option 1: Development Mode
 
 ```bash
-nix develop --command cargo run --bin neoland -- server
-# Ou com portas customizadas:
-nix develop --command cargo run --bin neoland -- server --grpc-port 50052 --rest-port 3002
+cd /home/kernelcore/arch/neoland
+nix develop
 ```
 
-**Cliente** (TUI - Em Desenvolvimento):
+### Option 2: Build Release Binary
 
 ```bash
-nix develop --command cargo run --bin neoland -- client
-```
-
-**Health Check**:
-
-```bash
-nix develop --command cargo run --bin neoland -- test
-```
-
-**Restart**:
-
-```bash
-nix develop --command cargo run --bin neoland -- restart
+nix develop --command cargo build --bin neoland --release
+# Binary: ./target/release/neoland
 ```
 
 ---
 
-### Opção 2: Build Release
+## Basic Usage
+
+### 1. Start the Server
 
 ```bash
-# Build única vez
-nix develop --command cargo build --release --bins
+# Default ports: gRPC=50051, REST=3001
+neoland server
 
-# Executar
-./target/release/neoland server
-./target/release/neoland client
-./target/release/neoland test
-./target/release/neoland --help
+# Custom configuration
+neoland server --grpc-port 50052 --rest-port 3002 --log-level debug
+```
+
+The server will:
+
+- Download models on first run (~1.2GB total)
+- Start gRPC service on `[::]:<grpc-port>`
+- Start REST API on `0.0.0.0:<rest-port>`
+
+### 2. Launch TUI Client
+
+**In a new terminal**:
+
+```bash
+# Connect to default local server
+neoland client
+
+# Custom endpoints
+neoland client \
+  --server-url http://[::1]:50051 \
+  --ml-api-url http://localhost:9000
 ```
 
 ---
 
-### Opção 3: Legacy (Scripts Shell - Deprecated)
+## TUI Interface
 
-Ainda funcionam, mas serão removidos:
+### Layout
 
-```bash
-./run-server.sh
-./run-client.sh  # GTK4, será substituído por TUI
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🚀 Neoland TUI | http://[::1]:50051 | ✅ Ready | Preset: ... │
+├─────────────────────────────────────────┬───────────────────┤
+│ 💬 Chat                                 │ ℹ️  Info           │
+│                                         │                   │
+│ [12:34:56] 👤 VOCÊ                      │ 📊 Config Atual   │
+│ Hello, how are you?                     │                   │
+│                                         │  Temperature: 0.70│
+│ [12:34:58] 🤖 AI                        │  Top P: 0.90      │
+│ I'm doing well! How can I help?         │  Max Tokens: 600  │
+│                                         │                   │
+│                                         │ ⌨️  Atalhos       │
+│                                         │                   │
+│                                         │  Ctrl+1-5: Presets│
+│                                         │  Ctrl+L: Limpar   │
+│                                         │  Tab: Sidebar     │
+│                                         │  Esc: Sair        │
+├─────────────────────────────────────────┴───────────────────┤
+│ ✏️  Input (Ctrl+Enter para enviar)                          │
+│ _                                                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
+### Keyboard Shortcuts
+
+| Key            | Action                      |
+| -------------- | --------------------------- |
+| **Ctrl+Enter** | Send message                |
+| **Ctrl+L**     | Clear chat                  |
+| **Ctrl+1**     | Balanced preset (temp: 0.7) |
+| **Ctrl+2**     | Creative preset (temp: 1.5) |
+| **Ctrl+3**     | Precise preset (temp: 0.3)  |
+| **Ctrl+4**     | Research preset (RAG: max)  |
+| **Ctrl+5**     | Safe preset (commands: off) |
+| **Tab**        | Toggle sidebar              |
+| **j** / **k**  | Scroll down/up              |
+| **Esc**        | Quit                        |
+
+### Visual Feedback
+
+- **✅ Ready**: System idle
+- **⏳ Thinking...**: Processing inference
+
 ---
 
-## 📖 CLI Subcomandos
+## Testing
 
-### `neoland server`
-
-Inicia o servidor gRPC + REST.
-
-**Flags**:
-
-- `--grpc-port <PORT>` - Porta gRPC (padrão: 50051)
-- `--rest-port <PORT>` - Porta REST (padrão: 3001)
-- `--log-level <LEVEL>` - Nível de logging: trace/debug/info/warn/error (padrão: info)
-
-**Exemplo**:
+### Health Check
 
 ```bash
-nix develop --command cargo run --bin neoland -- \
-  server \
-  --grpc-port 50052 \
-  --rest-port 3002 \
-  --log-level debug
+neoland test
 ```
 
----
+Verifies:
 
-### `neoland client`
+1. REST API (`/health` endpoint)
+2. gRPC connectivity
+3. Process status
 
-Inicia o cliente TUI (Terminal User Interface).
-
-> ⚠️ **Em Desenvolvimento**: Fase 2 (TUI ratatui) ainda não implementada.  
-> Use temporariamente: `nix develop --command cargo run --bin llamachat-client` (GTK4 legacy)
-
-**Flags**:
-
-- `--server-url <URL>` - URL do servidor gRPC (padrão: `http://[::1]:50051`)
-
----
-
-### `neoland test`
-
-Executa health checks completos no servidor.
-
-**Flags**:
-
-- `--rest-endpoint <URL>` - Endpoint REST (padrão: `http://localhost:3001`)
-- `--grpc-endpoint <URL>` - Endpoint gRPC (padrão: `http://[::1]:50051`)
-
-**Testes executados**:
-
-1. REST health endpoint (`/health`)
-2. Verificação de conexão gRPC
-3. Verificação de processos (`ps aux`)
-
----
-
-### `neoland restart`
-
-Reinicia o servidor (mata processo antigo e inicia novo).
-
-**Flags**:
-
-- `--grpc-port <PORT>` - Porta gRPC (padrão: 50051)
-- `--rest-port <PORT>` - Porta REST (padrão: 3001)
-
----
-
-## 🔍 Verificação de Saúde
-
-### Testar gRPC (com servidor rodando):
+### REST API Direct Test
 
 ```bash
-nix develop --command cargo test --release test_grpc_chat_stream
-```
-
-### Testar REST API:
-
-```bash
+# Health check
 curl http://localhost:3001/health
-# Resposta esperada: OK
+# Expected: OK
+
+# Chat completion (OpenAI-compatible)
+curl -X POST http://localhost:3001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'
 ```
 
 ---
 
-## 🎯 Atalhos do Cliente (GTK4 Legacy)
+## Advanced Configuration
 
-| Atalho         | Ação                         |
-| -------------- | ---------------------------- |
-| **Ctrl+1**     | Preset Balanceado            |
-| **Ctrl+2**     | Preset Criativo              |
-| **Ctrl+3**     | Preset Preciso               |
-| **Ctrl+4**     | Preset Pesquisa (RAG Max)    |
-| **Ctrl+5**     | Preset Seguro (sem comandos) |
-| **Ctrl+L**     | Limpar chat                  |
-| **Ctrl+Enter** | Enviar mensagem              |
-| **F12**        | Toggle Hyprland scratchpad   |
-
----
-
-## 📦 Modelos de IA
-
-Na primeira execução, os modelos serão baixados automaticamente:
-
-- **LLM**: Qwen 1.8B Chat (~1.1 GB)
-- **Embeddings**: MiniLM-L6-v2 (~90 MB)
-
-**Cache**: `~/.cache/huggingface/`
-
----
-
-## ⚠️ Troubleshooting
-
-### Erro: "Connection refused"
-
-- ✅ Certifique-se de que o **servidor está rodando** (Terminal 1)
-- ✅ Verifique se a porta **50051** está livre: `lsof -i :50051`
-
-### Erro: "Failed to load model"
-
-- ✅ Verifique conexão com internet (download de modelos)
-- ✅ Limpe cache: `rm -rf ~/.cache/huggingface/hub/models--Qwen*`
-
-### Cliente GTK4 não abre
-
-- ✅ Verifique display server: `echo $WAYLAND_DISPLAY` ou `echo $DISPLAY`
-- ✅ Execute em ambiente gráfico (não SSH sem X11 forwarding)
-
----
-
-## 🧪 Teste Completo
+### Environment Variables
 
 ```bash
-# Terminal 1: Iniciar servidor
-nix develop --command cargo run --bin neoland -- server
+# ML Offload API URL (if using external GPU service)
+export ML_API_URL="http://gpu-server.local:9000"
 
-# Terminal 2: Executar health check
-nix develop --command cargo run --bin neoland -- test
-
-# Terminal 2: Executar cliente (GTK4 legacy)
-nix develop --command cargo run --bin llamachat-client
+neoland client --ml-api-url $ML_API_URL
 ```
 
+### Preset Customization
+
+Edit `src/tui/presets.rs`:
+
+```rust
+pub fn creative() -> Self {
+    Self {
+        temperature: 1.8,  // Increase randomness
+        max_tokens: 800,   // Longer responses
+        // ...
+    }
+}
+```
+
+Rebuild: `cargo build --release`
+
 ---
 
-## 📊 Endpoints
+## NixOS Integration
 
-- **gRPC**: `http://[::1]:50051` (cliente GTK4)
-- **REST**: `http://0.0.0.0:3001` (API OpenAI-compatible)
-- **Health**: `http://localhost:3001/health`
+### System Service
+
+Add to `configuration.nix`:
+
+```nix
+imports = [ ./modules/applications/neoland.nix ];
+
+services.neoland = {
+  enable = true;
+  grpcPort = 50051;
+  restPort = 3001;
+};
+```
+
+Rebuild: `sudo nixos-rebuild switch`
+
+### Hyprland Scratchpad
+
+Included in module config:
+
+- **Keybind**: `Super+N` toggles scratchpad
+- **Window Rules**: Float, center, 1400x900, 95% opacity
+
+### Agent Hub Launcher
+
+Access via Wofi menu (configured in `agent-hub.nix`):
+
+- Select "󰜈 Neoland - AI Agent"
+- Client launches in Alacritty terminal
 
 ---
 
-## 🛠️ Build & Desenvolvimento
+## Troubleshooting
+
+### Model Download Issues
 
 ```bash
-# Verificar código
-nix develop --command cargo check --all-targets
+# Clear cache and retry
+rm -rf ~/.cache/huggingface/hub/models--Qwen*
+neoland server
+```
 
-# Build release (todos binaries)
-nix develop --command cargo build --release --bins
+### Connection Refused
 
-# Build específico
-nix develop --command cargo build --release --bin neoland
+```bash
+# Check if server is running
+pgrep -f "neoland server"
 
-# Executar testes
-nix develop --command cargo test --release
+# Check port availability
+lsof -i :50051
+```
 
-# Limpar build
-cargo clean
+### TUI Not Rendering
+
+```bash
+# Verify terminal capabilities
+echo $TERM
+# Should be: xterm-256color, alacritty, or similar
+
+# Force color support
+export TERM=xterm-256color
+neoland client
+```
+
+### High Memory Usage
+
+Server memory grows with chat history. Restart periodically:
+
+```bash
+neoland restart
 ```
 
 ---
 
-## 🚀 Próximas Fases
+## Performance Tips
 
-- **Fase 2**: TUI moderna com ratatui (substituir GTK4)
-- **Fase 3**: Integração profunda com intelagent-core (phantom)
-- **Fase 4**: Integração com securellm-bridge (fallback multi-provider)
+1. **Use ml-offload-api**: Offload to GPU for 10-50x speedup
+2. **Reduce max_tokens**: Lower values = faster responses
+3. **Disable RAG**: Set `context_top_k: 0` if not needed
+
+---
+
+## Next Steps
+
+- Read `ARCHITECTURE.md` for technical details
+- Explore integration points (`ml-offload-api`, `securellm-bridge`)
+- Check NixOS module: `/etc/nixos/modules/applications/neoland.nix`
+
+---
+
+## Support
+
+Internal project - contact VoidNxSEC team for issues.
+
+---
+
+**Pro Tip**: Use `neoland --help` or `neoland <command> --help` for detailed CLI documentation.

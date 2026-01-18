@@ -44,11 +44,11 @@ async fn test_grpc_chat_stream() {
                 streaming: None,
             };
             
-            let response = client.chat_stream(request).await.expect("RPC failed");
+            let response = client.chat_stream(request).await?;
             let mut stream = response.into_inner();
             
             if let Some(chunk) = stream.next().await {
-                let chunk = chunk.expect("Stream error");
+                let chunk = chunk?;
                 assert!(!chunk.content.is_empty());
                 println!("Recebido: {}", chunk.content);
             }
