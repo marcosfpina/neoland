@@ -90,6 +90,21 @@ impl LlamaService for MyLlamaService {
         if let Some(rep_penalty) = req.repetition_penalty {
             config.repetition_penalty = rep_penalty;
         }
+        if let Some(typical_p) = req.typical_p {
+            config.typical_p = typical_p as f64;
+        }
+        if let Some(epsilon_cutoff) = req.epsilon_cutoff {
+            config.epsilon_cutoff = epsilon_cutoff as f64;
+        }
+        if let Some(eta_cutoff) = req.eta_cutoff {
+            config.eta_cutoff = eta_cutoff as f64;
+        }
+        if let Some(tail_free_sampling) = req.tail_free_sampling {
+            config.tail_free_sampling = tail_free_sampling as f64;
+        }
+        if let Some(top_a) = req.top_a {
+            config.top_a = top_a as f64;
+        }
         if let Some(ctx_k) = req.context_top_k {
             config.context_top_k = ctx_k as usize;
         }
