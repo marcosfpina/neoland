@@ -40,7 +40,10 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                 AppEvent::SendMessage => {
                     if !app.input_buffer.is_empty() {
                         // Send message to server
+                        app.is_thinking = true;
+                        terminal.draw(|f| render(f, &app))?;
                         send_message_to_server(&mut app).await?;
+                        app.is_thinking = false;
                     }
                 }
                 AppEvent::ClearChat => {
