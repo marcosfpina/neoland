@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
+name = "neoland"
+path = "src/bin/neoland.rs"
+
+[[bin]]
 name = "llamachat-client"
 path = "src/main.rs"
 
@@ -12,6 +16,21 @@ name = "llamachat-server"
 path = "src/server.rs"
 
 [dependencies]
+# CLI & Logging
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# TUI (novo para neoland-tui)
+ratatui = "0.28"
+crossterm = "0.28"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+futures = "0.3"
+
+# GTK4 (mantido para llamachat-client)
 gtk4 = "0.9"
 libadwaita = "0.7"
 glib = "0.19"
@@ -19,9 +38,6 @@ gio = "0.19"
 
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 async-channel = "2.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
 uuid = { version = "1.0", features = ["v4"] }
 
 # gRPC & Async
@@ -32,8 +48,6 @@ tokio-stream = "0.1"
 axum = { version = "0.7", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
-futures = "0.3"
-
 # Local Inference Engine (Candle)
 candle-core = "0.8"
 candle-transformers = "0.8"
@@ -43,6 +57,7 @@ hf-hub = "0.3"
 # Integration Dependencies (Path-based)
 securellm-core = { path = "../securellm-bridge/crates/core" }
 intelagent-core = { path = "../phantom/intelagent/crates/core" }
+hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
 
 
 [build-dependencies]
