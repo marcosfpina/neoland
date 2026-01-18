@@ -10,13 +10,15 @@ pub struct MLOffloadClient {
 }
 
 impl MLOffloadClient {
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(60))
+            .pool_max_idle_per_host(10) // Connection pooling for low latency
+            .http2_keep_alive_interval(Duration::from_secs(30)) // HTTP/2 keep-alive
             .build()
-            .expect("Failed to create HTTP client");
+            .context("Failed to create HTTP client")?;
 
-        Self { client, base_url }
+        Ok(Self { client, base_url })
     }
 
     /// Check if API is available
@@ -106,7 +108,8 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requer ml-offload-api rodando
     async fn test_health_check() {
-        let client = MLOffloadClient::new("http://localhost:9000".into());
+        let client = MLOffloadClient::new("http://localhost:9000".into())
+            .expect("Failed to create client");
         let health = client.health().await;
         assert!(health.is_ok(), "ml-offload-api should be healthy");
     }
@@ -114,7 +117,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_list_models() {
-        let client = MLOffloadClient::new("http://localhost:9000".into());
+        let client = MLOffloadClient::new("http://localhost:9000".into())
+            .expect("Failed to create client");
         let models = client.list_models().await;
         assert!(models.is_ok(), "Should list models");
     }
@@ -122,7 +126,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_chat_completion() {
-        let client = MLOffloadClient::new("http://localhost:9000".into());
+        let client = MLOffloadClient::new("http://localhost:9000".into())
+            .expect("Failed to create client");
         let request = ChatCompletionRequest {
             model: "auto".into(),
             messages: vec![ChatMessage {

@@ -125,7 +125,13 @@ impl LlamaService for MyLlamaService {
         }
 
         tokio::task::spawn_blocking(move || {
-            let mut engine_guard = state.engine.lock().unwrap();
+            let mut engine_guard = match state.engine.lock() {
+                Ok(guard) => guard,
+                Err(e) => {
+                    let _ = tx.blocking_send(Err(Status::internal(format!("Mutex poisoned: {}", e))));
+                    return;
+                }
+            };
             if engine_guard.is_none() {
                 match LocalEngine::new() {
                     Ok(e) => *engine_guard = Some(e),
@@ -136,7 +142,13 @@ impl LlamaService for MyLlamaService {
                 }
             }
             if let Some(engine) = engine_guard.as_mut() {
-                let vs_guard = state.vector_store.lock().unwrap();
+                let vs_guard = match state.vector_store.lock() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(Status::internal(format!("VectorStore mutex poisoned: {}", e))));
+                        return;
+                    }
+                };
 
                 // Send metadata first
                 let metadata = llamachat::ResponseMetadata {
@@ -212,7 +224,8 @@ impl LlamaService for MyLlamaService {
 
     async fn add_document(&self, request: Request<AddDocumentRequest>) -> Result<Response<AddDocumentResponse>, Status> {
         let req = request.into_inner();
-        let mut vs = self.state.vector_store.lock().unwrap();
+        let mut vs = self.state.vector_store.lock()
+            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?
         match vs.add_document(&req.content, &req.metadata) {
             Ok(_) => {
                  // SecureLLM Audit
@@ -225,7 +238,8 @@ impl LlamaService for MyLlamaService {
 
     async fn search(&self, request: Request<SearchRequest>) -> Result<Response<SearchResponse>, Status> {
         let req = request.into_inner();
-        let vs = self.state.vector_store.lock().unwrap();
+        let vs = self.state.vector_store.lock()
+            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?
         match vs.search(&req.query, req.top_k as usize) {
             Ok(results) => {
                 let grpc_results = results.into_iter().map(|(doc, score)| {
@@ -252,14 +266,19 @@ async fn rest_chat_handler(
     let config = GenerationConfig::default();
 
     tokio::task::spawn_blocking(move || {
-        let mut engine_guard = state.engine.lock().unwrap();
+        let mut engine_guard = match state.engine.lock() {
+            Ok(guard) => guard,
+            Err(_) => return,
+        };
         if engine_guard.is_none() {
             if let Ok(e) = LocalEngine::new() {
                 *engine_guard = Some(e);
             }
         }
         if let Some(engine) = engine_guard.as_mut() {
-            let vs_guard = state.vector_store.lock().unwrap();
+            let Ok(vs_guard) = state.vector_store.lock() else {
+                return;
+            };
             let _ = engine.generate_stream(&prompt, Some(&vs_guard), &config, |token| {
                 let response = RestChatResponse {
                     choices: vec![RestChoice {
@@ -289,7 +308,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     
     let vector_store = Arc::new(Mutex::new(VectorStore::new()?));
     {
-        let mut vs = vector_store.lock().unwrap();
+        let mut vs = vector_store.lock()
+            .map_err(|e| format!("VectorStore mutex poisoned during init: {}", e))?
         let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
     }
 
