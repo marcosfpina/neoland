@@ -1,5 +1,3 @@
-mod engine;
-mod nlp;
 
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 use llamachat::llama_service_server::{LlamaService, LlamaServiceServer};
