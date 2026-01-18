@@ -10,6 +10,11 @@ use crate::nlp::VectorStore;
 pub struct GenerationConfig {
     pub temperature: f64,
     pub top_p: f64,
+    pub typical_p: f64,
+    pub epsilon_cutoff: f64,
+    pub eta_cutoff: f64,
+    pub tail_free_sampling: f64,
+    pub top_a: f64,
     pub max_tokens: usize,
     pub repetition_penalty: f32,
     pub context_top_k: usize,
@@ -25,6 +30,11 @@ impl Default for GenerationConfig {
         Self {
             temperature: 0.7,
             top_p: 0.9,
+            typical_p: 1.0,
+            epsilon_cutoff: 0.0,
+            eta_cutoff: 0.0,
+            tail_free_sampling: 1.0,
+            top_a: 0.0,
             max_tokens: 600,
             repetition_penalty: 1.1,
             context_top_k: 2,

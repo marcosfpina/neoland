@@ -346,7 +346,6 @@ fn build_ui(app: &adw::Application) {
     let rep_penalty_box = create_labeled_slider(
         "Repetition Penalty",
         1.0, 2.0, 1.1,
-        Some("Penaliza repetições. Valores altos evitam redundância"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().repetition_penalty = value as f32;
         })
@@ -357,7 +356,6 @@ fn build_ui(app: &adw::Application) {
     let typical_p_box = create_labeled_slider(
         "Typical P",
         0.0, 1.0, 1.0,
-        Some("Typical sampling. Filtra tokens improváveis"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().typical_p = value as f32;
         })
@@ -368,7 +366,6 @@ fn build_ui(app: &adw::Application) {
     let epsilon_cutoff_box = create_labeled_slider(
         "Epsilon Cutoff",
         0.0, 1.0, 0.0,
-        Some("Remove tokens com probabilidade muito baixa"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().epsilon_cutoff = value as f32;
         })
@@ -379,7 +376,6 @@ fn build_ui(app: &adw::Application) {
     let eta_cutoff_box = create_labeled_slider(
         "ETA Cutoff",
         0.0, 1.0, 0.0,
-        Some("Variante do epsilon cutoff"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().eta_cutoff = value as f32;
         })
@@ -390,7 +386,6 @@ fn build_ui(app: &adw::Application) {
     let tail_free_sampling_box = create_labeled_slider(
         "Tail Free Sampling",
         0.0, 1.0, 1.0,
-        Some("Remove cauda de baixa probabilidade"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().tail_free_sampling = value as f32;
         })
@@ -401,7 +396,6 @@ fn build_ui(app: &adw::Application) {
     let top_a_box = create_labeled_slider(
         "Top A",
         0.0, 1.0, 0.0,
-        Some("Top-a sampling. Filtragem adaptativa"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().top_a = value as f32;
         })
@@ -434,7 +428,6 @@ fn build_ui(app: &adw::Application) {
     let ctx_threshold_box = create_labeled_slider(
         "Similaridade Mínima",
         0.0, 1.0, 0.3,
-        Some("Score mínimo para usar documentos do RAG"),
         clone!(@strong query_config => move |value| {
             query_config.borrow_mut().context_similarity_threshold = value as f32;
         })
@@ -572,108 +565,6 @@ fn build_ui(app: &adw::Application) {
 
     flap.set_content(Some(&chat_box));
     flap.set_flap(Some(&sidebar_scroll));
-
-    // ==================== PRESET BUTTONS CALLBACKS ====================
-    btn_balanced.connect_clicked(clone!(@strong query_config, @weak text_buffer => move |_| {
-        *query_config.borrow_mut() = QueryConfig::balanced();
-        append_message(&text_buffer, "system", "✅ Preset aplicado: BALANCEADO");
-    }));
-
-    btn_creative.connect_clicked(clone!(@strong query_config, @weak text_buffer => move |_| {
-        *query_config.borrow_mut() = QueryConfig::creative();
-        append_message(&text_buffer, "system", "✅ Preset aplicado: CRIATIVO (Temp: 1.5)");
-    }));
-
-    btn_precise.connect_clicked(clone!(@strong query_config, @weak text_buffer => move |_| {
-        *query_config.borrow_mut() = QueryConfig::precise();
-        append_message(&text_buffer, "system", "✅ Preset aplicado: PRECISO (Temp: 0.3)");
-    }));
-
-    btn_research.connect_clicked(clone!(@strong query_config, @weak text_buffer => move |_| {
-        *query_config.borrow_mut() = QueryConfig::research();
-        append_message(&text_buffer, "system", "✅ Preset aplicado: PESQUISA (RAG Max, Top K: 8)");
-    }));
-
-    btn_safe.connect_clicked(clone!(@strong query_config, @weak text_buffer => move |_| {
-        *query_config.borrow_mut() = QueryConfig::safe();
-        append_message(&text_buffer, "system", "✅ Preset aplicado: SEGURO (Comandos desabilitados)");
-    }));
-
-    // Clear button callback
-    clear_btn.connect_clicked(clone!(@weak text_buffer => move |_| {
-        text_buffer.delete(&mut text_buffer.start_iter(), &mut text_buffer.end_iter());
-        append_message(&text_buffer, "system", "🗑️ Chat limpo");
-    }));
-
-    // ==================== KEYBOARD SHORTCUTS ====================
-    let event_controller = gtk4::EventControllerKey::new();
-
-    event_controller.connect_key_pressed(clone!(
-        @weak send_btn,
-        @weak text_buffer,
-        @strong query_config,
-        @weak entry
-        => @default-return glib::Propagation::Proceed,
-        move |_, key, _, modifier| {
-            use gdk::Key;
-            use gdk::ModifierType;
-
-            // Ctrl+Enter: Send message
-            if key == Key::Return && modifier.contains(ModifierType::CONTROL_MASK) {
-                send_btn.emit_clicked();
-                return glib::Propagation::Stop;
-            }
-
-            // Ctrl+L: Clear chat
-            if key == Key::l && modifier.contains(ModifierType::CONTROL_MASK) {
-                text_buffer.delete(&mut text_buffer.start_iter(), &mut text_buffer.end_iter());
-                append_message(&text_buffer, "system", "🗑️ Chat limpo (Ctrl+L)");
-                return glib::Propagation::Stop;
-            }
-
-            // Ctrl+1-5: Presets
-            if modifier.contains(ModifierType::CONTROL_MASK) {
-                match key {
-                    Key::_1 => {
-                        *query_config.borrow_mut() = QueryConfig::balanced();
-                        append_message(&text_buffer, "system", "✅ BALANCEADO (Ctrl+1)");
-                        return glib::Propagation::Stop;
-                    }
-                    Key::_2 => {
-                        *query_config.borrow_mut() = QueryConfig::creative();
-                        append_message(&text_buffer, "system", "✅ CRIATIVO (Ctrl+2)");
-                        return glib::Propagation::Stop;
-                    }
-                    Key::_3 => {
-                        *query_config.borrow_mut() = QueryConfig::precise();
-                        append_message(&text_buffer, "system", "✅ PRECISO (Ctrl+3)");
-                        return glib::Propagation::Stop;
-                    }
-                    Key::_4 => {
-                        *query_config.borrow_mut() = QueryConfig::research();
-                        append_message(&text_buffer, "system", "✅ PESQUISA (Ctrl+4)");
-                        return glib::Propagation::Stop;
-                    }
-                    Key::_5 => {
-                        *query_config.borrow_mut() = QueryConfig::safe();
-                        append_message(&text_buffer, "system", "✅ SEGURO (Ctrl+5)");
-                        return glib::Propagation::Stop;
-                    }
-                    _ => {}
-                }
-            }
-
-            // F12: Toggle scratchpad
-            if key == Key::F12 {
-                HyprlandOps::toggle_scratchpad();
-                return glib::Propagation::Stop;
-            }
-
-            glib::Propagation::Proceed
-        }
-    ));
-
-    window.add_controller(event_controller);
 
     window.set_content(Some(&main_box));
     window.present();
