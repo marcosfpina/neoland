@@ -23,6 +23,11 @@ message ChatRequest {
   optional float top_p = 5;              // Default: 0.9
   optional int32 max_tokens = 6;         // Default: 256
   optional float repetition_penalty = 7; // Default: 1.1
+  optional float typical_p = 16;         // Typical sampling (0.0-1.0)
+  optional float epsilon_cutoff = 17;    // Epsilon cutoff (0.0-1.0)
+  optional float eta_cutoff = 18;        // ETA cutoff (0.0-1.0)
+  optional float tail_free_sampling = 19; // Tail free sampling (0.0-1.0)
+  optional float top_a = 20;             // Top-a sampling (0.0-1.0)
 
   // Context control parameters
   optional int32 context_top_k = 8;           // Number of docs to retrieve. Default: 2
