@@ -31,6 +31,10 @@ pub enum Commands {
         /// URL do servidor gRPC
         #[arg(long, default_value = "http://[::1]:50051")]
         server_url: String,
+
+        /// URL do endpoint OpenAI-compatible (ml-offload-api ou llama.cpp)
+        #[arg(long, default_value = "http://localhost:9000")]
+        ml_api_url: String,
     },
     
     /// Executa health checks no servidor

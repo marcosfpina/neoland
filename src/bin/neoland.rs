@@ -33,8 +33,8 @@ async fn main() {
             }
         }
         
-        Commands::Client { server_url } => {
-            if let Err(e) = llamachat_poc::tui::run_client(&server_url).await {
+        Commands::Client { server_url, ml_api_url } => {
+            if let Err(e) = llamachat_poc::tui::run_client(&server_url, &ml_api_url).await {
                 eprintln!("❌ Erro no cliente TUI: {}", e);
                 std::process::exit(1);
             }

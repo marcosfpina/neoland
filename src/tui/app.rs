@@ -10,6 +10,7 @@ pub struct AppState {
     pub config: QueryConfig,
     pub sidebar_visible: bool,
     pub server_url: String,
+    pub ml_api_url: String,
     pub scroll_offset: usize,
 }
 
@@ -28,7 +29,7 @@ pub enum MessageRole {
 }
 
 impl AppState {
-    pub fn new(server_url: String) -> Self {
+    pub fn new(server_url: String, ml_api_url: String) -> Self {
         Self {
             messages: vec![
                 ChatMessage {
@@ -41,11 +42,17 @@ impl AppState {
                     content: format!("📡 Conectado em: {}", server_url),
                     timestamp: Utc::now(),
                 },
+                ChatMessage {
+                    role: MessageRole::System,
+                    content: format!("🤖 ML API: {}", ml_api_url),
+                    timestamp: Utc::now(),
+                },
             ],
             input_buffer: String::new(),
             config: QueryConfig::default(),
             sidebar_visible: true,
             server_url,
+            ml_api_url,
             scroll_offset: 0,
         }
     }
