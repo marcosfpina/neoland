@@ -16,7 +16,7 @@ pub enum AppEvent {
     ScrollDown,
 }
 
-pub fn handle_events(app: &mut AppState) -> Result<Option<AppEvent>> {
+pub fn handle_events(_app: &mut AppState) -> Result<Option<AppEvent>> {
     if event::poll(Duration::from_millis(100))? {
         if let Event::Key(key) = event::read()? {
             return Ok(match (key.code, key.modifiers) {
