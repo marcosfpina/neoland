@@ -19,7 +19,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 
 /// Executa o cliente TUI
-pub async fn run_client(server_url: &str) -> Result<()> {
+pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -28,7 +28,7 @@ pub async fn run_client(server_url: &str) -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app state
-    let mut app = AppState::new(server_url.to_string());
+    let mut app = AppState::new(server_url.to_string(), ml_api_url.to_string());
 
     // Main event loop
     loop {
@@ -87,8 +87,8 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
     app.add_user_message(&message);
     app.input_buffer.clear();
 
-    // Try ml-offload-api first (port 9000)
-    let ml_client = MLOffloadClient::new("http://localhost:9000".into());
+    // Try ml-offload-api first (Configured URL)
+    let ml_client = MLOffloadClient::new(app.ml_api_url.clone());
     
     match ml_client.health().await {
         Ok(_) => {
