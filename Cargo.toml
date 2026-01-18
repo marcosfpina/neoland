@@ -42,6 +42,8 @@ tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 hf-hub = "0.3"
 # Integration Dependencies (Path-based)
 securellm-core = { path = "../securellm-bridge/crates/core" }
+securellm-providers = { path = "../securellm-bridge/crates/providers" }
+securellm-security = { path = "../securellm-bridge/crates/security" }
 intelagent-core = { path = "../phantom/intelagent/crates/core" }
 hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
 
