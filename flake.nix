@@ -73,6 +73,36 @@
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
+
+          shellHook = ''
+            echo ""
+            echo "┌─────────────────────────────────────────────────────────────────┐"
+            echo "│  🚀 Neoland Development Environment (v0.2.0)                   │"
+            echo "│  LocalFirst AI Assistant | ML-Offload + SecureLLM             │"
+            echo "└─────────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "📦 Quick Commands:"
+            echo "  cargo check              # Validate compilation"
+            echo "  cargo build --release    # Build optimized binary"
+            echo "  cargo test               # Run test suite"
+            echo ""
+            echo "🔧 Development:"
+            echo "  cargo run --bin neoland -- server  # Start gRPC + REST server"
+            echo "  cargo run --bin neoland -- client  # Launch TUI client"
+            echo ""
+            echo "📊 Validation:"
+            echo "  nix flake check          # Validate flake"
+            echo "  cargo clippy             # Linter checks"
+            echo ""
+            echo "📚 Documentation:"
+            echo "  docs/ADR.md              # Architecture Decision Records"
+            echo "  README.md                # Project overview + roadmap"
+            echo ""
+            echo "💡 Tip: Set environment variables for SecureLLM:"
+            echo "  export SECURELLM_PROVIDER=deepseek"
+            echo "  export DEEPSEEK_API_KEY=sk-xxx"
+            echo ""
+          '';
         };
       }
     );
