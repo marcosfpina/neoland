@@ -57,9 +57,11 @@ pub fn render(f: &mut Frame<'_>, app: &AppState) {
 }
 
 fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let status = if app.is_thinking { "⏳ Thinking..." } else { "✅ Ready" };
     let title = format!(
-        " 🚀 Neoland TUI | {} | Preset: {} ",
+        " 🚀 Neoland TUI | {} | {} | Preset: {} ",
         app.server_url,
+        status,
         get_preset_name(&app.config)
     );
 
