@@ -97,7 +97,11 @@ impl VectorStore {
         let query_emb = self.model.embed(query)?;
         
         let mut scores: Vec<(usize, f32)> = self.embeddings.iter().enumerate().map(|(idx, doc_emb)| {
-            let score = (query_emb.clone() * doc_emb.clone()).unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap();
+            // Compute cosine similarity via dot product (embeddings are normalized)
+            let score = (query_emb.clone() * doc_emb.clone())
+                .and_then(|t| t.sum_all())
+                .and_then(|t| t.to_scalar::<f32>())
+                .unwrap_or(0.0); // Fallback to 0.0 similarity on tensor operation failure
             (idx, score)
         }).collect();
 

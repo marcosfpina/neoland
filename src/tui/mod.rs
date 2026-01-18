@@ -21,6 +21,8 @@ use std::io;
 /// Executa o cliente TUI
 pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     // Setup terminal
+
+    
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -82,51 +84,58 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Envia mensagem para o servidor (ml-offload-api ou gRPC fallback)
+/// Envia mensagem usando UnifiedLLMClient (LocalFirst strategy)
 async fn send_message_to_server(app: &mut AppState) -> Result<()> {
-    use crate::ml_offload::{MLOffloadClient, ChatCompletionRequest, ChatMessage};
+    use crate::llm::UnifiedLLMClient;
 
     let message = app.input_buffer.clone();
     app.add_user_message(&message);
     app.input_buffer.clear();
 
-    // Try ml-offload-api first (Configured URL)
-    let ml_client = MLOffloadClient::new(app.ml_api_url.clone());
-    
-    match ml_client.health().await {
-        Ok(_) => {
-            // ml-offload-api available - use it
-            let request = ChatCompletionRequest {
-                model: "auto".into(),  // Let ml-offload-api choose best backend
-                messages: vec![ChatMessage {
-                    role: "user".into(),
-                    content: message.clone(),
-                }],
-                temperature: Some(app.config.temperature),
-                max_tokens: Some(app.config.max_tokens as u32),
-                stream: None,
-                stop: None,
-                top_p: Some(app.config.top_p),
-            };
+    // Load SecureLLM API key from environment (if available)
+    let securellm_provider = std::env::var("SECURELLM_PROVIDER")
+        .ok()
+        .map(|provider| {
+            let api_key = std::env::var(format!("{}_API_KEY", provider.to_uppercase())).ok();
+            (provider.leak() as &str, api_key)
+        });
 
-            match ml_client.chat_completion(request).await {
-                Ok(response) => {
-                    if let Some(choice) = response.choices.first() {
-                        app.add_assistant_message(&choice.message.content);
-                    }
-                    return Ok(());
-                }
-                Err(e) => {
-                    app.add_system_message(&format!("⚠️ ml-offload-api error: {}, trying gRPC fallback...", e));
-                }
-            }
+    // Create UnifiedLLMClient with LocalFirst strategy
+    let client = match UnifiedLLMClient::new_local_first(
+        app.ml_api_url.clone(),
+        securellm_provider,
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            app.add_system_message(&format!("❌ Failed to initialize LLM client: {}", e));
+            return Ok(());
         }
-        Err(_) => {
-            app.add_system_message("⚠️ ml-offload-api offline, using gRPC fallback...");
+    };
+
+    // Send chat request (LocalFirst: ml-offload → SecureLLM fallback)
+    match client.chat(
+        &message,
+        Some(app.config.temperature),
+        Some(app.config.max_tokens as u32),
+    ).await {
+        Ok(response) => {
+            app.add_assistant_message(&response);
+        }
+        Err(e) => {
+            app.add_system_message(&format!("❌ All LLM backends failed: {}", e));
+            
+            // Last resort: Try local gRPC server directly
+            if let Err(grpc_err) = try_grpc_fallback(app, message).await {
+                app.add_system_message(&format!("❌ gRPC fallback also failed: {}", grpc_err));
+            }
         }
     }
 
-    // Fallback to local gRPC server
+    Ok(())
+}
+
+/// Last resort fallback: Direct gRPC connection
+async fn try_grpc_fallback(app: &mut AppState, message: String) -> Result<()> {
     use crate::llamachat::llama_service_client::LlamaServiceClient;
     use crate::llamachat::ChatRequest;
 
@@ -165,36 +174,8 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
         streaming: Some(true),
     };
 
-    // Stream response from gRPC fallback
-    let mut stream = match client.chat_stream(request).await {
-        Ok(s) => s.into_inner(),
-        Err(e) => {
-            app.add_system_message(&format!("⚠️ Local gRPC failed: {}, trying SecureLLM Proxy...", e));
-            
-            // 3. Fallback to SecureLLM Proxy (Remote + Audit)
-            use crate::llm::SecureLLMProxy;
-            
-            // TODO: Load API Key from secure storage/env
-            match SecureLLMProxy::new("openai", None) {
-                Ok(proxy) => {
-                     match proxy.send_secure(&message).await {
-                        Ok(response) => {
-                            app.add_assistant_message(&response);
-                            return Ok(());
-                        },
-                        Err(err) => {
-                             app.add_system_message(&format!("❌ SecureLLM Proxy failed: {}", err));
-                        }
-                     }
-                },
-                Err(err) => {
-                    app.add_system_message(&format!("❌ SecureLLM init failed: {}", err));
-                }
-            }
-            return Ok(());
-        }
-    };
-
+    // Stream response
+    let mut stream = client.chat_stream(request).await?.into_inner();
     let mut response_text = String::new();
 
     while let Ok(Some(chunk)) = stream.message().await {
@@ -206,6 +187,5 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
     }
 
     app.add_assistant_message(&response_text);
-
     Ok(())
 }
