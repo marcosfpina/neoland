@@ -12,6 +12,7 @@ pub struct AppState {
     pub server_url: String,
     pub ml_api_url: String,
     pub scroll_offset: usize,
+    pub is_thinking: bool,
 }
 
 #[derive(Clone)]
@@ -54,6 +55,7 @@ impl AppState {
             server_url,
             ml_api_url,
             scroll_offset: 0,
+            is_thinking: false,
         }
     }
 

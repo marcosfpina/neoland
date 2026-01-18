@@ -9,9 +9,8 @@ pub mod ml_offload;
 pub mod llm;
 
 // Re-export server function e tipos gRPC
-pub mod server {
-    include!("server.rs");
-}
+// Re-export server function e tipos gRPC
+pub mod server;
 
 // Re-export tipos gRPC para TUI
 pub use server::llamachat;
