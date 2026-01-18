@@ -1,6 +1,5 @@
 use llamachat_poc::{cli, server};
 use cli::{Cli, Commands};
-use clap::Parser;
 use std::process::Command;
 
 #[tokio::main]

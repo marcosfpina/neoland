@@ -278,7 +278,7 @@ async fn rest_chat_handler(
 }
 
 pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    use tracing::{info, warn};
+    use tracing::info;
     
     let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
     let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
