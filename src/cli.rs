@@ -33,7 +33,7 @@ pub enum Commands {
         server_url: String,
 
         /// URL do endpoint OpenAI-compatible (ml-offload-api ou llama.cpp)
-        #[arg(long, default_value = "http://localhost:9000")]
+        #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
     },
     

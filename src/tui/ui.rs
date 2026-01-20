@@ -139,7 +139,7 @@ fn render_sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         format!(""),
         format!(" Ctrl+1-5: Presets"),
         format!(" Ctrl+L: Limpar"),
-        format!(" Ctrl+Enter: Enviar"),
+        format!(" Enter: Enviar"),
         format!(" Tab: Toggle Sidebar"),
         format!(" Esc: Sair"),
         format!(""),
@@ -164,7 +164,7 @@ fn render_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         .style(Style::default().fg(colors::FG))
         .block(
             Block::default()
-                .title(" ✏️  Input (Ctrl+Enter para enviar) ")
+                .title(" ✏️  Input (Enter para enviar) ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(colors::PRIMARY)),
         );
