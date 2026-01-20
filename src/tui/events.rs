@@ -24,8 +24,9 @@ pub fn handle_events(_app: &mut AppState) -> Result<Option<AppEvent>> {
                 (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(AppEvent::Quit),
                 (KeyCode::Esc, _) => Some(AppEvent::Quit),
 
-                // Send message
+                // Send message (Ctrl+Enter or plain Enter)
                 (KeyCode::Enter, KeyModifiers::CONTROL) => Some(AppEvent::SendMessage),
+                (KeyCode::Enter, KeyModifiers::NONE) => Some(AppEvent::SendMessage),
 
                 // Clear chat
                 (KeyCode::Char('l'), KeyModifiers::CONTROL) => Some(AppEvent::ClearChat),

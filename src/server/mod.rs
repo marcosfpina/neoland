@@ -225,7 +225,7 @@ impl LlamaService for MyLlamaService {
     async fn add_document(&self, request: Request<AddDocumentRequest>) -> Result<Response<AddDocumentResponse>, Status> {
         let req = request.into_inner();
         let mut vs = self.state.vector_store.lock()
-            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?
+            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
         match vs.add_document(&req.content, &req.metadata) {
             Ok(_) => {
                  // SecureLLM Audit
@@ -239,7 +239,7 @@ impl LlamaService for MyLlamaService {
     async fn search(&self, request: Request<SearchRequest>) -> Result<Response<SearchResponse>, Status> {
         let req = request.into_inner();
         let vs = self.state.vector_store.lock()
-            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?
+            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
         match vs.search(&req.query, req.top_k as usize) {
             Ok(results) => {
                 let grpc_results = results.into_iter().map(|(doc, score)| {
@@ -309,7 +309,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     let vector_store = Arc::new(Mutex::new(VectorStore::new()?));
     {
         let mut vs = vector_store.lock()
-            .map_err(|e| format!("VectorStore mutex poisoned during init: {}", e))?
+            .map_err(|e| format!("VectorStore mutex poisoned during init: {}", e))?;
         let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
     }
 
