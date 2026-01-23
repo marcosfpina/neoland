@@ -105,7 +105,7 @@ mod.rs (Coordinator)
 pub struct AppState {
     messages: Vec<ChatMessage>,
     input_buffer: String,
-    config: QueryConfig,
+    config: QueryConfig,http://127.0.0.1:39599/webview/agentic-duo-chat?mode=flow-mode&_csrf=wxdUnrBS-PSKvagv6fMbPfj6fgPsoEeUiyJgZVokGRhbTc757A-g#
     sidebar_visible: bool,
     server_url: String,
     ml_api_url: String,      // Configurable endpoint
