@@ -73,7 +73,7 @@
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
-
+          PKG_CONFIG_PATH = "$SHELL"
           shellHook = ''
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
