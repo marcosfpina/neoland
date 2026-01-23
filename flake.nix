@@ -41,6 +41,7 @@
             nativeBuildInputs = with pkgs; [
               pkg-config
               protobuf
+              maturin
             ];
 
             buildInputs = with pkgs; [
@@ -73,7 +74,7 @@
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
-          PKG_CONFIG_PATH = "$SHELL"
+          PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
