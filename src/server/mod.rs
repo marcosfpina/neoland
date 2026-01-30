@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use futures::stream::Stream;
 use std::convert::Infallible;
 use crate::auth::AuthManager;
+use crate::audit::{AuditLogger, AuditEvent, AuditAction, FailedAuthTracker, ConsoleAlertHandler};
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -64,6 +65,8 @@ pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,
     auth_manager: Arc<AuthManager>,
+    audit_logger: Arc<AuditLogger>,
+    failed_auth_tracker: Arc<FailedAuthTracker>,
 }
 
 // gRPC Service Implementation
@@ -301,7 +304,7 @@ async fn rest_chat_handler(
         .keep_alive(axum::response::sse::KeepAlive::default())
 }
 
-/// Authentication middleware for REST API
+/// Authentication middleware for REST API (Phase 1.3: with audit logging)
 ///
 /// Validates the X-API-Key header and attaches user info to request extensions
 async fn auth_middleware(
@@ -313,20 +316,74 @@ async fn auth_middleware(
     // Extract API key from X-API-Key header
     let api_key = headers
         .get("X-API-Key")
+        .and_then(|v| v.to_str().ok());
+
+    // Extract IP address for audit logging
+    let ip_address = headers
+        .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse().ok());
+
+    // Check if API key was provided
+    if api_key.is_none() {
+        // Log missing API key attempt
+        let event = AuditEvent::new(AuditAction::AuthFailure)
+            .with_error("Missing X-API-Key header".to_string());
+        let _ = state.audit_logger.log(event).await;
+
+        return Err(StatusCode::UNAUTHORIZED);
+    }
 
     // Validate API key
-    let api_key_info = state
-        .auth_manager
-        .validate_api_key(api_key)
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    match state.auth_manager.validate_api_key(api_key.unwrap()) {
+        Ok(api_key_info) => {
+            // Log successful authentication (Phase 1.3)
+            let event = AuditEvent::new(AuditAction::AuthSuccess)
+                .with_user(api_key_info.user_id.clone(), format!("{:?}", api_key_info.role))
+                .with_resource(req.uri().path().to_string());
 
-    // Attach user info to request extensions for use in handlers
-    req.extensions_mut().insert(api_key_info);
+            let event = if let Some(ip) = ip_address {
+                event.with_ip(ip)
+            } else {
+                event
+            };
 
-    // Continue to next middleware/handler
-    Ok(next.run(req).await)
+            let _ = state.audit_logger.log(event).await;
+
+            // Attach user info to request extensions for use in handlers
+            req.extensions_mut().insert(api_key_info);
+
+            // Continue to next middleware/handler
+            Ok(next.run(req).await)
+        }
+        Err(e) => {
+            // Log failed authentication attempt (Phase 1.3)
+            let user_id = "unknown".to_string();
+            let event = AuditEvent::new(AuditAction::AuthFailure)
+                .with_user(user_id.clone(), "none".to_string())
+                .with_resource(req.uri().path().to_string())
+                .with_error(e.to_string());
+
+            let event = if let Some(ip) = ip_address {
+                event.with_ip(ip)
+            } else {
+                event
+            };
+
+            let _ = state.audit_logger.log(event).await;
+
+            // Track failed authentication for brute force detection
+            if state.failed_auth_tracker.track_failure(user_id.clone()).await {
+                tracing::error!(
+                    user = user_id,
+                    "🚨 Brute force attack detected: >5 failed auth attempts in 1 minute"
+                );
+            }
+
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
 }
 
 pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -355,10 +412,25 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     info!("🔐 Authentication manager initialized");
     info!("⚠️  Using development API keys (change in production)");
 
+    // Initialize audit logger (Phase 1.3)
+    let audit_log_path = std::env::var("AUDIT_LOG_PATH")
+        .unwrap_or_else(|_| "/var/log/neoland/audit.log".to_string());
+    let audit_logger = Arc::new(AuditLogger::new(&audit_log_path)?);
+
+    // Set up alert handler
+    audit_logger.set_alert_handler(Box::new(ConsoleAlertHandler)).await;
+    info!("📝 Audit logger initialized: {}", audit_log_path);
+
+    // Initialize failed auth tracker (5 failures in 1 minute)
+    let failed_auth_tracker = Arc::new(FailedAuthTracker::new(5, 1));
+    info!("🛡️  Failed authentication tracker enabled");
+
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
         vector_store,
         auth_manager,
+        audit_logger,
+        failed_auth_tracker,
     });
 
     // 1. Start gRPC Server

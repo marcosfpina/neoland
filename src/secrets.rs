@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vaultrs::client::{VaultClient, VaultClientSettingsBuilder};
 use vaultrs::kv2;
+use crate::audit::{AuditLogger, AuditEvent, AuditAction};
 
 /// Secret types supported by the secrets manager
 #[derive(Debug, Clone)]
@@ -56,6 +57,8 @@ pub struct SecretsManager {
     mount: String,
     // In-memory cache with TTL (30 seconds)
     cache: Arc<tokio::sync::RwLock<HashMap<String, CachedSecret>>>,
+    // Audit logger (Phase 1.3)
+    audit_logger: Option<Arc<AuditLogger>>,
 }
 
 /// Cached secret with expiration
@@ -99,7 +102,13 @@ impl SecretsManager {
             vault_client,
             mount: "secret".to_string(),
             cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            audit_logger: None, // Will be set via set_audit_logger
         })
+    }
+
+    /// Set audit logger for secret access logging (Phase 1.3)
+    pub fn set_audit_logger(&mut self, logger: Arc<AuditLogger>) {
+        self.audit_logger = Some(logger);
     }
 
     /// Create a Vault client with the given address and token
@@ -113,7 +122,7 @@ impl SecretsManager {
         VaultClient::new(settings).context("Failed to create Vault client")
     }
 
-    /// Get a secret by type
+    /// Get a secret by type (Phase 1.3: with audit logging)
     ///
     /// Tries the following sources in order:
     /// 1. In-memory cache (if not expired)
@@ -131,6 +140,7 @@ impl SecretsManager {
                         secret_type = ?secret_type,
                         "Retrieved secret from cache"
                     );
+                    // Don't log cache hits to reduce noise
                     return Ok(cached.value.clone());
                 }
             }
@@ -140,6 +150,14 @@ impl SecretsManager {
         if let Some(client) = &self.vault_client {
             match self.get_from_vault(client, &secret_type).await {
                 Ok(secret) => {
+                    // Log secret access from Vault (Phase 1.3)
+                    if let Some(ref logger) = self.audit_logger {
+                        let event = AuditEvent::new(AuditAction::SecretAccess)
+                            .with_resource(cache_key.clone())
+                            .with_metadata("source", serde_json::json!("vault"));
+                        let _ = logger.log(event).await;
+                    }
+
                     self.cache_secret(&cache_key, &secret).await;
                     return Ok(secret);
                 }
@@ -154,7 +172,19 @@ impl SecretsManager {
         }
 
         // Fallback to environment variables
-        self.get_from_env(&secret_type)
+        let result = self.get_from_env(&secret_type);
+
+        // Log secret access from environment (Phase 1.3)
+        if result.is_ok() {
+            if let Some(ref logger) = self.audit_logger {
+                let event = AuditEvent::new(AuditAction::SecretAccess)
+                    .with_resource(cache_key)
+                    .with_metadata("source", serde_json::json!("environment"));
+                let _ = logger.log(event).await;
+            }
+        }
+
+        result
     }
 
     /// Get secret from Vault
@@ -207,7 +237,7 @@ impl SecretsManager {
         );
     }
 
-    /// Store a secret in Vault (admin operation)
+    /// Store a secret in Vault (admin operation, Phase 1.3: with audit logging)
     ///
     /// Note: This requires appropriate Vault permissions
     pub async fn store_secret(
@@ -240,6 +270,13 @@ impl SecretsManager {
             secret_type = ?secret_type,
             "Secret stored in Vault successfully"
         );
+
+        // Log secret storage (Phase 1.3)
+        if let Some(ref logger) = self.audit_logger {
+            let event = AuditEvent::new(AuditAction::SecretStore)
+                .with_resource(path);
+            let _ = logger.log(event).await;
+        }
 
         Ok(())
     }

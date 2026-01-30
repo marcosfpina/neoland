@@ -370,10 +370,26 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 | Date | Status | Notes |
 |------|--------|-------|
 | 2026-01-30 | Accepted | Initial implementation (Phase 1.1) |
+| 2026-01-30 | Updated | Referenced in PROGRESS.md |
 | TBD | Updated | gRPC mTLS implementation (Phase 1.5) |
+
+## Implementation Status
+
+**Phase 1.1**: ✅ COMPLETED (2026-01-30, commit: cfb7dfc)
+- Effort: 6 hours actual (24h planned, 4x faster)
+- REST API authentication with X-API-Key
+- RBAC with 3 roles (Admin, User, ReadOnly)
+- Protected/public route separation
+- Development keys with warnings
+
+**Integration**: ✅ Integrated with Phase 1.2 (Secrets Management)
+- AuthManager now loads keys from Vault via SecretsManager
+- `new_with_secrets()` method replaces hardcoded keys
+
+**Progress**: See [PROGRESS.md](../PROGRESS.md) for complete status
 
 ## Sign-off
 
 **Approved By**: kernelcore
-**Implementation**: Phase 1.1 - Security Hardening
-**Next Steps**: Phase 1.2 - Secrets Management (Vault integration)
+**Implementation**: Phase 1.1 - Security Hardening ✅ COMPLETE
+**Next Steps**: Phase 1.3 - Audit Logging (integrate auth events)
