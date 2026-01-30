@@ -18,6 +18,14 @@ pub struct SecureLLMProxy {
     secrets_manager: Arc<SecretsManager>,
 }
 
+impl std::fmt::Debug for SecureLLMProxy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecureLLMProxy")
+            .field("provider_name", &self.provider_name)
+            .finish()
+    }
+}
+
 impl SecureLLMProxy {
     /// Cria nova instância do proxy com provider real
     ///

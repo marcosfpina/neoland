@@ -175,13 +175,16 @@ impl SecretsManager {
         let result = self.get_from_env(&secret_type);
 
         // Log secret access from environment (Phase 1.3)
-        if result.is_ok() {
+        if let Ok(ref secret) = result {
             if let Some(ref logger) = self.audit_logger {
                 let event = AuditEvent::new(AuditAction::SecretAccess)
-                    .with_resource(cache_key)
+                    .with_resource(cache_key.clone())
                     .with_metadata("source", serde_json::json!("environment"));
                 let _ = logger.log(event).await;
             }
+
+            // Cache the environment variable for performance (Phase 1.2)
+            self.cache_secret(&cache_key, secret).await;
         }
 
         result
