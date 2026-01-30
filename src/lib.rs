@@ -7,8 +7,8 @@ pub mod hyprland_ops;
 pub mod tui;
 pub mod ml_offload;
 pub mod llm;
+pub mod auth;
 
-// Re-export server function e tipos gRPC
 // Re-export server function e tipos gRPC
 pub mod server;
 

@@ -16,10 +16,14 @@ use axum::{
     extract::{State, Json},
     response::sse::{Event, Sse},
     Router,
+    middleware::{self, Next},
+    http::{Request as HttpRequest, StatusCode, HeaderMap},
+    body::Body,
 };
 use serde::{Deserialize, Serialize};
 use futures::stream::Stream;
 use std::convert::Infallible;
+use crate::auth::AuthManager;
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -59,6 +63,7 @@ struct RestDelta {
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,
+    auth_manager: Arc<AuthManager>,
 }
 
 // gRPC Service Implementation
@@ -296,6 +301,34 @@ async fn rest_chat_handler(
         .keep_alive(axum::response::sse::KeepAlive::default())
 }
 
+/// Authentication middleware for REST API
+///
+/// Validates the X-API-Key header and attaches user info to request extensions
+async fn auth_middleware(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    mut req: HttpRequest<Body>,
+    next: Next,
+) -> Result<axum::response::Response, StatusCode> {
+    // Extract API key from X-API-Key header
+    let api_key = headers
+        .get("X-API-Key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // Validate API key
+    let api_key_info = state
+        .auth_manager
+        .validate_api_key(api_key)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Attach user info to request extensions for use in handlers
+    req.extensions_mut().insert(api_key_info);
+
+    // Continue to next middleware/handler
+    Ok(next.run(req).await)
+}
+
 pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
     use tracing::info;
     
@@ -317,9 +350,15 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     let phantom_task_id = TaskId::new();
     info!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
 
+    // Initialize authentication manager
+    let auth_manager = Arc::new(AuthManager::new());
+    info!("🔐 Authentication manager initialized");
+    info!("⚠️  Using development API keys (change in production)");
+
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
         vector_store,
+        auth_manager,
     });
 
     // 1. Start gRPC Server
@@ -329,9 +368,22 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         .serve(grpc_addr);
 
     // 2. Start REST Server (Axum)
-    let app = Router::new()
+    // Protected routes require authentication
+    let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
-        .route("/health", get(|| async { "OK" }))
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            auth_middleware,
+        ));
+
+    // Public routes (no authentication)
+    let public_routes = Router::new()
+        .route("/health", get(|| async { "OK" }));
+
+    // Combine all routes
+    let app = Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .with_state(shared_state);
         
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;

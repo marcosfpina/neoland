@@ -1,0 +1,213 @@
+//! Authentication and Authorization Module
+//!
+//! This module implements a multi-protocol authentication system for Neoland:
+//! - REST API: API key authentication via X-API-Key header
+//! - gRPC: mTLS (mutual TLS) authentication
+//! - RBAC: Role-Based Access Control (admin, user, read-only)
+//!
+//! See ADR-011 for detailed architecture decisions.
+
+use anyhow::{Result, anyhow};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+/// User role for RBAC
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Role {
+    /// Full system access (can modify configuration, view all data)
+    Admin,
+    /// Standard user access (can make requests, add documents)
+    User,
+    /// Read-only access (can only query, no modifications)
+    ReadOnly,
+}
+
+impl Role {
+    /// Check if this role has the required permission
+    pub fn has_permission(&self, required: &Role) -> bool {
+        match (self, required) {
+            // Admin has all permissions
+            (Role::Admin, _) => true,
+            // User has User and ReadOnly permissions
+            (Role::User, Role::User) | (Role::User, Role::ReadOnly) => true,
+            // ReadOnly only has ReadOnly permission
+            (Role::ReadOnly, Role::ReadOnly) => true,
+            // Everything else is denied
+            _ => false,
+        }
+    }
+}
+
+/// API key with associated metadata
+#[derive(Debug, Clone)]
+pub struct ApiKey {
+    pub key: String,
+    pub role: Role,
+    pub user_id: String,
+    pub description: String,
+}
+
+/// Authentication manager
+///
+/// In production, this should be backed by a database or secrets management system.
+/// For now, we use an in-memory store with predefined keys.
+pub struct AuthManager {
+    api_keys: Arc<RwLock<HashMap<String, ApiKey>>>,
+}
+
+impl AuthManager {
+    /// Create a new AuthManager with default keys
+    ///
+    /// TODO (Phase 1.2): Load keys from Vault instead of hardcoding
+    pub fn new() -> Self {
+        let mut keys = HashMap::new();
+
+        // Default admin key (should be loaded from secrets management in production)
+        keys.insert(
+            "neoland_admin_dev_key_change_in_production".to_string(),
+            ApiKey {
+                key: "neoland_admin_dev_key_change_in_production".to_string(),
+                role: Role::Admin,
+                user_id: "admin".to_string(),
+                description: "Development admin key".to_string(),
+            },
+        );
+
+        // Default user key
+        keys.insert(
+            "neoland_user_dev_key_change_in_production".to_string(),
+            ApiKey {
+                key: "neoland_user_dev_key_change_in_production".to_string(),
+                role: Role::User,
+                user_id: "user".to_string(),
+                description: "Development user key".to_string(),
+            },
+        );
+
+        // Default read-only key
+        keys.insert(
+            "neoland_readonly_dev_key_change_in_production".to_string(),
+            ApiKey {
+                key: "neoland_readonly_dev_key_change_in_production".to_string(),
+                role: Role::ReadOnly,
+                user_id: "readonly".to_string(),
+                description: "Development read-only key".to_string(),
+            },
+        );
+
+        Self {
+            api_keys: Arc::new(RwLock::new(keys)),
+        }
+    }
+
+    /// Validate an API key and return the associated metadata
+    pub fn validate_api_key(&self, key: &str) -> Result<ApiKey> {
+        let keys = self.api_keys.read()
+            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+
+        keys.get(key)
+            .cloned()
+            .ok_or_else(|| anyhow!("Invalid API key"))
+    }
+
+    /// Add a new API key (admin operation)
+    pub fn add_api_key(&self, api_key: ApiKey) -> Result<()> {
+        let mut keys = self.api_keys.write()
+            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+
+        keys.insert(api_key.key.clone(), api_key);
+        Ok(())
+    }
+
+    /// Revoke an API key (admin operation)
+    pub fn revoke_api_key(&self, key: &str) -> Result<()> {
+        let mut keys = self.api_keys.write()
+            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+
+        keys.remove(key)
+            .ok_or_else(|| anyhow!("API key not found"))?;
+
+        Ok(())
+    }
+
+    /// List all API keys (admin operation, excludes actual key values)
+    pub fn list_api_keys(&self) -> Result<Vec<(String, Role, String)>> {
+        let keys = self.api_keys.read()
+            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+
+        Ok(keys.values()
+            .map(|k| (k.user_id.clone(), k.role.clone(), k.description.clone()))
+            .collect())
+    }
+}
+
+impl Default for AuthManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_role_permissions() {
+        // Admin has all permissions
+        assert!(Role::Admin.has_permission(&Role::Admin));
+        assert!(Role::Admin.has_permission(&Role::User));
+        assert!(Role::Admin.has_permission(&Role::ReadOnly));
+
+        // User has User and ReadOnly permissions
+        assert!(!Role::User.has_permission(&Role::Admin));
+        assert!(Role::User.has_permission(&Role::User));
+        assert!(Role::User.has_permission(&Role::ReadOnly));
+
+        // ReadOnly only has ReadOnly permission
+        assert!(!Role::ReadOnly.has_permission(&Role::Admin));
+        assert!(!Role::ReadOnly.has_permission(&Role::User));
+        assert!(Role::ReadOnly.has_permission(&Role::ReadOnly));
+    }
+
+    #[test]
+    fn test_auth_manager() {
+        let manager = AuthManager::new();
+
+        // Validate default admin key
+        let result = manager.validate_api_key("neoland_admin_dev_key_change_in_production");
+        assert!(result.is_ok());
+        let api_key = result.unwrap();
+        assert_eq!(api_key.role, Role::Admin);
+        assert_eq!(api_key.user_id, "admin");
+
+        // Validate invalid key
+        let result = manager.validate_api_key("invalid_key");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_and_revoke_api_key() {
+        let manager = AuthManager::new();
+
+        // Add new key
+        let new_key = ApiKey {
+            key: "test_key_123".to_string(),
+            role: Role::User,
+            user_id: "testuser".to_string(),
+            description: "Test key".to_string(),
+        };
+
+        assert!(manager.add_api_key(new_key.clone()).is_ok());
+
+        // Validate new key
+        let result = manager.validate_api_key("test_key_123");
+        assert!(result.is_ok());
+
+        // Revoke key
+        assert!(manager.revoke_api_key("test_key_123").is_ok());
+
+        // Key should no longer be valid
+        let result = manager.validate_api_key("test_key_123");
+        assert!(result.is_err());
+    }
+}
