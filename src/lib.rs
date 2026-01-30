@@ -10,6 +10,7 @@ pub mod llm;
 pub mod auth;
 pub mod secrets;
 pub mod audit;
+pub mod validation;
 
 // Re-export server function e tipos gRPC
 pub mod server;
