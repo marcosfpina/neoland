@@ -27,6 +27,9 @@ reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 async-channel = "2.3"
 uuid = { version = "1.0", features = ["v4"] }
 
+# Secrets Management (Phase 1.2)
+vaultrs = "0.7"
+
 # gRPC & Async
 tonic = "0.12"
 prost = "0.13"

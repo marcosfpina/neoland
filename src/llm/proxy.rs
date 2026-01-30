@@ -8,19 +8,28 @@ use securellm_core::{
 use securellm_providers::deepseek::{DeepSeekConfig, DeepSeekProvider};
 use std::sync::Arc;
 use tracing::{info, warn};
+use crate::secrets::{SecretsManager, SecretType};
 
 /// SecureLLM Proxy com audit e rate limiting
 pub struct SecureLLMProxy {
     provider: Arc<dyn LLMProvider>,
     provider_name: String,
+    #[allow(dead_code)] // Will be used in Phase 1.3 for key rotation
+    secrets_manager: Arc<SecretsManager>,
 }
 
 impl SecureLLMProxy {
     /// Cria nova instância do proxy com provider real
-    pub fn new(provider_name: &str, api_key: Option<String>) -> Result<Self> {
+    ///
+    /// Phase 1.2: Now uses SecretsManager for secure API key retrieval
+    pub async fn new(
+        provider_name: &str,
+        secrets_manager: Arc<SecretsManager>,
+        api_key: Option<String>,
+    ) -> Result<Self> {
         let api_key = match api_key {
             Some(key) => key,
-            None => Self::load_api_key(provider_name)?,
+            None => Self::load_api_key(provider_name, &secrets_manager).await?,
         };
 
         let provider: Arc<dyn LLMProvider> = match provider_name {
@@ -41,22 +50,28 @@ impl SecureLLMProxy {
 
         info!(
             provider = provider_name,
+            vault_available = secrets_manager.is_vault_available(),
             "SecureLLM Proxy initialized successfully"
         );
 
         Ok(Self {
             provider,
             provider_name: provider_name.to_string(),
+            secrets_manager,
         })
     }
 
-    /// Load API key from environment variable
-    fn load_api_key(provider: &str) -> Result<String> {
-        let var_name = format!("{}_API_KEY", provider.to_uppercase());
-        std::env::var(&var_name)
+    /// Load API key from SecretsManager (Vault or environment variable fallback)
+    ///
+    /// Phase 1.2: Replaced direct env var access with SecretsManager
+    async fn load_api_key(provider: &str, secrets_manager: &SecretsManager) -> Result<String> {
+        secrets_manager
+            .get_secret(SecretType::LLMApiKey(provider.to_string()))
+            .await
             .with_context(|| format!(
-                "Missing API key for {}. Set {} environment variable",
-                provider, var_name
+                "Failed to load API key for {}. Configure Vault or set {}_API_KEY environment variable",
+                provider,
+                provider.to_uppercase()
             ))
     }
 
@@ -146,17 +161,19 @@ impl SecureLLMProxy {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_load_api_key_missing() {
-        let result = SecureLLMProxy::load_api_key("deepseek");
+    #[tokio::test]
+    async fn test_load_api_key_missing() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let result = SecureLLMProxy::load_api_key("nonexistent_provider", &secrets_manager).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("DEEPSEEK_API_KEY"));
+        assert!(result.unwrap_err().to_string().contains("NONEXISTENT_PROVIDER_API_KEY"));
     }
 
     #[tokio::test]
     async fn test_proxy_creation_no_key() {
-        let result = SecureLLMProxy::new("deepseek", None);
-        // Should fail if DEEPSEEK_API_KEY not set
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let result = SecureLLMProxy::new("deepseek", secrets_manager, None).await;
+        // Should fail if DEEPSEEK_API_KEY not set in env or Vault
         if std::env::var("DEEPSEEK_API_KEY").is_err() {
             assert!(result.is_err());
         }
@@ -164,8 +181,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_unsupported_provider() {
-        let result = SecureLLMProxy::new("invalid_provider", Some("test".into()));
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let result = SecureLLMProxy::new("invalid_provider", secrets_manager, Some("test".into())).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unsupported provider"));
+    }
+
+    #[tokio::test]
+    async fn test_proxy_with_env_var() {
+        std::env::set_var("TEST_PROVIDER_API_KEY", "test_key_12345");
+
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let api_key = SecureLLMProxy::load_api_key("test_provider", &secrets_manager).await;
+
+        assert!(api_key.is_ok());
+        assert_eq!(api_key.unwrap(), "test_key_12345");
+
+        std::env::remove_var("TEST_PROVIDER_API_KEY");
     }
 }
