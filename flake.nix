@@ -50,8 +50,8 @@
 
             PROTOC = "${pkgs.protobuf}/bin/protoc";
 
-            # Skip tests for now (may require additional setup)
-            doCheck = false;
+            # Enable tests (Phase 0: Foundation)
+            doCheck = true;
 
             meta = with pkgs.lib; {
               description = "LlamaChat PoC - GTK4 Chat Client with gRPC Backend";
