@@ -10,6 +10,7 @@
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use crate::secrets::{SecretsManager, SecretType};
 
 /// User role for RBAC
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +95,66 @@ impl AuthManager {
                 description: "Development read-only key".to_string(),
             },
         );
+
+        Self {
+            api_keys: Arc::new(RwLock::new(keys)),
+        }
+    }
+
+    /// Create a new AuthManager with keys from SecretsManager (Phase 1.2)
+    ///
+    /// Attempts to load API keys from Vault. Falls back to default keys if Vault unavailable.
+    pub async fn new_with_secrets(secrets_manager: &SecretsManager) -> Self {
+        let mut keys = HashMap::new();
+
+        // Try to load keys from Vault/secrets manager
+        let roles = vec![
+            ("admin", Role::Admin, "Administrator API key"),
+            ("user", Role::User, "Standard user API key"),
+            ("readonly", Role::ReadOnly, "Read-only API key"),
+        ];
+
+        for (role_name, role, description) in roles {
+            match secrets_manager
+                .get_secret(SecretType::NeolandApiKey(role_name.to_string()))
+                .await
+            {
+                Ok(key) => {
+                    tracing::info!(
+                        role = role_name,
+                        source = if secrets_manager.is_vault_available() { "vault" } else { "env" },
+                        "Loaded API key for role"
+                    );
+                    keys.insert(
+                        key.clone(),
+                        ApiKey {
+                            key: key.clone(),
+                            role,
+                            user_id: role_name.to_string(),
+                            description: description.to_string(),
+                        },
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        role = role_name,
+                        error = %e,
+                        "Failed to load API key from secrets, using default development key"
+                    );
+                    // Fallback to default dev key
+                    let default_key = format!("neoland_{}_dev_key_change_in_production", role_name);
+                    keys.insert(
+                        default_key.clone(),
+                        ApiKey {
+                            key: default_key,
+                            role,
+                            user_id: role_name.to_string(),
+                            description: format!("Development {} key (fallback)", role_name),
+                        },
+                    );
+                }
+            }
+        }
 
         Self {
             api_keys: Arc::new(RwLock::new(keys)),

@@ -86,11 +86,19 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
 
 /// Envia mensagem usando UnifiedLLMClient (LocalFirst strategy)
 async fn send_message_to_server(app: &mut AppState) -> Result<()> {
-    use crate::llm::UnifiedLLMClient;
 
     let message = app.input_buffer.clone();
     app.add_user_message(&message);
     app.input_buffer.clear();
+
+    // Initialize SecretsManager (Phase 1.2)
+    let secrets_manager = match crate::secrets::SecretsManager::new().await {
+        Ok(sm) => std::sync::Arc::new(sm),
+        Err(e) => {
+            app.add_system_message(&format!("❌ Failed to initialize secrets manager: {}", e));
+            return Ok(());
+        }
+    };
 
     // Load SecureLLM API key from environment (if available)
     let securellm_provider = std::env::var("SECURELLM_PROVIDER")
@@ -100,11 +108,12 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
             (provider.leak() as &str, api_key)
         });
 
-    // Create UnifiedLLMClient with LocalFirst strategy
-    let client = match UnifiedLLMClient::new_local_first(
+    // Create UnifiedLLMClient with LocalFirst strategy (Phase 1.2: now async)
+    let client = match crate::llm::UnifiedLLMClient::new_local_first(
         app.ml_api_url.clone(),
+        secrets_manager,
         securellm_provider,
-    ) {
+    ).await {
         Ok(client) => client,
         Err(e) => {
             app.add_system_message(&format!("❌ Failed to initialize LLM client: {}", e));

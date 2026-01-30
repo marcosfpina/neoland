@@ -4,6 +4,8 @@
 use anyhow::{Context, Result};
 use crate::ml_offload::{MLOffloadClient, ChatCompletionRequest, ChatMessage};
 use crate::llm::SecureLLMProxy;
+use crate::secrets::SecretsManager;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 /// Estratégia de roteamento para LLM requests
@@ -26,8 +28,11 @@ pub struct UnifiedLLMClient {
 
 impl UnifiedLLMClient {
     /// Cria novo cliente com estratégia LocalFirst (padrão)
-    pub fn new_local_first(
+    ///
+    /// Phase 1.2: Now requires SecretsManager for secure API key loading
+    pub async fn new_local_first(
         ml_offload_url: String,
+        secrets_manager: Arc<SecretsManager>,
         securellm_provider: Option<(&str, Option<String>)>,
     ) -> Result<Self> {
         let ml_offload = match MLOffloadClient::new(ml_offload_url) {
@@ -42,7 +47,7 @@ impl UnifiedLLMClient {
         };
 
         let securellm = if let Some((provider, api_key)) = securellm_provider {
-            match SecureLLMProxy::new(provider, api_key) {
+            match SecureLLMProxy::new(provider, secrets_manager.clone(), api_key).await {
                 Ok(proxy) => {
                     info!(provider = provider, "SecureLLM proxy initialized");
                     Some(proxy)
@@ -208,11 +213,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_first_creation() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
         let result = UnifiedLLMClient::new_local_first(
             "http://localhost:9000".to_string(),
+            secrets_manager,
             None, // No SecureLLM
-        );
-        
+        ).await;
+
         // Should succeed if ml-offload client can be created
         if result.is_ok() {
             let client = result.unwrap();
