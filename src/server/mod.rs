@@ -25,6 +25,10 @@ use futures::stream::Stream;
 use std::convert::Infallible;
 use crate::auth::AuthManager;
 use crate::audit::{AuditLogger, AuditEvent, AuditAction, FailedAuthTracker, ConsoleAlertHandler};
+use crate::validation::{ChatRequestValidation, MessageValidator};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -60,6 +64,59 @@ struct RestDelta {
     content: String,
 }
 
+// Rate limiter for tracking requests per user/IP
+pub struct RateLimiter {
+    // Map of (user_id or IP) -> (request_count, window_start_time)
+    requests: RwLock<HashMap<String, (u32, Instant)>>,
+    max_requests: u32,
+    window_duration: Duration,
+}
+
+impl RateLimiter {
+    pub fn new(max_requests: u32, window_seconds: u64) -> Self {
+        Self {
+            requests: RwLock::new(HashMap::new()),
+            max_requests,
+            window_duration: Duration::from_secs(window_seconds),
+        }
+    }
+
+    /// Check if request is allowed, returns true if rate limit exceeded
+    pub async fn check_rate_limit(&self, identifier: &str) -> bool {
+        let mut requests = self.requests.write().await;
+        let now = Instant::now();
+
+        if let Some((count, window_start)) = requests.get_mut(identifier) {
+            // Check if we're still in the same time window
+            if now.duration_since(*window_start) < self.window_duration {
+                *count += 1;
+                if *count > self.max_requests {
+                    return true; // Rate limit exceeded
+                }
+            } else {
+                // New time window, reset counter
+                *window_start = now;
+                *count = 1;
+            }
+        } else {
+            // First request from this identifier
+            requests.insert(identifier.to_string(), (1, now));
+        }
+
+        false // Not rate limited
+    }
+
+    /// Clean up old entries (optional, for memory management)
+    pub async fn cleanup_old_entries(&self) {
+        let mut requests = self.requests.write().await;
+        let now = Instant::now();
+
+        requests.retain(|_, (_, window_start)| {
+            now.duration_since(*window_start) < self.window_duration * 2
+        });
+    }
+}
+
 // Shared State for gRPC and REST
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
@@ -67,6 +124,7 @@ pub struct AppState {
     auth_manager: Arc<AuthManager>,
     audit_logger: Arc<AuditLogger>,
     failed_auth_tracker: Arc<FailedAuthTracker>,
+    rate_limiter: Arc<RateLimiter>,
 }
 
 // gRPC Service Implementation
@@ -263,8 +321,33 @@ impl LlamaService for MyLlamaService {
 // REST Handlers
 async fn rest_chat_handler(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<RestChatRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    Json(mut req): Json<RestChatRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    // Phase 1.4: Validate request
+    let validation_req = ChatRequestValidation {
+        messages: req.messages.iter().map(|m| crate::validation::ChatMessage {
+            role: m.role.clone(),
+            content: m.content.clone(),
+        }).collect(),
+        metadata: serde_json::json!({}),
+    };
+
+    if let Err(e) = validation_req.validate() {
+        tracing::warn!(error = %e, "Invalid chat request");
+
+        let event = AuditEvent::new(AuditAction::ChatRequest)
+            .with_error(e.to_string())
+            .with_metadata("validation_error", serde_json::json!(true));
+        let _ = state.audit_logger.log(event).await;
+
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Sanitize messages
+    for msg in &mut req.messages {
+        msg.content = MessageValidator::sanitize_input(&msg.content);
+    }
+
     let (tx, rx) = tokio::sync::mpsc::channel(100);
 
     // Get last user message
@@ -300,8 +383,85 @@ async fn rest_chat_handler(
         }
     });
 
-    Sse::new(tokio_stream::wrappers::ReceiverStream::new(rx))
-        .keep_alive(axum::response::sse::KeepAlive::default())
+    Ok(Sse::new(tokio_stream::wrappers::ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::default()))
+}
+
+/// Rate limiting middleware (Phase 1.4)
+///
+/// Limits requests to 100 per minute per user/IP
+async fn rate_limit_middleware(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    req: HttpRequest<Body>,
+    next: Next,
+) -> Result<axum::response::Response, StatusCode> {
+    // Identify user by API key or IP address
+    let identifier = if let Some(api_key) = headers.get("X-API-Key").and_then(|v| v.to_str().ok()) {
+        format!("key:{}", api_key)
+    } else if let Some(ip) = headers.get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+    {
+        format!("ip:{}", ip.trim())
+    } else {
+        // Fallback to connection IP (not ideal but better than nothing)
+        "unknown".to_string()
+    };
+
+    // Check rate limit
+    if state.rate_limiter.check_rate_limit(&identifier).await {
+        tracing::warn!(
+            identifier = identifier,
+            "Rate limit exceeded (>100 req/min)"
+        );
+
+        // Log rate limit event
+        let event = AuditEvent::new(AuditAction::AuthFailure)
+            .with_error("Rate limit exceeded".to_string())
+            .with_metadata("identifier", serde_json::json!(identifier));
+        let _ = state.audit_logger.log(event).await;
+
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    Ok(next.run(req).await)
+}
+
+/// Input validation middleware (Phase 1.4)
+///
+/// Validates and sanitizes request body before processing
+async fn validation_middleware(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    req: HttpRequest<Body>,
+    next: Next,
+) -> Result<axum::response::Response, StatusCode> {
+    // Get content length
+    if let Some(content_length) = headers.get("content-length") {
+        if let Ok(length_str) = content_length.to_str() {
+            if let Ok(length) = length_str.parse::<usize>() {
+                // Validate request body size (1MB max)
+                if length > 1024 * 1024 {
+                    tracing::warn!(
+                        size = length,
+                        "Request body too large (>1MB)"
+                    );
+
+                    let event = AuditEvent::new(AuditAction::AuthFailure)
+                        .with_error(format!("Request body too large: {} bytes", length));
+                    let _ = state.audit_logger.log(event).await;
+
+                    return Err(StatusCode::PAYLOAD_TOO_LARGE);
+                }
+            }
+        }
+    }
+
+    // Note: Detailed validation (prompt size, message count) is done in the handler
+    // because we need to parse the JSON body first, which Axum does automatically
+
+    Ok(next.run(req).await)
 }
 
 /// Authentication middleware for REST API (Phase 1.3: with audit logging)
@@ -425,12 +585,17 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     let failed_auth_tracker = Arc::new(FailedAuthTracker::new(5, 1));
     info!("🛡️  Failed authentication tracker enabled");
 
+    // Initialize rate limiter (Phase 1.4: 100 requests per minute)
+    let rate_limiter = Arc::new(RateLimiter::new(100, 60));
+    info!("⏱️  Rate limiter enabled (100 req/min)");
+
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
         vector_store,
         auth_manager,
         audit_logger,
         failed_auth_tracker,
+        rate_limiter,
     });
 
     // 1. Start gRPC Server
@@ -440,12 +605,21 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         .serve(grpc_addr);
 
     // 2. Start REST Server (Axum)
-    // Protected routes require authentication
+    // Protected routes with full security stack (Phase 1.4)
+    // Middleware order (applied in reverse): rate_limit → validation → auth → handler
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
         .layer(middleware::from_fn_with_state(
             shared_state.clone(),
             auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            validation_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            rate_limit_middleware,
         ));
 
     // Public routes (no authentication)
