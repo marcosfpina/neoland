@@ -23,7 +23,7 @@ serde_json = "1.0"
 anyhow = "1.0"
 futures = "0.3"
 
-reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "stream", "multipart", "cookies"] }
 async-channel = "2.3"
 uuid = { version = "1.0", features = ["v4"] }
 
@@ -66,3 +66,23 @@ hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[dev-dependencies]
+# Security Testing (Phase 2.4)
+regex = "1.11"
+
+# Test Infrastructure
+tempfile = "3.14"
+
+# Performance Testing
+criterion = "0.5"
+
+[[test]]
+name = "fuzz_endpoints"
+path = "tests/security/fuzz_endpoints.rs"
+harness = true
+
+[[test]]
+name = "pentest_scenarios"
+path = "tests/security/pentest_scenarios.rs"
+harness = true
