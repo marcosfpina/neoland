@@ -34,6 +34,7 @@ use crate::{
     audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
     auth::AuthManager,
     engine::{GenerationConfig, LocalEngine},
+    health, // Phase 4.3: Health Checks
     nlp::VectorStore,
     validation::{ChatRequestValidation, MessageValidator},
 };
@@ -133,6 +134,7 @@ pub struct AppState {
     audit_logger: Arc<AuditLogger>,
     failed_auth_tracker: Arc<FailedAuthTracker>,
     rate_limiter: Arc<RateLimiter>,
+    start_time: Instant, // Phase 4.3: Track uptime for health checks
 }
 
 // gRPC Service Implementation
@@ -365,6 +367,32 @@ async fn metrics_handler() -> HttpResponse<String> {
             .body(format!("Error rendering metrics: {}", e))
             .unwrap(),
     }
+}
+
+// Phase 4.3: Health Check Endpoints
+
+/// Comprehensive health check (Kubernetes liveness probe)
+async fn health_handler(State(state): State<Arc<AppState>>) -> Json<health::HealthResponse> {
+    let uptime = state.start_time.elapsed().as_secs();
+    let response = health::perform_health_check(Some(uptime)).await;
+    Json(response)
+}
+
+/// Readiness check (Kubernetes readiness probe)
+async fn readiness_handler() -> (StatusCode, Json<health::ReadinessResponse>) {
+    let response = health::perform_readiness_check().await;
+    let status_code = if response.ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (status_code, Json(response))
+}
+
+/// Liveness check (simple heartbeat)
+async fn liveness_handler() -> Json<health::LivenessResponse> {
+    let response = health::perform_liveness_check().await;
+    Json(response)
 }
 
 async fn rest_chat_handler(
@@ -702,6 +730,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         audit_logger,
         failed_auth_tracker,
         rate_limiter,
+        start_time: Instant::now(), // Phase 4.3: Track service start time
     });
 
     // 1. Start gRPC Server
@@ -722,7 +751,9 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
 
     // Public routes (no authentication)
     let public_routes = Router::new()
-        .route("/health", get(|| async { "OK" }))
+        .route("/health", get(health_handler)) // Phase 4.3: Comprehensive health check
+        .route("/ready", get(readiness_handler)) // Phase 4.3: Readiness probe
+        .route("/live", get(liveness_handler)) // Phase 4.3: Liveness probe
         .route("/metrics", get(metrics_handler)); // Phase 4.1: Prometheus metrics
 
     // Combine all routes
