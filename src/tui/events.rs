@@ -1,8 +1,10 @@
 // TUI Event Handling
-use super::app::AppState;
+use std::time::Duration;
+
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use std::time::Duration;
+
+use super::app::AppState;
 
 pub enum AppEvent {
     Quit,
@@ -34,27 +36,26 @@ pub fn handle_events(_app: &mut AppState) -> Result<Option<AppEvent>> {
                 // Presets (Ctrl+1-5)
                 (KeyCode::Char('1'), KeyModifiers::CONTROL) => {
                     Some(AppEvent::ApplyPreset("balanced".into()))
-                }
+                },
                 (KeyCode::Char('2'), KeyModifiers::CONTROL) => {
                     Some(AppEvent::ApplyPreset("creative".into()))
-                }
+                },
                 (KeyCode::Char('3'), KeyModifiers::CONTROL) => {
                     Some(AppEvent::ApplyPreset("precise".into()))
-                }
+                },
                 (KeyCode::Char('4'), KeyModifiers::CONTROL) => {
                     Some(AppEvent::ApplyPreset("research".into()))
-                }
+                },
                 (KeyCode::Char('5'), KeyModifiers::CONTROL) => {
                     Some(AppEvent::ApplyPreset("safe".into()))
-                }
+                },
 
                 // Toggle sidebar
                 (KeyCode::Tab, _) => Some(AppEvent::ToggleSidebar),
 
                 // Text input
-                (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
-                    Some(AppEvent::Input(c))
-                }
+                (KeyCode::Char(c), KeyModifiers::NONE)
+                | (KeyCode::Char(c), KeyModifiers::SHIFT) => Some(AppEvent::Input(c)),
 
                 // Backspace
                 (KeyCode::Backspace, _) => Some(AppEvent::Backspace),

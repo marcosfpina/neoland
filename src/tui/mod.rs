@@ -2,27 +2,26 @@
 // Terminal User Interface using ratatui + crossterm
 
 pub mod app;
-pub mod ui;
 pub mod events;
 pub mod presets;
+pub mod ui;
 
-use app::AppState;
-use events::{handle_events, AppEvent};
-use ui::render;
+use std::io;
 
 use anyhow::Result;
+use app::AppState;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use events::{handle_events, AppEvent};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io;
+use ui::render;
 
 /// Executa o cliente TUI
 pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     // Setup terminal
 
-    
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -47,31 +46,31 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                         send_message_to_server(&mut app).await?;
                         app.is_thinking = false;
                     }
-                }
+                },
                 AppEvent::ClearChat => {
                     app.messages.clear();
                     app.add_system_message("🗑️ Chat limpo");
-                }
+                },
                 AppEvent::ApplyPreset(preset_name) => {
                     app.apply_preset(&preset_name);
-                }
+                },
                 AppEvent::ToggleSidebar => {
                     app.sidebar_visible = !app.sidebar_visible;
-                }
+                },
                 AppEvent::Input(c) => {
                     app.input_buffer.push(c);
-                }
+                },
                 AppEvent::Backspace => {
                     app.input_buffer.pop();
-                }
+                },
                 AppEvent::ScrollUp => {
                     if app.scroll_offset > 0 {
                         app.scroll_offset -= 1;
                     }
-                }
+                },
                 AppEvent::ScrollDown => {
                     app.scroll_offset += 1;
-                }
+                },
             }
         }
     }
@@ -86,7 +85,6 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
 
 /// Envia mensagem usando UnifiedLLMClient (LocalFirst strategy)
 async fn send_message_to_server(app: &mut AppState) -> Result<()> {
-
     let message = app.input_buffer.clone();
     app.add_user_message(&message);
     app.input_buffer.clear();
@@ -97,47 +95,46 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
         Err(e) => {
             app.add_system_message(&format!("❌ Failed to initialize secrets manager: {}", e));
             return Ok(());
-        }
+        },
     };
 
     // Load SecureLLM API key from environment (if available)
-    let securellm_provider = std::env::var("SECURELLM_PROVIDER")
-        .ok()
-        .map(|provider| {
-            let api_key = std::env::var(format!("{}_API_KEY", provider.to_uppercase())).ok();
-            (provider.leak() as &str, api_key)
-        });
+    let securellm_provider = std::env::var("SECURELLM_PROVIDER").ok().map(|provider| {
+        let api_key = std::env::var(format!("{}_API_KEY", provider.to_uppercase())).ok();
+        (provider.leak() as &str, api_key)
+    });
 
     // Create UnifiedLLMClient with LocalFirst strategy (Phase 1.2: now async)
     let client = match crate::llm::UnifiedLLMClient::new_local_first(
         app.ml_api_url.clone(),
         secrets_manager,
         securellm_provider,
-    ).await {
+    )
+    .await
+    {
         Ok(client) => client,
         Err(e) => {
             app.add_system_message(&format!("❌ Failed to initialize LLM client: {}", e));
             return Ok(());
-        }
+        },
     };
 
     // Send chat request (LocalFirst: ml-offload → SecureLLM fallback)
-    match client.chat(
-        &message,
-        Some(app.config.temperature),
-        Some(app.config.max_tokens as u32),
-    ).await {
+    match client
+        .chat(&message, Some(app.config.temperature), Some(app.config.max_tokens as u32))
+        .await
+    {
         Ok(response) => {
             app.add_assistant_message(&response);
-        }
+        },
         Err(e) => {
             app.add_system_message(&format!("❌ All LLM backends failed: {}", e));
-            
+
             // Last resort: Try local gRPC server directly
             if let Err(grpc_err) = try_grpc_fallback(app, message).await {
                 app.add_system_message(&format!("❌ gRPC fallback also failed: {}", grpc_err));
             }
-        }
+        },
     }
 
     Ok(())
@@ -145,8 +142,7 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
 
 /// Last resort fallback: Direct gRPC connection
 async fn try_grpc_fallback(app: &mut AppState, message: String) -> Result<()> {
-    use crate::llamachat::llama_service_client::LlamaServiceClient;
-    use crate::llamachat::ChatRequest;
+    use crate::llamachat::{llama_service_client::LlamaServiceClient, ChatRequest};
 
     let mut client = LlamaServiceClient::connect(app.server_url.clone()).await?;
 

@@ -2,7 +2,7 @@
 // Re-implementado usando crate `hyprland-ipc` do ai-agent-os
 
 use anyhow::Result;
-use hyprland_ipc::{HyprlandClient, Workspace, Window};
+use hyprland_ipc::{HyprlandClient, Window, Workspace};
 
 pub struct HyprlandIPC {
     client: HyprlandClient,
@@ -49,29 +49,39 @@ impl HyprlandIPC {
 
     /// Toggle floating mode
     pub async fn toggle_float(&self, address: Option<&str>) -> Result<()> {
-        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        let target = address
+            .map(|a| format!("address:{}", a))
+            .unwrap_or_else(|| "active".to_string());
         self.dispatch(&format!("dispatch togglefloating {}", target)).await?;
         Ok(())
     }
 
     /// Centraliza janela
     pub async fn center_window(&self, address: Option<&str>) -> Result<()> {
-        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
+        let target = address
+            .map(|a| format!("address:{}", a))
+            .unwrap_or_else(|| "active".to_string());
         self.dispatch(&format!("dispatch centerwindow {}", target)).await?;
         Ok(())
     }
 
     /// Move para workspace
     pub async fn move_to_workspace(&self, workspace_id: i32, address: Option<&str>) -> Result<()> {
-        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
-        self.dispatch(&format!("dispatch movetoworkspace {},{}", workspace_id, target)).await?;
+        let target = address
+            .map(|a| format!("address:{}", a))
+            .unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch movetoworkspace {},{}", workspace_id, target))
+            .await?;
         Ok(())
     }
 
     /// Move para scratchpad (special workspace)
     pub async fn move_to_scratchpad(&self, address: Option<&str>) -> Result<()> {
-        let target = address.map(|a| format!("address:{}", a)).unwrap_or_else(|| "active".to_string());
-        self.dispatch(&format!("dispatch movetoworkspace special:scratch_neoland,{}", target)).await?;
+        let target = address
+            .map(|a| format!("address:{}", a))
+            .unwrap_or_else(|| "active".to_string());
+        self.dispatch(&format!("dispatch movetoworkspace special:scratch_neoland,{}", target))
+            .await?;
         Ok(())
     }
 

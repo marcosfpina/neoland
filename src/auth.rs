@@ -7,10 +7,14 @@
 //!
 //! See ADR-011 for detailed architecture decisions.
 
-use anyhow::{Result, anyhow};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use crate::secrets::{SecretsManager, SecretType};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
+
+use anyhow::{anyhow, Result};
+
+use crate::secrets::{SecretType, SecretsManager};
 
 /// User role for RBAC
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,8 +54,8 @@ pub struct ApiKey {
 
 /// Authentication manager
 ///
-/// In production, this should be backed by a database or secrets management system.
-/// For now, we use an in-memory store with predefined keys.
+/// In production, this should be backed by a database or secrets management
+/// system. For now, we use an in-memory store with predefined keys.
 pub struct AuthManager {
     api_keys: Arc<RwLock<HashMap<String, ApiKey>>>,
 }
@@ -96,14 +100,13 @@ impl AuthManager {
             },
         );
 
-        Self {
-            api_keys: Arc::new(RwLock::new(keys)),
-        }
+        Self { api_keys: Arc::new(RwLock::new(keys)) }
     }
 
     /// Create a new AuthManager with keys from SecretsManager (Phase 1.2)
     ///
-    /// Attempts to load API keys from Vault. Falls back to default keys if Vault unavailable.
+    /// Attempts to load API keys from Vault. Falls back to default keys if
+    /// Vault unavailable.
     pub async fn new_with_secrets(secrets_manager: &SecretsManager) -> Self {
         let mut keys = HashMap::new();
 
@@ -122,7 +125,11 @@ impl AuthManager {
                 Ok(key) => {
                     tracing::info!(
                         role = role_name,
-                        source = if secrets_manager.is_vault_available() { "vault" } else { "env" },
+                        source = if secrets_manager.is_vault_available() {
+                            "vault"
+                        } else {
+                            "env"
+                        },
                         "Loaded API key for role"
                     );
                     keys.insert(
@@ -134,7 +141,7 @@ impl AuthManager {
                             description: description.to_string(),
                         },
                     );
-                }
+                },
                 Err(e) => {
                     tracing::warn!(
                         role = role_name,
@@ -152,29 +159,24 @@ impl AuthManager {
                             description: format!("Development {} key (fallback)", role_name),
                         },
                     );
-                }
+                },
             }
         }
 
-        Self {
-            api_keys: Arc::new(RwLock::new(keys)),
-        }
+        Self { api_keys: Arc::new(RwLock::new(keys)) }
     }
 
     /// Validate an API key and return the associated metadata
     pub fn validate_api_key(&self, key: &str) -> Result<ApiKey> {
-        let keys = self.api_keys.read()
-            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+        let keys = self.api_keys.read().map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
 
-        keys.get(key)
-            .cloned()
-            .ok_or_else(|| anyhow!("Invalid API key"))
+        keys.get(key).cloned().ok_or_else(|| anyhow!("Invalid API key"))
     }
 
     /// Add a new API key (admin operation)
     pub fn add_api_key(&self, api_key: ApiKey) -> Result<()> {
-        let mut keys = self.api_keys.write()
-            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+        let mut keys =
+            self.api_keys.write().map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
 
         keys.insert(api_key.key.clone(), api_key);
         Ok(())
@@ -182,21 +184,20 @@ impl AuthManager {
 
     /// Revoke an API key (admin operation)
     pub fn revoke_api_key(&self, key: &str) -> Result<()> {
-        let mut keys = self.api_keys.write()
-            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+        let mut keys =
+            self.api_keys.write().map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
 
-        keys.remove(key)
-            .ok_or_else(|| anyhow!("API key not found"))?;
+        keys.remove(key).ok_or_else(|| anyhow!("API key not found"))?;
 
         Ok(())
     }
 
     /// List all API keys (admin operation, excludes actual key values)
     pub fn list_api_keys(&self) -> Result<Vec<(String, Role, String)>> {
-        let keys = self.api_keys.read()
-            .map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
+        let keys = self.api_keys.read().map_err(|e| anyhow!("Failed to acquire lock: {}", e))?;
 
-        Ok(keys.values()
+        Ok(keys
+            .values()
             .map(|k| (k.user_id.clone(), k.role.clone(), k.description.clone()))
             .collect())
     }
@@ -354,8 +355,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_manager_with_secrets() {
-        use crate::secrets::SecretsManager;
         use std::sync::Arc;
+
+        use crate::secrets::SecretsManager;
 
         // Set up test environment
         std::env::set_var("NEOLAND_ADMIN_API_KEY", "vault_admin_key");
@@ -426,4 +428,3 @@ mod tests {
         assert_eq!(key2.role, Role::User);
     }
 }
-

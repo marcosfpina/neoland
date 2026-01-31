@@ -1,12 +1,16 @@
 // Unified LLM Client - Local First Strategy
 // Abstração unificada para ml-offload-api + securellm-bridge
 
-use anyhow::{Context, Result};
-use crate::ml_offload::{MLOffloadClient, ChatCompletionRequest, ChatMessage};
-use crate::llm::SecureLLMProxy;
-use crate::secrets::SecretsManager;
 use std::sync::Arc;
+
+use anyhow::{Context, Result};
 use tracing::{info, warn};
+
+use crate::{
+    llm::SecureLLMProxy,
+    ml_offload::{ChatCompletionRequest, ChatMessage, MLOffloadClient},
+    secrets::SecretsManager,
+};
 
 /// Estratégia de roteamento para LLM requests
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,11 +43,11 @@ impl UnifiedLLMClient {
             Ok(client) => {
                 info!("ML-Offload client initialized");
                 Some(client)
-            }
+            },
             Err(e) => {
                 warn!("Failed to initialize ML-Offload client: {}", e);
                 None
-            }
+            },
         };
 
         let securellm = if let Some((provider, api_key)) = securellm_provider {
@@ -51,11 +55,11 @@ impl UnifiedLLMClient {
                 Ok(proxy) => {
                     info!(provider = provider, "SecureLLM proxy initialized");
                     Some(proxy)
-                }
+                },
                 Err(e) => {
                     warn!("Failed to initialize SecureLLM proxy: {}", e);
                     None
-                }
+                },
             }
         } else {
             None
@@ -65,11 +69,7 @@ impl UnifiedLLMClient {
             anyhow::bail!("No LLM backend available (both ml-offload and securellm failed)");
         }
 
-        Ok(Self {
-            ml_offload,
-            securellm,
-            strategy: RoutingStrategy::LocalFirst,
-        })
+        Ok(Self { ml_offload, securellm, strategy: RoutingStrategy::LocalFirst })
     }
 
     /// Envia chat request com roteamento baseado na estratégia
@@ -80,11 +80,15 @@ impl UnifiedLLMClient {
         max_tokens: Option<u32>,
     ) -> Result<String> {
         match self.strategy {
-            RoutingStrategy::LocalFirst => self.chat_local_first(prompt, temperature, max_tokens).await,
-            RoutingStrategy::ExternalFirst => self.chat_external_first(prompt, temperature, max_tokens).await,
+            RoutingStrategy::LocalFirst => {
+                self.chat_local_first(prompt, temperature, max_tokens).await
+            },
+            RoutingStrategy::ExternalFirst => {
+                self.chat_external_first(prompt, temperature, max_tokens).await
+            },
             RoutingStrategy::LoadBalanced => {
                 anyhow::bail!("LoadBalanced strategy not yet implemented")
-            }
+            },
         }
     }
 
@@ -101,17 +105,16 @@ impl UnifiedLLMClient {
                 Ok(response) => {
                     info!("Response from ml-offload (local)");
                     return Ok(response);
-                }
+                },
                 Err(e) => {
                     warn!("ml-offload failed: {}, trying SecureLLM fallback", e);
-                }
+                },
             }
         }
 
         // Fallback to SecureLLM (external, audited)
         if let Some(sec) = &self.securellm {
-            let response = sec.send_secure(prompt).await
-                .context("SecureLLM fallback failed")?;
+            let response = sec.send_secure(prompt).await.context("SecureLLM fallback failed")?;
             info!(provider = sec.provider(), "Response from SecureLLM (external)");
             return Ok(response);
         }
@@ -132,16 +135,18 @@ impl UnifiedLLMClient {
                 Ok(response) => {
                     info!(provider = sec.provider(), "Response from SecureLLM (external)");
                     return Ok(response);
-                }
+                },
                 Err(e) => {
                     warn!("SecureLLM failed: {}, trying ml-offload fallback", e);
-                }
+                },
             }
         }
 
         // Fallback to ml-offload (local, fast)
         if let Some(ml) = &self.ml_offload {
-            let response = self.try_ml_offload(ml, prompt, temperature, max_tokens).await
+            let response = self
+                .try_ml_offload(ml, prompt, temperature, max_tokens)
+                .await
                 .context("ml-offload fallback failed")?;
             info!("Response from ml-offload (local)");
             return Ok(response);
@@ -160,10 +165,7 @@ impl UnifiedLLMClient {
     ) -> Result<String> {
         let request = ChatCompletionRequest {
             model: "auto".into(), // ml-offload selects best backend
-            messages: vec![ChatMessage {
-                role: "user".into(),
-                content: prompt.to_string(),
-            }],
+            messages: vec![ChatMessage { role: "user".into(), content: prompt.to_string() }],
             temperature,
             max_tokens,
             stream: None,
@@ -194,10 +196,7 @@ impl UnifiedLLMClient {
             false
         };
 
-        HealthStatus {
-            ml_offload: ml_healthy,
-            securellm: sec_healthy,
-        }
+        HealthStatus { ml_offload: ml_healthy, securellm: sec_healthy }
     }
 }
 
@@ -218,7 +217,8 @@ mod tests {
             "http://localhost:9000".to_string(),
             secrets_manager,
             None, // No SecureLLM
-        ).await;
+        )
+        .await;
 
         // Should succeed if ml-offload client can be created
         if result.is_ok() {
