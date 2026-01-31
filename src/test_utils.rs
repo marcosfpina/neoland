@@ -84,7 +84,7 @@ pub mod assertions {
         assert!(
             err.to_string().contains(expected),
             "Error message '{}' does not contain '{}'",
-            err.to_string(),
+            err,
             expected
         );
     }
@@ -173,13 +173,13 @@ mod tests {
     #[test]
     fn test_assert_no_sensitive_data() {
         let text = "This is a safe message";
-        assertions::assert_no_sensitive_data(&text, &["password", "secret"]);
+        assertions::assert_no_sensitive_data(text, &["password", "secret"]);
     }
 
     #[test]
     #[should_panic(expected = "contains sensitive keyword")]
     fn test_assert_no_sensitive_data_fails() {
         let text = "This message contains a password: hunter2";
-        assertions::assert_no_sensitive_data(&text, &["password"]);
+        assertions::assert_no_sensitive_data(text, &["password"]);
     }
 }

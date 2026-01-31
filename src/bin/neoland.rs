@@ -93,7 +93,7 @@ async fn run_health_check(rest_endpoint: &str, grpc_endpoint: &str) {
 
     // Test 3: Check processes
     info!("3️⃣ Verificando processos...");
-    let output = Command::new("ps").args(&["aux"]).output();
+    let output = Command::new("ps").args(["aux"]).output();
 
     match output {
         Ok(out) => {
@@ -118,7 +118,7 @@ async fn restart_server(grpc_port: u16, rest_port: u16) {
     info!("🔄 Reiniciando servidor Neoland...");
 
     // 1. Find and kill old process
-    let output = Command::new("ps").args(&["aux"]).output();
+    let output = Command::new("ps").args(["aux"]).output();
 
     match output {
         Ok(out) => {

@@ -221,8 +221,7 @@ mod tests {
         .await;
 
         // Should succeed if ml-offload client can be created
-        if result.is_ok() {
-            let client = result.unwrap();
+        if let Ok(client) = result {
             assert_eq!(client.strategy, RoutingStrategy::LocalFirst);
         }
     }
