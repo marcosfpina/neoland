@@ -12,6 +12,7 @@ pub mod metrics; // Phase 4.1: Prometheus Metrics
 pub mod ml_offload;
 pub mod nlp;
 pub mod secrets;
+pub mod storage; // Phase 4.7: Persistent Vector Store
 pub mod tui;
 pub mod validation;
 
