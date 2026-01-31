@@ -1,9 +1,11 @@
 use anyhow::{Error as E, Result};
 use candle_core::{Device, Tensor};
-use candle_transformers::generation::LogitsProcessor;
-use candle_transformers::models::quantized_llama::ModelWeights as Qwen2;
+use candle_transformers::{
+    generation::LogitsProcessor, models::quantized_llama::ModelWeights as Qwen2,
+};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
+
 use crate::nlp::VectorStore;
 
 #[derive(Clone)]
@@ -60,21 +62,25 @@ impl LocalEngine {
         let repo_id = "Qwen/Qwen1.5-1.8B-Chat-GGUF".to_string();
         let filename = "qwen1_5-1_8b-chat-q4_k_m.gguf".to_string();
 
-        let default_system_prompt = "You are a Linux System Architect assistant embedded in a Hyprland environment.
+        let default_system_prompt = "You are a Linux System Architect assistant embedded in a \
+                                     Hyprland environment.
 If context is provided below, use it to answer.
-Always output commands in format [[CMD:action:args]] when executing system actions.".to_string();
+Always output commands in format [[CMD:action:args]] when executing system actions."
+            .to_string();
 
         println!("Initializing Local Engine (Qwen 1.8B)...");
         let api = Api::new()?;
         let repo = api.repo(Repo::new(repo_id, RepoType::Model));
         let model_path = repo.get(&filename)?;
 
-        let tokenizer_repo = api.repo(Repo::new("Qwen/Qwen1.5-1.8B-Chat".to_string(), RepoType::Model));
+        let tokenizer_repo =
+            api.repo(Repo::new("Qwen/Qwen1.5-1.8B-Chat".to_string(), RepoType::Model));
         let tokenizer_filename = tokenizer_repo.get("tokenizer.json")?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
         let mut file = std::fs::File::open(&model_path)?;
-        let content = candle_core::quantized::gguf_file::Content::read(&mut file).map_err(E::msg)?;
+        let content =
+            candle_core::quantized::gguf_file::Content::read(&mut file).map_err(E::msg)?;
         let model = Qwen2::from_gguf(content, &mut file, &device)?;
 
         println!("Local Engine Ready.");
@@ -111,14 +117,13 @@ Always output commands in format [[CMD:action:args]] when executing system actio
         }
 
         // Use custom system prompt or default
-        let base_system_prompt = config
-            .system_prompt
-            .as_ref()
-            .unwrap_or(&self.default_system_prompt);
+        let base_system_prompt =
+            config.system_prompt.as_ref().unwrap_or(&self.default_system_prompt);
 
         let full_system_prompt = format!("{}{}", base_system_prompt, context_injection);
         let templated_prompt = format!(
-            "<|im_start|>system\n{}\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>system\n{}\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\\
+             n<|im_start|>assistant\n",
             full_system_prompt, user_input
         );
 
@@ -126,11 +131,8 @@ Always output commands in format [[CMD:action:args]] when executing system actio
         let mut tokens = tokens.get_ids().to_vec();
 
         // Create logits processor with config parameters
-        let mut logits_processor = LogitsProcessor::new(
-            299792458,
-            Some(config.temperature),
-            Some(config.top_p),
-        );
+        let mut logits_processor =
+            LogitsProcessor::new(299792458, Some(config.temperature), Some(config.top_p));
 
         for _ in 0..config.max_tokens {
             let input = Tensor::new(&tokens[tokens.len() - 1..], &self.device)?.unsqueeze(0)?;

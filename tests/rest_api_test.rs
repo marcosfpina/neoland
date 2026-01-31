@@ -1,10 +1,12 @@
 //! REST API Integration Tests
 //!
-//! Tests for REST API endpoints including authentication, rate limiting, and error handling.
+//! Tests for REST API endpoints including authentication, rate limiting, and
+//! error handling.
+
+use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::json;
-use std::time::Duration;
 use tokio::time::sleep;
 
 const TEST_GRPC_PORT: u16 = 50053;
@@ -34,20 +36,17 @@ async fn test_health_endpoint() {
     wait_for_server().await;
 
     let client = Client::new();
-    let response = client
-        .get(format!("{}/health", BASE_URL))
-        .send()
-        .await;
+    let response = client.get(format!("{}/health", BASE_URL)).send().await;
 
     match response {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
             let body = resp.text().await.unwrap();
             assert_eq!(body, "OK");
-        }
+        },
         Err(e) => {
             eprintln!("Health check failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -75,10 +74,10 @@ async fn test_chat_endpoint_requires_auth() {
     match response {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -112,10 +111,10 @@ async fn test_chat_endpoint_with_valid_auth() {
             // Should either be OK (200) or other valid response
             // Note: Actual streaming response handling depends on server implementation
             println!("Response status: {}", resp.status());
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -144,10 +143,10 @@ async fn test_chat_endpoint_with_invalid_auth() {
     match response {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -229,10 +228,10 @@ async fn test_input_validation_empty_prompt() {
         Ok(resp) => {
             // Should return bad request due to validation
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -262,10 +261,10 @@ async fn test_input_validation_invalid_role() {
         Ok(resp) => {
             // Should return bad request due to validation
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -298,10 +297,10 @@ async fn test_input_validation_too_many_messages() {
         Ok(resp) => {
             // Should return bad request due to validation
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();
@@ -371,10 +370,10 @@ async fn test_cors_headers() {
             // Check for CORS headers (if configured)
             println!("Headers: {:?}", resp.headers());
             // Note: Actual CORS validation depends on server configuration
-        }
+        },
         Err(e) => {
             eprintln!("Request failed: {}", e);
-        }
+        },
     }
 
     server.abort();

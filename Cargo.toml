@@ -33,6 +33,10 @@ vaultrs = "0.7"
 # Audit Logging (Phase 1.3)
 async-trait = "0.1"
 
+# Observability & Metrics (Phase 4.1)
+prometheus = "0.13"
+lazy_static = "1.4"
+
 # gRPC & Async
 tonic = "0.12"
 prost = "0.13"

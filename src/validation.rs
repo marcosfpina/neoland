@@ -1,7 +1,8 @@
 //! Input Validation Module
 //!
 //! This module provides input validation and sanitization for all user inputs.
-//! It protects against oversized requests, malformed data, and potential security issues.
+//! It protects against oversized requests, malformed data, and potential
+//! security issues.
 //!
 //! See ADR-014 for validation strategy decisions.
 
@@ -33,20 +34,20 @@ impl std::fmt::Display for ValidationError {
         match self {
             Self::PromptTooLarge { size, max } => {
                 write!(f, "Prompt too large: {} bytes (max: {} bytes)", size, max)
-            }
+            },
             Self::TooManyMessages { count, max } => {
                 write!(f, "Too many messages: {} (max: {})", count, max)
-            }
+            },
             Self::MetadataTooLarge { size, max } => {
                 write!(f, "Metadata too large: {} bytes (max: {} bytes)", size, max)
-            }
+            },
             Self::EmptyPrompt => write!(f, "Prompt cannot be empty"),
             Self::InvalidCharacters { field } => {
                 write!(f, "Invalid characters in field: {}", field)
-            }
+            },
             Self::MalformedRequest { reason } => {
                 write!(f, "Malformed request: {}", reason)
-            }
+            },
         }
     }
 }
@@ -68,17 +69,12 @@ impl MessageValidator {
         // Check size
         let size = prompt.len();
         if size > MAX_PROMPT_SIZE {
-            return Err(ValidationError::PromptTooLarge {
-                size,
-                max: MAX_PROMPT_SIZE,
-            });
+            return Err(ValidationError::PromptTooLarge { size, max: MAX_PROMPT_SIZE });
         }
 
         // Check for null bytes (potential injection)
         if prompt.contains('\0') {
-            return Err(ValidationError::InvalidCharacters {
-                field: "prompt".to_string(),
-            });
+            return Err(ValidationError::InvalidCharacters { field: "prompt".to_string() });
         }
 
         Ok(())
@@ -87,10 +83,7 @@ impl MessageValidator {
     /// Validate message count
     pub fn validate_message_count(count: usize) -> Result<(), ValidationError> {
         if count > MAX_MESSAGE_COUNT {
-            return Err(ValidationError::TooManyMessages {
-                count,
-                max: MAX_MESSAGE_COUNT,
-            });
+            return Err(ValidationError::TooManyMessages { count, max: MAX_MESSAGE_COUNT });
         }
         Ok(())
     }
@@ -130,15 +123,10 @@ impl RequestValidator {
 
     /// Validate metadata size
     pub fn validate_metadata_size(metadata: &serde_json::Value) -> Result<(), ValidationError> {
-        let size = serde_json::to_string(metadata)
-            .map(|s| s.len())
-            .unwrap_or(0);
+        let size = serde_json::to_string(metadata).map(|s| s.len()).unwrap_or(0);
 
         if size > MAX_METADATA_SIZE {
-            return Err(ValidationError::MetadataTooLarge {
-                size,
-                max: MAX_METADATA_SIZE,
-            });
+            return Err(ValidationError::MetadataTooLarge { size, max: MAX_METADATA_SIZE });
         }
 
         Ok(())
@@ -205,18 +193,13 @@ impl DocumentValidator {
         // Check size
         if content.len() > Self::MAX_DOCUMENT_SIZE {
             return Err(ValidationError::MalformedRequest {
-                reason: format!(
-                    "Document too large: {} bytes (max: 10MB)",
-                    content.len()
-                ),
+                reason: format!("Document too large: {} bytes (max: 10MB)", content.len()),
             });
         }
 
         // Validate filename (prevent path traversal)
         if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
-            return Err(ValidationError::InvalidCharacters {
-                field: "filename".to_string(),
-            });
+            return Err(ValidationError::InvalidCharacters { field: "filename".to_string() });
         }
 
         // Check for empty filename
@@ -250,19 +233,13 @@ mod tests {
     fn test_validate_prompt_too_large() {
         let large_prompt = "a".repeat(MAX_PROMPT_SIZE + 1);
         let result = MessageValidator::validate_prompt(&large_prompt);
-        assert!(matches!(
-            result,
-            Err(ValidationError::PromptTooLarge { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::PromptTooLarge { .. })));
     }
 
     #[test]
     fn test_validate_prompt_null_byte() {
         let result = MessageValidator::validate_prompt("Hello\0World");
-        assert!(matches!(
-            result,
-            Err(ValidationError::InvalidCharacters { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::InvalidCharacters { .. })));
     }
 
     #[test]
@@ -278,10 +255,7 @@ mod tests {
         assert!(result.is_ok());
 
         let result = MessageValidator::validate_message_count(MAX_MESSAGE_COUNT + 1);
-        assert!(matches!(
-            result,
-            Err(ValidationError::TooManyMessages { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::TooManyMessages { .. })));
     }
 
     #[test]
@@ -307,10 +281,7 @@ mod tests {
             metadata: serde_json::json!({}),
         };
 
-        assert!(matches!(
-            request.validate(),
-            Err(ValidationError::MalformedRequest { .. })
-        ));
+        assert!(matches!(request.validate(), Err(ValidationError::MalformedRequest { .. })));
     }
 
     #[test]
@@ -324,19 +295,13 @@ mod tests {
     fn test_document_path_traversal() {
         let content = b"Hello";
         let result = DocumentValidator::validate_document(content, "../etc/passwd");
-        assert!(matches!(
-            result,
-            Err(ValidationError::InvalidCharacters { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::InvalidCharacters { .. })));
     }
 
     #[test]
     fn test_document_too_large() {
         let large_content = vec![0u8; DocumentValidator::MAX_DOCUMENT_SIZE + 1];
         let result = DocumentValidator::validate_document(&large_content, "large.bin");
-        assert!(matches!(
-            result,
-            Err(ValidationError::MalformedRequest { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::MalformedRequest { .. })));
     }
 }

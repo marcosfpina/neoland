@@ -1,15 +1,16 @@
 // Library crate para Neoland
 // Expõe modules que podem ser usados por binaries
+pub mod audit;
+pub mod auth;
 pub mod cli;
 pub mod engine;
-pub mod nlp;
 pub mod hyprland_ops;
-pub mod tui;
-pub mod ml_offload;
 pub mod llm;
-pub mod auth;
+pub mod metrics; // Phase 4.1: Prometheus Metrics
+pub mod ml_offload;
+pub mod nlp;
 pub mod secrets;
-pub mod audit;
+pub mod tui;
 pub mod validation;
 
 // Re-export server function e tipos gRPC

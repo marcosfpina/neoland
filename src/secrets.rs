@@ -1,16 +1,20 @@
 //! Secrets Management Module
 //!
-//! This module provides secure secret storage and retrieval using HashiCorp Vault.
-//! It supports both Vault integration (production) and environment variable fallback (development).
+//! This module provides secure secret storage and retrieval using HashiCorp
+//! Vault. It supports both Vault integration (production) and environment
+//! variable fallback (development).
 //!
 //! See ADR-012 for architecture decisions.
 
-use anyhow::{Context, Result, anyhow};
-use std::collections::HashMap;
-use std::sync::Arc;
-use vaultrs::client::{VaultClient, VaultClientSettingsBuilder};
-use vaultrs::kv2;
-use crate::audit::{AuditLogger, AuditEvent, AuditAction};
+use std::{collections::HashMap, sync::Arc};
+
+use anyhow::{anyhow, Context, Result};
+use vaultrs::{
+    client::{VaultClient, VaultClientSettingsBuilder},
+    kv2,
+};
+
+use crate::audit::{AuditAction, AuditEvent, AuditLogger};
 
 /// Secret types supported by the secrets manager
 #[derive(Debug, Clone)]
@@ -43,10 +47,10 @@ impl SecretType {
             SecretType::NeolandApiKey(role) => format!("NEOLAND_{}_API_KEY", role.to_uppercase()),
             SecretType::DatabaseCredential(cred_type) => {
                 format!("DATABASE_{}", cred_type.to_uppercase())
-            }
+            },
             SecretType::TLSCertificate(cert_type) => {
                 format!("TLS_{}_CERT", cert_type.to_uppercase())
-            }
+            },
         }
     }
 }
@@ -71,7 +75,8 @@ struct CachedSecret {
 impl SecretsManager {
     /// Create a new SecretsManager
     ///
-    /// Attempts to connect to Vault. If Vault is unavailable, falls back to environment variables.
+    /// Attempts to connect to Vault. If Vault is unavailable, falls back to
+    /// environment variables.
     pub async fn new() -> Result<Self> {
         let vault_addr = std::env::var("VAULT_ADDR").ok();
         let vault_token = std::env::var("VAULT_TOKEN").ok();
@@ -84,17 +89,20 @@ impl SecretsManager {
                         "Connected to Vault successfully"
                     );
                     Some(Arc::new(client))
-                }
+                },
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
                         "Failed to connect to Vault, falling back to environment variables"
                     );
                     None
-                }
+                },
             }
         } else {
-            tracing::info!("Vault not configured (VAULT_ADDR/VAULT_TOKEN missing), using environment variables");
+            tracing::info!(
+                "Vault not configured (VAULT_ADDR/VAULT_TOKEN missing), using environment \
+                 variables"
+            );
             None
         };
 
@@ -160,14 +168,14 @@ impl SecretsManager {
 
                     self.cache_secret(&cache_key, &secret).await;
                     return Ok(secret);
-                }
+                },
                 Err(e) => {
                     tracing::warn!(
                         secret_type = ?secret_type,
                         error = %e,
                         "Failed to get secret from Vault, trying environment variables"
                     );
-                }
+                },
             }
         }
 
@@ -221,10 +229,7 @@ impl SecretsManager {
         let env_var = secret_type.env_var_name();
 
         std::env::var(&env_var).with_context(|| {
-            format!(
-                "Secret not found in Vault or environment. Set {} or configure Vault",
-                env_var
-            )
+            format!("Secret not found in Vault or environment. Set {} or configure Vault", env_var)
         })
     }
 
@@ -243,11 +248,7 @@ impl SecretsManager {
     /// Store a secret in Vault (admin operation, Phase 1.3: with audit logging)
     ///
     /// Note: This requires appropriate Vault permissions
-    pub async fn store_secret(
-        &self,
-        secret_type: SecretType,
-        value: String,
-    ) -> Result<()> {
+    pub async fn store_secret(&self, secret_type: SecretType, value: String) -> Result<()> {
         let client = self
             .vault_client
             .as_ref()
@@ -276,8 +277,7 @@ impl SecretsManager {
 
         // Log secret storage (Phase 1.3)
         if let Some(ref logger) = self.audit_logger {
-            let event = AuditEvent::new(AuditAction::SecretStore)
-                .with_resource(path);
+            let event = AuditEvent::new(AuditAction::SecretStore).with_resource(path);
             let _ = logger.log(event).await;
         }
 
@@ -335,9 +335,7 @@ mod tests {
         std::env::set_var("DEEPSEEK_API_KEY", "test_key_123");
 
         let manager = SecretsManager::new().await.unwrap();
-        let secret = manager
-            .get_secret(SecretType::LLMApiKey("deepseek".to_string()))
-            .await;
+        let secret = manager.get_secret(SecretType::LLMApiKey("deepseek".to_string())).await;
 
         assert!(secret.is_ok());
         assert_eq!(secret.unwrap(), "test_key_123");
@@ -349,15 +347,10 @@ mod tests {
     #[tokio::test]
     async fn test_secrets_manager_missing_secret() {
         let manager = SecretsManager::new().await.unwrap();
-        let secret = manager
-            .get_secret(SecretType::LLMApiKey("nonexistent".to_string()))
-            .await;
+        let secret = manager.get_secret(SecretType::LLMApiKey("nonexistent".to_string())).await;
 
         assert!(secret.is_err());
-        assert!(secret
-            .unwrap_err()
-            .to_string()
-            .contains("NONEXISTENT_API_KEY"));
+        assert!(secret.unwrap_err().to_string().contains("NONEXISTENT_API_KEY"));
     }
 
     #[tokio::test]
@@ -367,19 +360,13 @@ mod tests {
         let manager = SecretsManager::new().await.unwrap();
 
         // First call - should retrieve from env and cache
-        let secret1 = manager
-            .get_secret(SecretType::LLMApiKey("test".to_string()))
-            .await
-            .unwrap();
+        let secret1 = manager.get_secret(SecretType::LLMApiKey("test".to_string())).await.unwrap();
 
         // Change environment variable
         std::env::set_var("TEST_API_KEY", "new_value");
 
         // Second call - should retrieve from cache (old value)
-        let secret2 = manager
-            .get_secret(SecretType::LLMApiKey("test".to_string()))
-            .await
-            .unwrap();
+        let secret2 = manager.get_secret(SecretType::LLMApiKey("test".to_string())).await.unwrap();
 
         assert_eq!(secret1, secret2);
         assert_eq!(secret1, "cached_value");
@@ -388,10 +375,7 @@ mod tests {
         manager.clear_cache().await;
 
         // Third call - should retrieve from env (new value)
-        let secret3 = manager
-            .get_secret(SecretType::LLMApiKey("test".to_string()))
-            .await
-            .unwrap();
+        let secret3 = manager.get_secret(SecretType::LLMApiKey("test".to_string())).await.unwrap();
 
         assert_eq!(secret3, "new_value");
 

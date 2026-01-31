@@ -1,14 +1,14 @@
 // SecureLLM Bridge Integration - Real Implementation
 // Proxy seguro para LLMs remotos com auditoria e rate limiting
 
-use anyhow::{Context, Result};
-use securellm_core::{
-    LLMProvider, Request, Message, MessageRole, MessageContent,
-};
-use securellm_providers::deepseek::{DeepSeekConfig, DeepSeekProvider};
 use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use securellm_core::{LLMProvider, Message, MessageContent, MessageRole, Request};
+use securellm_providers::deepseek::{DeepSeekConfig, DeepSeekProvider};
 use tracing::{info, warn};
-use crate::secrets::{SecretsManager, SecretType};
+
+use crate::secrets::{SecretType, SecretsManager};
 
 /// SecureLLM Proxy com audit e rate limiting
 pub struct SecureLLMProxy {
@@ -42,19 +42,17 @@ impl SecureLLMProxy {
 
         let provider: Arc<dyn LLMProvider> = match provider_name {
             "deepseek" => {
-                let config = DeepSeekConfig::new(api_key)
-                    .with_logging(true); // Enable logging for audit
-                let provider = DeepSeekProvider::new(config)
-                    .context("Failed to create DeepSeek provider")?;
+                let config = DeepSeekConfig::new(api_key).with_logging(true); // Enable logging for audit
+                let provider =
+                    DeepSeekProvider::new(config).context("Failed to create DeepSeek provider")?;
                 Arc::new(provider)
-            }
+            },
             // TODO: Add OpenAI, Anthropic, Ollama when needed
             _ => anyhow::bail!("Unsupported provider: {}. Supported: deepseek", provider_name),
         };
 
         // Validate configuration
-        provider.validate_config()
-            .context("Provider configuration validation failed")?;
+        provider.validate_config().context("Provider configuration validation failed")?;
 
         info!(
             provider = provider_name,
@@ -62,25 +60,25 @@ impl SecureLLMProxy {
             "SecureLLM Proxy initialized successfully"
         );
 
-        Ok(Self {
-            provider,
-            provider_name: provider_name.to_string(),
-            secrets_manager,
-        })
+        Ok(Self { provider, provider_name: provider_name.to_string(), secrets_manager })
     }
 
-    /// Load API key from SecretsManager (Vault or environment variable fallback)
+    /// Load API key from SecretsManager (Vault or environment variable
+    /// fallback)
     ///
     /// Phase 1.2: Replaced direct env var access with SecretsManager
     async fn load_api_key(provider: &str, secrets_manager: &SecretsManager) -> Result<String> {
         secrets_manager
             .get_secret(SecretType::LLMApiKey(provider.to_string()))
             .await
-            .with_context(|| format!(
-                "Failed to load API key for {}. Configure Vault or set {}_API_KEY environment variable",
-                provider,
-                provider.to_uppercase()
-            ))
+            .with_context(|| {
+                format!(
+                    "Failed to load API key for {}. Configure Vault or set {}_API_KEY environment \
+                     variable",
+                    provider,
+                    provider.to_uppercase()
+                )
+            })
     }
 
     /// Envia requisição segura com auditoria integrada
@@ -106,10 +104,8 @@ impl SecureLLMProxy {
         );
 
         // Send request through provider
-        let response = self.provider
-            .send_request(request)
-            .await
-            .context("SecureLLM request failed")?;
+        let response =
+            self.provider.send_request(request).await.context("SecureLLM request failed")?;
 
         // Log response metrics
         info!(
@@ -134,20 +130,17 @@ impl SecureLLMProxy {
     pub async fn health_check(&self) -> Result<bool> {
         match self.provider.health_check().await {
             Ok(health) => {
-                let is_healthy = matches!(
-                    health.status,
-                    securellm_core::HealthStatus::Healthy
-                );
-                
+                let is_healthy = matches!(health.status, securellm_core::HealthStatus::Healthy);
+
                 info!(
                     provider = %self.provider_name,
                     status = ?health.status,
                     latency_ms = ?health.latency_ms,
                     "Provider health check completed"
                 );
-                
+
                 Ok(is_healthy)
-            }
+            },
             Err(e) => {
                 warn!(
                     provider = %self.provider_name,
@@ -155,7 +148,7 @@ impl SecureLLMProxy {
                     "Provider health check failed"
                 );
                 Ok(false)
-            }
+            },
         }
     }
 
@@ -190,7 +183,8 @@ mod tests {
     #[tokio::test]
     async fn test_unsupported_provider() {
         let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
-        let result = SecureLLMProxy::new("invalid_provider", secrets_manager, Some("test".into())).await;
+        let result =
+            SecureLLMProxy::new("invalid_provider", secrets_manager, Some("test".into())).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unsupported provider"));
     }

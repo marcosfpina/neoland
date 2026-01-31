@@ -1,14 +1,15 @@
 //! Test Utilities Module
 //!
-//! This module provides common test utilities, mocks, and helpers for testing NEOLAND components.
-//! It is only compiled when running tests (#[cfg(test)]).
+//! This module provides common test utilities, mocks, and helpers for testing
+//! NEOLAND components. It is only compiled when running tests (#[cfg(test)]).
 
 #[cfg(test)]
 pub mod mocks {
     use std::sync::Arc;
-    use crate::secrets::SecretsManager;
-    use crate::auth::AuthManager;
+
     use anyhow::Result;
+
+    use crate::{auth::AuthManager, secrets::SecretsManager};
 
     /// Create a test SecretsManager with environment variable fallback
     pub async fn test_secrets_manager() -> Result<Arc<SecretsManager>> {
@@ -42,12 +43,10 @@ pub mod mocks {
     /// Sample chat request for testing
     pub fn sample_chat_request() -> crate::validation::ChatRequestValidation {
         crate::validation::ChatRequestValidation {
-            messages: vec![
-                crate::validation::ChatMessage {
-                    role: "user".to_string(),
-                    content: "Hello, world!".to_string(),
-                },
-            ],
+            messages: vec![crate::validation::ChatMessage {
+                role: "user".to_string(),
+                content: "Hello, world!".to_string(),
+            }],
             metadata: serde_json::json!({}),
         }
     }
@@ -56,12 +55,7 @@ pub mod mocks {
     pub fn large_chat_request(size_kb: usize) -> crate::validation::ChatRequestValidation {
         let content = "a".repeat(size_kb * 1024);
         crate::validation::ChatRequestValidation {
-            messages: vec![
-                crate::validation::ChatMessage {
-                    role: "user".to_string(),
-                    content,
-                },
-            ],
+            messages: vec![crate::validation::ChatMessage { role: "user".to_string(), content }],
             metadata: serde_json::json!({}),
         }
     }
@@ -75,10 +69,7 @@ pub mod mocks {
             })
             .collect();
 
-        crate::validation::ChatRequestValidation {
-            messages,
-            metadata: serde_json::json!({}),
-        }
+        crate::validation::ChatRequestValidation { messages, metadata: serde_json::json!({}) }
     }
 }
 
@@ -134,8 +125,7 @@ pub mod fixtures {
     pub const TEST_PROMPT: &str = "Hello, this is a test prompt for NEOLAND!";
 
     /// Common test fixture: system prompt
-    pub const SYSTEM_PROMPT: &str =
-        "You are a helpful AI assistant for testing purposes.";
+    pub const SYSTEM_PROMPT: &str = "You are a helpful AI assistant for testing purposes.";
 }
 
 #[cfg(test)]

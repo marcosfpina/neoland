@@ -12,10 +12,15 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if we're in a nix environment
-if ! command -v cargo &> /dev/null; then
-    echo -e "${YELLOW}⚠️  cargo not found. Entering nix develop...${NC}"
-    exec nix develop -c "$0" "$@"
+# Check if we need to run in nix environment
+# We need nix if flake.nix exists and IN_NIX_SHELL is not set
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "$PROJECT_ROOT/flake.nix" ] && [ -z "$IN_NIX_SHELL" ]; then
+    echo -e "${YELLOW}⚠️  Running in nix develop environment...${NC}"
+    cd "$PROJECT_ROOT"
+    exec nix develop -c .githooks/pre-commit "$@"
 fi
 
 echo "1️⃣  Checking formatting..."

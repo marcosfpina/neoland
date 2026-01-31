@@ -1,18 +1,16 @@
 //! Audit Logging Module
 //!
-//! This module provides comprehensive audit logging for security and compliance.
-//! All security-critical events are logged with structured data for analysis and alerting.
+//! This module provides comprehensive audit logging for security and
+//! compliance. All security-critical events are logged with structured data for
+//! analysis and alerting.
 //!
 //! See ADR-013 for architecture decisions.
+
+use std::{fs::OpenOptions, io::Write, net::IpAddr, path::Path, sync::Arc};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::net::IpAddr;
-use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Audit event action types
@@ -187,7 +185,8 @@ impl AuditEvent {
                 if key_lower.contains("password")
                     || key_lower.contains("secret")
                     || key_lower.contains("token")
-                    || key_lower.contains("key") {
+                    || key_lower.contains("key")
+                {
                     *value = serde_json::Value::String("[REDACTED]".to_string());
                 }
             }
@@ -218,10 +217,7 @@ impl AuditLogger {
             std::fs::create_dir_all(parent)?;
         }
 
-        Ok(Self {
-            log_path,
-            alert_handler: Arc::new(RwLock::new(None)),
-        })
+        Ok(Self { log_path, alert_handler: Arc::new(RwLock::new(None)) })
     }
 
     /// Set alert handler for suspicious activity
@@ -235,14 +231,17 @@ impl AuditLogger {
         // Sanitize sensitive data
         event.sanitize();
 
+        // Phase 4.1: Record audit metric
+        crate::metrics::utils::record_audit_event(
+            &format!("{:?}", event.action),
+            &format!("{:?}", event.severity),
+        );
+
         // Convert to JSON
         let json = serde_json::to_string(&event)?;
 
         // Write to log file (append mode, immutable)
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.log_path)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(&self.log_path)?;
 
         writeln!(file, "{}", json)?;
         file.sync_all()?; // Ensure written to disk
@@ -342,11 +341,7 @@ pub struct FailedAuthTracker {
 impl FailedAuthTracker {
     /// Create a new tracker
     pub fn new(threshold: usize, window_minutes: i64) -> Self {
-        Self {
-            failures: Arc::new(RwLock::new(Vec::new())),
-            threshold,
-            window_minutes,
-        }
+        Self { failures: Arc::new(RwLock::new(Vec::new())), threshold, window_minutes }
     }
 
     /// Track a failed authentication attempt
@@ -362,9 +357,7 @@ impl FailedAuthTracker {
         failures.retain(|(_, timestamp)| *timestamp > cutoff);
 
         // Count failures for this user
-        let user_failures = failures.iter()
-            .filter(|(uid, _)| uid == &user_id)
-            .count();
+        let user_failures = failures.iter().filter(|(uid, _)| uid == &user_id).count();
 
         // Return true if threshold exceeded
         user_failures > self.threshold
@@ -465,8 +458,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_event_with_error() {
-        let event = AuditEvent::new(AuditAction::AuthFailure)
-            .with_error("Invalid API key".to_string());
+        let event =
+            AuditEvent::new(AuditAction::AuthFailure).with_error("Invalid API key".to_string());
 
         assert_eq!(event.error, Some("Invalid API key".to_string()));
         assert!(!event.success);
@@ -482,10 +475,11 @@ mod tests {
         assert_eq!(event.metadata["tokens"], serde_json::json!(150));
 
         // Test sanitization removes sensitive metadata
-        event.metadata.as_object_mut().unwrap().insert(
-            "password".to_string(),
-            serde_json::json!("secret123"),
-        );
+        event
+            .metadata
+            .as_object_mut()
+            .unwrap()
+            .insert("password".to_string(), serde_json::json!("secret123"));
 
         event.sanitize();
         assert_eq!(event.metadata["password"], serde_json::json!("[REDACTED]"));
@@ -587,4 +581,3 @@ mod tests {
         assert!(triggered);
     }
 }
-

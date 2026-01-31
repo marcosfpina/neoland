@@ -1,5 +1,4 @@
 // TUI Rendering (ratatui widgets)
-use super::app::{AppState, MessageRole};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -7,6 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
+
+use super::app::{AppState, MessageRole};
 
 // Tokyo Night Palette
 pub mod colors {
@@ -29,9 +30,9 @@ pub fn render(f: &mut Frame<'_>, app: &AppState) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(0),     // Chat area
-            Constraint::Length(3),  // Input bar
+            Constraint::Length(3), // Header
+            Constraint::Min(0),    // Chat area
+            Constraint::Length(3), // Input bar
         ])
         .split(size);
 
@@ -42,8 +43,8 @@ pub fn render(f: &mut Frame<'_>, app: &AppState) {
         let chat_sidebar = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(70),  // Chat
-                Constraint::Percentage(30),  // Sidebar
+                Constraint::Percentage(70), // Chat
+                Constraint::Percentage(30), // Sidebar
             ])
             .split(main_chunks[1]);
 
@@ -57,7 +58,11 @@ pub fn render(f: &mut Frame<'_>, app: &AppState) {
 }
 
 fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let status = if app.is_thinking { "⏳ Thinking..." } else { "✅ Ready" };
+    let status = if app.is_thinking {
+        "⏳ Thinking..."
+    } else {
+        "✅ Ready"
+    };
     let title = format!(
         " 🚀 Neoland TUI | {} | {} | Preset: {} ",
         app.server_url,
@@ -66,11 +71,7 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     );
 
     let header = Paragraph::new(title)
-        .style(
-            Style::default()
-                .fg(colors::PRIMARY)
-                .add_modifier(Modifier::BOLD),
-        )
+        .style(Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -95,16 +96,10 @@ fn render_chat(f: &mut Frame<'_>, area: Rect, app: &AppState) {
             let time = msg.timestamp.format("%H:%M:%S").to_string();
             let content = vec![
                 Line::from(vec![
-                    Span::styled(
-                        format!("[{}] ", time),
-                        Style::default().fg(colors::MUTED),
-                    ),
+                    Span::styled(format!("[{}] ", time), Style::default().fg(colors::MUTED)),
                     Span::styled(prefix, Style::default().fg(color).add_modifier(Modifier::BOLD)),
                 ]),
-                Line::from(Span::styled(
-                    msg.content.clone(),
-                    Style::default().fg(colors::FG),
-                )),
+                Line::from(Span::styled(msg.content.clone(), Style::default().fg(colors::FG))),
                 Line::from(""),
             ];
 

@@ -1,7 +1,7 @@
-use llamachat::llama_service_client::LlamaServiceClient;
-use llamachat::ChatRequest;
-use tokio_stream::StreamExt;
 use std::time::Duration;
+
+use llamachat::{llama_service_client::LlamaServiceClient, ChatRequest};
+use tokio_stream::StreamExt;
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -22,9 +22,8 @@ async fn test_grpc_chat_stream() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Connect to the test server
-    let channel_result = tonic::transport::Channel::from_static("http://[::1]:50052")
-        .connect()
-        .await;
+    let channel_result =
+        tonic::transport::Channel::from_static("http://[::1]:50052").connect().await;
 
     // If connection fails, abort server and skip test
     let channel = match channel_result {
@@ -33,7 +32,7 @@ async fn test_grpc_chat_stream() {
             eprintln!("Failed to connect to test server: {}", e);
             server_handle.abort();
             return;
-        }
+        },
     };
 
     let mut client = LlamaServiceClient::new(channel);
@@ -75,16 +74,16 @@ async fn test_grpc_chat_stream() {
                         println!("✓ Received chunk: {}", chunk.content);
                         // Just verify we got content (stream ends naturally)
                         assert!(!chunk.content.is_empty() || chunk.metadata.is_some());
-                    }
+                    },
                     Err(e) => {
                         eprintln!("Stream error: {}", e);
-                    }
+                    },
                 }
             }
-        }
+        },
         Err(e) => {
             eprintln!("gRPC request failed: {}", e);
-        }
+        },
     }
 
     // Clean up: abort the server

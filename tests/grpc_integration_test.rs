@@ -3,11 +3,13 @@
 //! Comprehensive integration tests for gRPC services including chat_stream,
 //! add_document, and search operations.
 
-use llamachat::llama_service_client::LlamaServiceClient;
-use llamachat::{ChatRequest, AddDocumentRequest, SearchRequest};
-use tokio_stream::StreamExt;
 use std::time::Duration;
+
+use llamachat::{
+    llama_service_client::LlamaServiceClient, AddDocumentRequest, ChatRequest, SearchRequest,
+};
 use tokio::time::sleep;
+use tokio_stream::StreamExt;
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -29,10 +31,9 @@ async fn wait_for_server() {
 }
 
 /// Helper to create gRPC client
-async fn create_client() -> Result<LlamaServiceClient<tonic::transport::Channel>, tonic::transport::Error> {
-    let channel = tonic::transport::Channel::from_static("http://[::1]:50054")
-        .connect()
-        .await?;
+async fn create_client(
+) -> Result<LlamaServiceClient<tonic::transport::Channel>, tonic::transport::Error> {
+    let channel = tonic::transport::Channel::from_static("http://[::1]:50054").connect().await?;
     Ok(LlamaServiceClient::new(channel))
 }
 
@@ -85,19 +86,19 @@ async fn test_grpc_chat_stream_basic() {
                             if chunk_count >= 5 {
                                 break;
                             }
-                        }
+                        },
                         Err(e) => {
                             eprintln!("Stream error: {}", e);
                             break;
-                        }
+                        },
                     }
                 }
 
                 assert!(chunk_count > 0, "Should receive at least one chunk");
-            }
+            },
             Err(e) => {
                 eprintln!("gRPC request failed: {}", e);
-            }
+            },
         }
     }
 
@@ -122,10 +123,10 @@ async fn test_grpc_chat_stream_with_context() {
         match add_result {
             Ok(resp) => {
                 assert!(resp.into_inner().success);
-            }
+            },
             Err(e) => {
                 eprintln!("Failed to add document: {}", e);
-            }
+            },
         }
 
         // Now query with context enabled
@@ -166,16 +167,16 @@ async fn test_grpc_chat_stream_with_context() {
                             if let Some(metadata) = chunk.metadata {
                                 println!("Context docs used: {}", metadata.context_docs_count);
                             }
-                        }
+                        },
                         Err(e) => {
                             eprintln!("Stream error: {}", e);
-                        }
+                        },
                     }
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("gRPC request failed: {}", e);
-            }
+            },
         }
     }
 
@@ -203,10 +204,10 @@ async fn test_grpc_add_document() {
                 assert!(add_response.success);
                 assert!(!add_response.id.is_empty());
                 println!("Document added with ID: {}", add_response.id);
-            }
+            },
             Err(e) => {
                 eprintln!("Failed to add document: {}", e);
-            }
+            },
         }
     }
 
@@ -229,19 +230,14 @@ async fn test_grpc_search() {
         ];
 
         for (content, metadata) in docs {
-            let add_request = AddDocumentRequest {
-                content: content.to_string(),
-                metadata: metadata.to_string(),
-            };
+            let add_request =
+                AddDocumentRequest { content: content.to_string(), metadata: metadata.to_string() };
 
             let _ = client.add_document(add_request).await;
         }
 
         // Now search
-        let search_request = SearchRequest {
-            query: "window management".to_string(),
-            top_k: 2,
-        };
+        let search_request = SearchRequest { query: "window management".to_string(), top_k: 2 };
 
         let search_result = client.search(search_request).await;
 
@@ -258,11 +254,12 @@ async fn test_grpc_search() {
                 // First result should be most relevant
                 let first_result = &search_response.results[0];
                 assert!(first_result.content.contains("window management"));
-                assert!(first_result.score > 0.5); // Should have high similarity
-            }
+                assert!(first_result.score > 0.5); // Should have high
+                                                   // similarity
+            },
             Err(e) => {
                 eprintln!("Search failed: {}", e);
-            }
+            },
         }
     }
 
@@ -288,10 +285,10 @@ async fn test_grpc_search_empty_query() {
         match search_result {
             Ok(response) => {
                 println!("Empty query returned {} results", response.into_inner().results.len());
-            }
+            },
             Err(e) => {
                 println!("Empty query error (expected): {}", e);
-            }
+            },
         }
     }
 
@@ -420,16 +417,16 @@ async fn test_grpc_chat_with_all_parameters() {
                                 assert_eq!(metadata.max_tokens_used, 100);
                                 assert!(metadata.commands_enabled);
                             }
-                        }
+                        },
                         Err(e) => {
                             eprintln!("Stream error: {}", e);
-                        }
+                        },
                     }
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("gRPC request failed: {}", e);
-            }
+            },
         }
     }
 

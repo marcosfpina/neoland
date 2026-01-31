@@ -1,34 +1,41 @@
-
-use tonic::{transport::Server as GrpcServer, Request, Response, Status};
-use llamachat::llama_service_server::{LlamaService, LlamaServiceServer};
-use llamachat::{ChatRequest, ChatResponse, AddDocumentRequest, AddDocumentResponse, SearchRequest, SearchResponse};
-use tokio_stream::wrappers::ReceiverStream;
-use std::sync::{Arc, Mutex};
-use crate::engine::{LocalEngine, GenerationConfig};
-use crate::nlp::VectorStore;
-// Integration dependencies (currently used for demonstration)
-// use securellm_core;
-use intelagent_core::TaskId;
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 // Axum imports for REST
 use axum::{
-    routing::{post, get},
-    extract::{State, Json},
-    response::sse::{Event, Sse},
-    Router,
-    middleware::{self, Next},
-    http::{Request as HttpRequest, StatusCode, HeaderMap},
     body::Body,
+    extract::{Json, State},
+    http::{HeaderMap, Request as HttpRequest, Response as HttpResponse, StatusCode},
+    middleware::{self, Next},
+    response::sse::{Event, Sse},
+    routing::{get, post},
+    Router,
+};
+use futures::stream::Stream;
+// Integration dependencies (currently used for demonstration)
+// use securellm_core;
+use intelagent_core::TaskId;
+use llamachat::{
+    llama_service_server::{LlamaService, LlamaServiceServer},
+    AddDocumentRequest, AddDocumentResponse, ChatRequest, ChatResponse, SearchRequest,
+    SearchResponse,
 };
 use serde::{Deserialize, Serialize};
-use futures::stream::Stream;
-use std::convert::Infallible;
-use crate::auth::AuthManager;
-use crate::audit::{AuditLogger, AuditEvent, AuditAction, FailedAuthTracker, ConsoleAlertHandler};
-use crate::validation::{ChatRequestValidation, MessageValidator};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{transport::Server as GrpcServer, Request, Response, Status};
+
+use crate::{
+    audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
+    auth::AuthManager,
+    engine::{GenerationConfig, LocalEngine},
+    nlp::VectorStore,
+    validation::{ChatRequestValidation, MessageValidator},
+};
 
 pub mod llamachat {
     tonic::include_proto!("llamachat");
@@ -136,7 +143,10 @@ pub struct MyLlamaService {
 impl LlamaService for MyLlamaService {
     type ChatStreamStream = ReceiverStream<Result<ChatResponse, Status>>;
 
-    async fn chat_stream(&self, request: Request<ChatRequest>) -> Result<Response<Self::ChatStreamStream>, Status> {
+    async fn chat_stream(
+        &self,
+        request: Request<ChatRequest>,
+    ) -> Result<Response<Self::ChatStreamStream>, Status> {
         let req = request.into_inner();
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let state = self.state.clone();
@@ -194,9 +204,10 @@ impl LlamaService for MyLlamaService {
             let mut engine_guard = match state.engine.lock() {
                 Ok(guard) => guard,
                 Err(e) => {
-                    let _ = tx.blocking_send(Err(Status::internal(format!("Mutex poisoned: {}", e))));
+                    let _ =
+                        tx.blocking_send(Err(Status::internal(format!("Mutex poisoned: {}", e))));
                     return;
-                }
+                },
             };
             if engine_guard.is_none() {
                 match LocalEngine::new() {
@@ -204,16 +215,19 @@ impl LlamaService for MyLlamaService {
                     Err(err) => {
                         let _ = tx.blocking_send(Err(Status::internal(err.to_string())));
                         return;
-                    }
+                    },
                 }
             }
             if let Some(engine) = engine_guard.as_mut() {
                 let vs_guard = match state.vector_store.lock() {
                     Ok(guard) => guard,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(Status::internal(format!("VectorStore mutex poisoned: {}", e))));
+                        let _ = tx.blocking_send(Err(Status::internal(format!(
+                            "VectorStore mutex poisoned: {}",
+                            e
+                        ))));
                         return;
-                    }
+                    },
                 };
 
                 // Send metadata first
@@ -278,39 +292,56 @@ impl LlamaService for MyLlamaService {
                             is_command: false,
                             metadata: Some(final_metadata),
                         }));
-                    }
+                    },
                     Err(e) => {
                         let _ = tx.blocking_send(Err(Status::internal(e.to_string())));
-                    }
+                    },
                 }
             }
         });
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
-    async fn add_document(&self, request: Request<AddDocumentRequest>) -> Result<Response<AddDocumentResponse>, Status> {
+    async fn add_document(
+        &self,
+        request: Request<AddDocumentRequest>,
+    ) -> Result<Response<AddDocumentResponse>, Status> {
         let req = request.into_inner();
-        let mut vs = self.state.vector_store.lock()
+        let mut vs = self
+            .state
+            .vector_store
+            .lock()
             .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
         match vs.add_document(&req.content, &req.metadata) {
             Ok(_) => {
-                 // SecureLLM Audit
-                 println!("[SECURELLM] AUDIT: Document added. Metadata: {}", req.metadata);
-                 Ok(Response::new(AddDocumentResponse { id: "ok".to_string(), success: true }))
+                // SecureLLM Audit
+                println!("[SECURELLM] AUDIT: Document added. Metadata: {}", req.metadata);
+                Ok(Response::new(AddDocumentResponse { id: "ok".to_string(), success: true }))
             },
             Err(e) => Err(Status::internal(e.to_string())),
         }
     }
 
-    async fn search(&self, request: Request<SearchRequest>) -> Result<Response<SearchResponse>, Status> {
+    async fn search(
+        &self,
+        request: Request<SearchRequest>,
+    ) -> Result<Response<SearchResponse>, Status> {
         let req = request.into_inner();
-        let vs = self.state.vector_store.lock()
+        let vs = self
+            .state
+            .vector_store
+            .lock()
             .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
         match vs.search(&req.query, req.top_k as usize) {
             Ok(results) => {
-                let grpc_results = results.into_iter().map(|(doc, score)| {
-                    llamachat::Document { id: doc.id, content: doc.content, score }
-                }).collect();
+                let grpc_results = results
+                    .into_iter()
+                    .map(|(doc, score)| llamachat::Document {
+                        id: doc.id,
+                        content: doc.content,
+                        score,
+                    })
+                    .collect();
                 Ok(Response::new(SearchResponse { results: grpc_results }))
             },
             Err(e) => Err(Status::internal(e.to_string())),
@@ -319,16 +350,40 @@ impl LlamaService for MyLlamaService {
 }
 
 // REST Handlers
+
+// Phase 4.1: Prometheus Metrics Handler
+async fn metrics_handler() -> HttpResponse<String> {
+    match crate::metrics::render_metrics() {
+        Ok(metrics) => HttpResponse::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/plain; version=0.0.4")
+            .body(metrics)
+            .unwrap(),
+        Err(e) => HttpResponse::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(format!("Error rendering metrics: {}", e))
+            .unwrap(),
+    }
+}
+
 async fn rest_chat_handler(
     State(state): State<Arc<AppState>>,
     Json(mut req): Json<RestChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    // Phase 4.1: Track metrics
+    // TODO: Add timing metrics for streaming responses
+    // let _start_time = Instant::now();
+
     // Phase 1.4: Validate request
     let validation_req = ChatRequestValidation {
-        messages: req.messages.iter().map(|m| crate::validation::ChatMessage {
-            role: m.role.clone(),
-            content: m.content.clone(),
-        }).collect(),
+        messages: req
+            .messages
+            .iter()
+            .map(|m| crate::validation::ChatMessage {
+                role: m.role.clone(),
+                content: m.content.clone(),
+            })
+            .collect(),
         metadata: serde_json::json!({}),
     };
 
@@ -375,7 +430,7 @@ async fn rest_chat_handler(
                     choices: vec![RestChoice {
                         delta: Some(RestDelta { content: token }),
                         message: None,
-                    }]
+                    }],
                 };
                 let json = serde_json::json!(response).to_string();
                 let _ = tx.blocking_send(Ok(Event::default().data(json)));
@@ -399,7 +454,8 @@ async fn rate_limit_middleware(
     // Identify user by API key or IP address
     let identifier = if let Some(api_key) = headers.get("X-API-Key").and_then(|v| v.to_str().ok()) {
         format!("key:{}", api_key)
-    } else if let Some(ip) = headers.get("x-forwarded-for")
+    } else if let Some(ip) = headers
+        .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.split(',').next())
     {
@@ -411,10 +467,10 @@ async fn rate_limit_middleware(
 
     // Check rate limit
     if state.rate_limiter.check_rate_limit(&identifier).await {
-        tracing::warn!(
-            identifier = identifier,
-            "Rate limit exceeded (>100 req/min)"
-        );
+        tracing::warn!(identifier = identifier, "Rate limit exceeded (>100 req/min)");
+
+        // Phase 4.1: Record rate limit metric
+        crate::metrics::utils::record_rate_limit_exceeded(&identifier);
 
         // Log rate limit event
         let event = AuditEvent::new(AuditAction::AuthFailure)
@@ -443,10 +499,7 @@ async fn validation_middleware(
             if let Ok(length) = length_str.parse::<usize>() {
                 // Validate request body size (1MB max)
                 if length > 1024 * 1024 {
-                    tracing::warn!(
-                        size = length,
-                        "Request body too large (>1MB)"
-                    );
+                    tracing::warn!(size = length, "Request body too large (>1MB)");
 
                     let event = AuditEvent::new(AuditAction::AuthFailure)
                         .with_error(format!("Request body too large: {} bytes", length));
@@ -474,9 +527,7 @@ async fn auth_middleware(
     next: Next,
 ) -> Result<axum::response::Response, StatusCode> {
     // Extract API key from X-API-Key header
-    let api_key = headers
-        .get("X-API-Key")
-        .and_then(|v| v.to_str().ok());
+    let api_key = headers.get("X-API-Key").and_then(|v| v.to_str().ok());
 
     // Extract IP address for audit logging
     let ip_address = headers
@@ -498,6 +549,15 @@ async fn auth_middleware(
     // Validate API key
     match state.auth_manager.validate_api_key(api_key.unwrap()) {
         Ok(api_key_info) => {
+            // Phase 4.1: Record successful auth metric
+            let ip_str = ip_address.as_ref().map(|ip: &std::net::IpAddr| ip.to_string());
+            crate::metrics::utils::record_auth_attempt(
+                "api_key",
+                true,
+                Some(&api_key_info.user_id),
+                ip_str.as_deref(),
+            );
+
             // Log successful authentication (Phase 1.3)
             let event = AuditEvent::new(AuditAction::AuthSuccess)
                 .with_user(api_key_info.user_id.clone(), format!("{:?}", api_key_info.role))
@@ -516,10 +576,20 @@ async fn auth_middleware(
 
             // Continue to next middleware/handler
             Ok(next.run(req).await)
-        }
+        },
         Err(e) => {
             // Log failed authentication attempt (Phase 1.3)
             let user_id = "unknown".to_string();
+
+            // Phase 4.1: Record failed auth metric
+            let ip_str = ip_address.as_ref().map(|ip: &std::net::IpAddr| ip.to_string());
+            crate::metrics::utils::record_auth_attempt(
+                "api_key",
+                false,
+                Some(&user_id),
+                ip_str.as_deref(),
+            );
+
             let event = AuditEvent::new(AuditAction::AuthFailure)
                 .with_user(user_id.clone(), "none".to_string())
                 .with_resource(req.uri().path().to_string())
@@ -542,23 +612,24 @@ async fn auth_middleware(
             }
 
             Err(StatusCode::UNAUTHORIZED)
-        }
+        },
     }
 }
 
 pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
     use tracing::info;
-    
+
     let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
     let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
-    
+
     info!("🚀 Inicializando Neoland Server...");
     info!("📡 gRPC endpoint: {}", grpc_addr);
     info!("🌐 REST endpoint: {}", rest_addr);
-    
+
     let vector_store = Arc::new(Mutex::new(VectorStore::new()?));
     {
-        let mut vs = vector_store.lock()
+        let mut vs = vector_store
+            .lock()
             .map_err(|e| format!("VectorStore mutex poisoned during init: {}", e))?;
         let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
     }
@@ -606,32 +677,25 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
 
     // 2. Start REST Server (Axum)
     // Protected routes with full security stack (Phase 1.4)
-    // Middleware order (applied in reverse): rate_limit → validation → auth → handler
+    // Middleware order (applied in reverse): rate_limit → validation → auth →
+    // handler
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
-        .layer(middleware::from_fn_with_state(
-            shared_state.clone(),
-            auth_middleware,
-        ))
-        .layer(middleware::from_fn_with_state(
-            shared_state.clone(),
-            validation_middleware,
-        ))
-        .layer(middleware::from_fn_with_state(
-            shared_state.clone(),
-            rate_limit_middleware,
-        ));
+        .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))
+        .layer(middleware::from_fn_with_state(shared_state.clone(), validation_middleware))
+        .layer(middleware::from_fn_with_state(shared_state.clone(), rate_limit_middleware));
 
     // Public routes (no authentication)
     let public_routes = Router::new()
-        .route("/health", get(|| async { "OK" }));
+        .route("/health", get(|| async { "OK" }))
+        .route("/metrics", get(metrics_handler)); // Phase 4.1: Prometheus metrics
 
     // Combine all routes
     let app = Router::new()
         .merge(protected_routes)
         .merge(public_routes)
         .with_state(shared_state);
-        
+
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;
     info!("✅ REST API rodando em http://{}", rest_addr);
     info!("✅ gRPC Service rodando em {}", grpc_addr);
