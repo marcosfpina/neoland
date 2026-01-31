@@ -3,8 +3,8 @@
 
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_gauge, register_gauge_vec, register_histogram_vec,
-    CounterVec, Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder,
+    register_counter_vec, register_gauge, register_gauge_vec, register_histogram_vec, CounterVec,
+    Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder,
 };
 use std::time::Instant;
 
@@ -155,11 +155,7 @@ pub struct Timer {
 
 impl Timer {
     pub fn new(histogram: &'static HistogramVec, labels: Vec<String>) -> Self {
-        Self {
-            start: Instant::now(),
-            labels,
-            histogram,
-        }
+        Self { start: Instant::now(), labels, histogram }
     }
 
     pub fn observe_duration(self) {
@@ -195,13 +191,9 @@ pub mod utils {
 
     /// Record gRPC request
     pub fn record_grpc_request(method: &str, status: &str, duration: f64) {
-        GRPC_REQUESTS_TOTAL
-            .with_label_values(&[method, status])
-            .inc();
+        GRPC_REQUESTS_TOTAL.with_label_values(&[method, status]).inc();
 
-        GRPC_REQUEST_DURATION_SECONDS
-            .with_label_values(&[method])
-            .observe(duration);
+        GRPC_REQUEST_DURATION_SECONDS.with_label_values(&[method]).observe(duration);
     }
 
     /// Record LLM request
@@ -213,9 +205,7 @@ pub mod utils {
         completion_tokens: u32,
         duration: f64,
     ) {
-        LLM_REQUESTS_TOTAL
-            .with_label_values(&[provider, model, status])
-            .inc();
+        LLM_REQUESTS_TOTAL.with_label_values(&[provider, model, status]).inc();
 
         LLM_TOKENS_TOTAL
             .with_label_values(&[provider, model, "prompt"])
@@ -237,7 +227,12 @@ pub mod utils {
     }
 
     /// Estimate LLM cost in USD (rough approximation)
-    pub fn estimate_llm_cost(provider: &str, model: &str, prompt_tokens: u32, completion_tokens: u32) -> f64 {
+    pub fn estimate_llm_cost(
+        provider: &str,
+        model: &str,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    ) -> f64 {
         // Prices per 1M tokens (approximate)
         let (prompt_price, completion_price) = match (provider, model) {
             ("deepseek", _) => (0.14, 0.28), // DeepSeek Chat
@@ -255,33 +250,30 @@ pub mod utils {
     }
 
     /// Record authentication attempt
-    pub fn record_auth_attempt(method: &str, success: bool, user_id: Option<&str>, ip: Option<&str>) {
+    pub fn record_auth_attempt(
+        method: &str,
+        success: bool,
+        user_id: Option<&str>,
+        ip: Option<&str>,
+    ) {
         let status = if success { "success" } else { "failure" };
-        AUTH_ATTEMPTS_TOTAL
-            .with_label_values(&[method, status])
-            .inc();
+        AUTH_ATTEMPTS_TOTAL.with_label_values(&[method, status]).inc();
 
         if !success {
             if let (Some(user), Some(ip_addr)) = (user_id, ip) {
-                AUTH_FAILED_ATTEMPTS
-                    .with_label_values(&[user, ip_addr])
-                    .inc();
+                AUTH_FAILED_ATTEMPTS.with_label_values(&[user, ip_addr]).inc();
             }
         }
     }
 
     /// Record rate limit violation
     pub fn record_rate_limit_exceeded(identifier: &str) {
-        RATE_LIMIT_EXCEEDED_TOTAL
-            .with_label_values(&[identifier])
-            .inc();
+        RATE_LIMIT_EXCEEDED_TOTAL.with_label_values(&[identifier]).inc();
     }
 
     /// Record audit event
     pub fn record_audit_event(action: &str, severity: &str) {
-        AUDIT_EVENTS_TOTAL
-            .with_label_values(&[action, severity])
-            .inc();
+        AUDIT_EVENTS_TOTAL.with_label_values(&[action, severity]).inc();
     }
 
     /// Update vector store document count
@@ -291,9 +283,7 @@ pub mod utils {
 
     /// Record secrets access
     pub fn record_secrets_access(secret_type: &str, source: &str) {
-        SECRETS_ACCESS_TOTAL
-            .with_label_values(&[secret_type, source])
-            .inc();
+        SECRETS_ACCESS_TOTAL.with_label_values(&[secret_type, source]).inc();
     }
 
     /// Update active connections
