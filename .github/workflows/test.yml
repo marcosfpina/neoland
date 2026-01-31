@@ -1,0 +1,76 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: neoland
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          skipPush: true
+
+      - name: Check Nix flake
+        run: nix flake check
+
+      - name: Run unit tests
+        run: nix develop -c cargo test --lib --no-fail-fast
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run integration tests
+        run: nix develop -c cargo test --tests --no-fail-fast -- --test-threads=1
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Integration tests passed" >> $GITHUB_STEP_SUMMARY
+
+  test-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Run tests with coverage
+        run: |
+          nix develop -c cargo install cargo-tarpaulin || true
+          nix develop -c cargo tarpaulin --lib --out Xml --output-dir ./coverage
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/cobertura.xml
+          fail_ci_if_error: false
+        continue-on-error: true

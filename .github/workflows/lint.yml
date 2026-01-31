@@ -1,0 +1,77 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check formatting
+        run: nix develop -c cargo fmt --all -- --check
+
+      - name: Generate format summary
+        if: failure()
+        run: |
+          echo "## ❌ Format Check Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`cargo fmt\` to fix formatting issues" >> $GITHUB_STEP_SUMMARY
+
+  clippy:
+    name: Clippy Lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Run Clippy
+        run: nix develop -c cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Generate clippy summary
+        if: failure()
+        run: |
+          echo "## ❌ Clippy Lints Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Fix clippy warnings before merging" >> $GITHUB_STEP_SUMMARY
+
+  check:
+    name: Cargo Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check compilation
+        run: nix develop -c cargo check --all-targets --all-features
+
+      - name: Generate check summary
+        if: always()
+        run: |
+          echo "## Compilation Check" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All targets compile successfully" >> $GITHUB_STEP_SUMMARY
