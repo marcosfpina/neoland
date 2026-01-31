@@ -212,7 +212,7 @@ curl -X POST http://localhost:9093/api/v1/alerts \
       "alertname": "TestAlert",
       "severity": "warning",
       "component": "test",
-      "team": "platform"
+      "team": "voidnx"
     },
     "annotations": {
       "summary": "This is a test alert",
@@ -475,6 +475,6 @@ amtool silence add \
 
 ---
 
-**Maintained By**: Platform Team
+**Maintained By**: voidnx team
 **Last Updated**: 2026-01-31
 **Questions**: #neoland-ops on Slack

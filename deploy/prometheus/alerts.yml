@@ -14,7 +14,7 @@ groups:
         labels:
           severity: critical
           component: service
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND service is down"
           description: "Instance {{ $labels.instance }} has been down for more than 2 minutes."
@@ -28,7 +28,7 @@ groups:
         labels:
           severity: warning
           component: service
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND pod restarting frequently"
           description: "Pod {{ $labels.pod }} is restarting more than once per 10 minutes."
@@ -50,7 +50,7 @@ groups:
         labels:
           severity: critical
           component: health
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND health check failing"
           description: "Health check for {{ $labels.instance }} has been failing for >2 minutes."
@@ -63,7 +63,7 @@ groups:
         labels:
           severity: warning
           component: health
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND not ready to serve traffic"
           description: "Instance {{ $labels.instance }} failing readiness checks."
@@ -76,7 +76,7 @@ groups:
         labels:
           severity: warning
           component: "{{ $labels.component }}"
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND component {{ $labels.component }} degraded"
           description: "Component {{ $labels.component }} has been degraded for >5 minutes."
@@ -97,7 +97,7 @@ groups:
         labels:
           severity: warning
           component: performance
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND p99 latency is high"
           description: "99th percentile latency is {{ $value }}s for endpoint {{ $labels.endpoint }}."
@@ -114,7 +114,7 @@ groups:
         labels:
           severity: critical
           component: performance
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND p99 latency is critically high"
           description: "99th percentile latency is {{ $value }}s for endpoint {{ $labels.endpoint }}."
@@ -155,7 +155,7 @@ groups:
         labels:
           severity: warning
           component: errors
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND error rate is elevated"
           description: "Error rate is {{ $value | humanizePercentage }} on endpoint {{ $labels.endpoint }}."
@@ -174,7 +174,7 @@ groups:
         labels:
           severity: critical
           component: errors
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND error rate is critically high"
           description: "Error rate is {{ $value | humanizePercentage }} on endpoint {{ $labels.endpoint }}."
@@ -237,7 +237,7 @@ groups:
         labels:
           severity: info
           component: security
-          team: platform
+          team: voidnx
         annotations:
           summary: "Rate limits frequently exceeded"
           description: "Rate limit exceeded {{ $value }} times/sec for user {{ $labels.user_id }}."
@@ -275,7 +275,7 @@ groups:
         labels:
           severity: warning
           component: resources
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND memory usage is high"
           description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit."
@@ -294,7 +294,7 @@ groups:
         labels:
           severity: critical
           component: resources
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND memory usage is critical"
           description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit. OOMKill imminent."
@@ -313,7 +313,7 @@ groups:
         labels:
           severity: warning
           component: resources
-          team: platform
+          team: voidnx
         annotations:
           summary: "NEOLAND CPU usage is high"
           description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of CPU limit."
@@ -333,7 +333,7 @@ groups:
         labels:
           severity: critical
           component: vector_store
-          team: platform
+          team: voidnx
         annotations:
           summary: "Vector store is unavailable"
           description: "Vector store health check failing for >2 minutes."
@@ -381,7 +381,7 @@ groups:
         labels:
           severity: info
           component: usage
-          team: platform
+          team: voidnx
         annotations:
           summary: "Token usage is very high"
           description: "Token consumption is {{ $value }} tokens/sec."
@@ -405,7 +405,7 @@ groups:
         labels:
           severity: warning
           component: validation
-          team: platform
+          team: voidnx
         annotations:
           summary: "High prompt rejection rate"
           description: "{{ $value | humanizePercentage }} of requests are being rejected by validation."
