@@ -15,5 +15,9 @@ pub mod validation;
 // Re-export server function e tipos gRPC
 pub mod server;
 
+// Test utilities (only compiled for tests)
+#[cfg(test)]
+pub mod test_utils;
+
 // Re-export tipos gRPC para TUI
 pub use server::llamachat;
