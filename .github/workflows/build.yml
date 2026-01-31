@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build Release Binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: neoland
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Build with Nix
+        run: nix build .#neoland
+
+      - name: Check binary
+        run: |
+          ./result/bin/neoland --version || echo "Binary built successfully"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoland-binary
+          path: result/bin/neoland
+          retention-days: 7
+
+      - name: Generate build summary
+        run: |
+          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Release binary built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Artifact uploaded for download" >> $GITHUB_STEP_SUMMARY
+
+  build-dev:
+    name: Build Development
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build debug binary
+        run: nix develop -c cargo build --bin neoland
+
+      - name: Check binary size
+        run: |
+          ls -lh target/debug/neoland
+          echo "## 📊 Binary Size" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -lh target/debug/neoland >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

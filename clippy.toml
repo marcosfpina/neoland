@@ -1,0 +1,37 @@
+# Clippy Configuration for NEOLAND
+# Production-ready linting rules
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Documentation
+missing-docs-in-crate-items = false
+
+# Type complexity
+type-complexity-threshold = 250
+
+# Too many arguments
+too-many-arguments-threshold = 7
+
+# Too many lines
+too-many-lines-threshold = 150
+
+# Enum variant names
+enum-variant-name-threshold = 3
+
+# Single char binding names
+single-char-binding-names-threshold = 4
+
+# Literal representation
+literal-representation-threshold = 10
+
+# Verbose bit mask
+verbose-bit-mask-threshold = 1
+
+# Disallowed names (avoid in production code)
+disallowed-names = ["foo", "bar", "baz", "test"]
+
+# Allow certain clippy warnings for now
+# These can be gradually fixed
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true

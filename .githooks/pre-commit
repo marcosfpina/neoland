@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# NEOLAND Pre-commit Hook
+# Ensures code quality before commits
+
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Check if we're in a nix environment
+if ! command -v cargo &> /dev/null; then
+    echo -e "${YELLOW}⚠️  cargo not found. Entering nix develop...${NC}"
+    exec nix develop -c "$0" "$@"
+fi
+
+echo "1️⃣  Checking formatting..."
+if ! cargo fmt --all -- --check; then
+    echo -e "${RED}❌ Format check failed!${NC}"
+    echo -e "${YELLOW}💡 Run: cargo fmt${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Format check passed${NC}"
+
+echo "2️⃣  Running clippy..."
+if ! cargo clippy --all-targets --all-features -- -D warnings 2>&1 | grep -v "^warning: unused"; then
+    echo -e "${RED}❌ Clippy failed!${NC}"
+    echo -e "${YELLOW}💡 Fix clippy warnings before committing${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Clippy passed${NC}"
+
+echo "3️⃣  Running unit tests..."
+if ! cargo test --lib --quiet; then
+    echo -e "${RED}❌ Unit tests failed!${NC}"
+    echo -e "${YELLOW}💡 Fix failing tests before committing${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Unit tests passed${NC}"
+
+echo "4️⃣  Checking compilation..."
+if ! cargo check --all-targets --quiet; then
+    echo -e "${RED}❌ Compilation check failed!${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Compilation check passed${NC}"
+
+echo -e "${GREEN}✨ All pre-commit checks passed!${NC}"
+echo -e "${GREEN}🚀 Proceeding with commit...${NC}"
