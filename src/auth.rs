@@ -271,4 +271,159 @@ mod tests {
         let result = manager.validate_api_key("test_key_123");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_duplicate_api_key_overwrites() {
+        let manager = AuthManager::new();
+
+        let key1 = ApiKey {
+            key: "duplicate_key".to_string(),
+            role: Role::User,
+            user_id: "user1".to_string(),
+            description: "First key".to_string(),
+        };
+
+        let key2 = ApiKey {
+            key: "duplicate_key".to_string(), // Same key
+            role: Role::Admin,
+            user_id: "user2".to_string(),
+            description: "Second key".to_string(),
+        };
+
+        // Add first key
+        assert!(manager.add_api_key(key1).is_ok());
+
+        // Adding duplicate key overwrites the previous one
+        assert!(manager.add_api_key(key2).is_ok());
+
+        // Validate that second key is now active
+        let result = manager.validate_api_key("duplicate_key").unwrap();
+        assert_eq!(result.user_id, "user2"); // Should be the second key
+        assert_eq!(result.role, Role::Admin);
+    }
+
+    #[test]
+    fn test_revoke_nonexistent_key() {
+        let manager = AuthManager::new();
+
+        // Revoking non-existent key should fail
+        let result = manager.revoke_api_key("nonexistent_key");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_empty_api_key() {
+        let manager = AuthManager::new();
+
+        // Empty API key should fail validation
+        let result = manager.validate_api_key("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_api_keys() {
+        let manager = AuthManager::new();
+
+        // Should have 3 default keys (admin, user, readonly)
+        let keys = manager.list_api_keys().unwrap();
+        assert_eq!(keys.len(), 3);
+
+        // Check that all default users are present
+        let user_ids: Vec<String> = keys.iter().map(|(user_id, _, _)| user_id.clone()).collect();
+        assert!(user_ids.contains(&"admin".to_string()));
+        assert!(user_ids.contains(&"user".to_string()));
+        assert!(user_ids.contains(&"readonly".to_string()));
+    }
+
+    #[test]
+    fn test_role_hierarchy() {
+        // Test role hierarchy: Admin > User > ReadOnly
+        assert!(Role::Admin.has_permission(&Role::Admin));
+        assert!(Role::Admin.has_permission(&Role::User));
+        assert!(Role::Admin.has_permission(&Role::ReadOnly));
+
+        assert!(!Role::User.has_permission(&Role::Admin));
+        assert!(Role::User.has_permission(&Role::User));
+        assert!(Role::User.has_permission(&Role::ReadOnly));
+
+        assert!(!Role::ReadOnly.has_permission(&Role::Admin));
+        assert!(!Role::ReadOnly.has_permission(&Role::User));
+        assert!(Role::ReadOnly.has_permission(&Role::ReadOnly));
+    }
+
+    #[tokio::test]
+    async fn test_auth_manager_with_secrets() {
+        use crate::secrets::SecretsManager;
+        use std::sync::Arc;
+
+        // Set up test environment
+        std::env::set_var("NEOLAND_ADMIN_API_KEY", "vault_admin_key");
+        std::env::set_var("NEOLAND_USER_API_KEY", "vault_user_key");
+        std::env::set_var("NEOLAND_READONLY_API_KEY", "vault_readonly_key");
+
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let manager = AuthManager::new_with_secrets(&secrets_manager).await;
+
+        // Should load keys from environment (via SecretsManager)
+        let result = manager.validate_api_key("vault_admin_key");
+        assert!(result.is_ok());
+        let api_key = result.unwrap();
+        assert_eq!(api_key.role, Role::Admin);
+
+        // Cleanup
+        std::env::remove_var("NEOLAND_ADMIN_API_KEY");
+        std::env::remove_var("NEOLAND_USER_API_KEY");
+        std::env::remove_var("NEOLAND_READONLY_API_KEY");
+    }
+
+    #[test]
+    fn test_api_key_description() {
+        let manager = AuthManager::new();
+
+        let key = ApiKey {
+            key: "test_key".to_string(),
+            role: Role::User,
+            user_id: "testuser".to_string(),
+            description: "This is a test key for unit testing".to_string(),
+        };
+
+        manager.add_api_key(key.clone()).unwrap();
+
+        let result = manager.validate_api_key("test_key").unwrap();
+        assert_eq!(result.description, "This is a test key for unit testing");
+    }
+
+    #[test]
+    fn test_multiple_users_same_role() {
+        let manager = AuthManager::new();
+
+        let user1 = ApiKey {
+            key: "user1_key".to_string(),
+            role: Role::User,
+            user_id: "user1@example.com".to_string(),
+            description: "User 1".to_string(),
+        };
+
+        let user2 = ApiKey {
+            key: "user2_key".to_string(),
+            role: Role::User,
+            user_id: "user2@example.com".to_string(),
+            description: "User 2".to_string(),
+        };
+
+        manager.add_api_key(user1).unwrap();
+        manager.add_api_key(user2).unwrap();
+
+        // Both should validate successfully
+        assert!(manager.validate_api_key("user1_key").is_ok());
+        assert!(manager.validate_api_key("user2_key").is_ok());
+
+        // Both should have User role
+        let key1 = manager.validate_api_key("user1_key").unwrap();
+        let key2 = manager.validate_api_key("user2_key").unwrap();
+        assert_eq!(key1.role, Role::User);
+        assert_eq!(key2.role, Role::User);
+    }
 }
+
