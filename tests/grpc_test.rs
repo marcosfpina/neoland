@@ -73,7 +73,8 @@ async fn test_grpc_chat_stream() {
                     Ok(chunk) => {
                         // Success - we got a response
                         println!("✓ Received chunk: {}", chunk.content);
-                        assert!(!chunk.content.is_empty() || chunk.done);
+                        // Just verify we got content (stream ends naturally)
+                        assert!(!chunk.content.is_empty() || chunk.metadata.is_some());
                     }
                     Err(e) => {
                         eprintln!("Stream error: {}", e);
