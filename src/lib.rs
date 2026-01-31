@@ -4,6 +4,7 @@ pub mod audit;
 pub mod auth;
 pub mod cli;
 pub mod engine;
+pub mod health; // Phase 4.3: Health Checks & Readiness Probes
 pub mod hyprland_ops;
 pub mod llm;
 pub mod logging; // Phase 4.2: Structured Logging
