@@ -1,0 +1,260 @@
+# Phase 4.4: Prometheus AlertManager Configuration
+# Production alert routing, grouping, and notification
+
+global:
+  # Default values
+  resolve_timeout: 5m
+
+  # Slack webhook (set via environment variable)
+  slack_api_url: "${SLACK_WEBHOOK_URL}"
+
+  # PagerDuty integration key (set via environment variable)
+  pagerduty_url: "https://events.pagerduty.com/v2/enqueue"
+
+# Route tree for alert routing
+route:
+  # Root route - all alerts come here first
+  receiver: 'default'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'component', 'severity']
+
+  # Wait time before sending first notification
+  group_wait: 30s
+
+  # Wait time before sending notification about new alerts in same group
+  group_interval: 5m
+
+  # Wait time before re-sending notification
+  repeat_interval: 4h
+
+  # Child routes for specific alert types
+  routes:
+    # Critical alerts -> PagerDuty (immediate)
+    - match:
+        severity: critical
+      receiver: 'pagerduty'
+      group_wait: 10s
+      repeat_interval: 5m
+      continue: true  # Also send to Slack
+
+    # Critical alerts -> Slack (for visibility)
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Security alerts -> Security team + Slack
+    - match:
+        team: security
+      receiver: 'security-team'
+      group_wait: 10s
+      repeat_interval: 30m
+      routes:
+        # Brute force attacks -> Immediate escalation
+        - match:
+            alertname: NeolandBruteForceAttack
+          receiver: 'pagerduty'
+          group_wait: 0s
+          repeat_interval: 5m
+
+    # Warning alerts -> Slack only
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+      group_wait: 1m
+      repeat_interval: 4h
+
+    # Info alerts -> Slack (low priority channel)
+    - match:
+        severity: info
+      receiver: 'slack-info'
+      group_wait: 5m
+      repeat_interval: 12h
+
+    # Cost alerts -> Finance team
+    - match:
+        team: finance
+      receiver: 'finance-team'
+      group_wait: 5m
+      repeat_interval: 24h
+
+    # ML/LLM alerts -> ML team
+    - match:
+        team: ml
+      receiver: 'ml-team'
+      group_wait: 1m
+      repeat_interval: 2h
+
+# Inhibition rules (suppress alerts based on other alerts)
+inhibit_rules:
+  # Don't alert on individual components if entire service is down
+  - source_match:
+      alertname: 'NeolandDown'
+    target_match_re:
+      alertname: 'Neoland.*'
+    equal: ['instance']
+
+  # Don't alert on high latency if service is unhealthy
+  - source_match:
+      alertname: 'NeolandUnhealthy'
+    target_match:
+      alertname: 'NeolandHighLatency'
+    equal: ['instance']
+
+  # Don't alert on component health if entire service is down
+  - source_match:
+      alertname: 'NeolandDown'
+    target_match:
+      component: '.*'
+    equal: ['instance']
+
+  # Don't send warnings if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+# Alert receivers (notification channels)
+receivers:
+  # Default receiver (catch-all)
+  - name: 'default'
+    slack_configs:
+      - channel: '#neoland-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook }}
+          {{ end }}
+
+  # PagerDuty (critical alerts)
+  - name: 'pagerduty'
+    pagerduty_configs:
+      - service_key: "${PAGERDUTY_SERVICE_KEY}"
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          severity: '{{ .GroupLabels.severity }}'
+          component: '{{ .GroupLabels.component }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+          action: '{{ .CommonAnnotations.action }}'
+
+  # Slack - Critical alerts
+  - name: 'slack-critical'
+    slack_configs:
+      - channel: '#neoland-critical'
+        username: 'NEOLAND AlertManager'
+        icon_emoji: ':fire:'
+        title: ':fire: CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* CRITICAL
+          *Component:* {{ .GroupLabels.component }}
+
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Impact:* {{ .Annotations.impact }}
+          *Action Required:* {{ .Annotations.action }}
+          *Runbook:* {{ .Annotations.runbook }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        color: 'danger'
+
+  # Slack - Warning alerts
+  - name: 'slack-warnings'
+    slack_configs:
+      - channel: '#neoland-warnings'
+        username: 'NEOLAND AlertManager'
+        icon_emoji: ':warning:'
+        title: ':warning: Warning: {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* WARNING
+          *Component:* {{ .GroupLabels.component }}
+
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook }}
+          {{ end }}
+        color: 'warning'
+
+  # Slack - Info alerts
+  - name: 'slack-info'
+    slack_configs:
+      - channel: '#neoland-info'
+        username: 'NEOLAND AlertManager'
+        icon_emoji: ':information_source:'
+        title: 'Info: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          {{ end }}
+        color: 'good'
+
+  # Security team notifications
+  - name: 'security-team'
+    slack_configs:
+      - channel: '#security-alerts'
+        username: 'NEOLAND Security'
+        icon_emoji: ':shield:'
+        title: ':shield: Security Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *SECURITY ALERT*
+
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Action Required:* {{ .Annotations.action }}
+          *Runbook:* {{ .Annotations.runbook }}
+          {{ end }}
+        color: 'danger'
+    email_configs:
+      - to: 'security@neoland.example.com'
+        from: 'alerts@neoland.example.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: "${SMTP_USERNAME}"
+        auth_password: "${SMTP_PASSWORD}"
+        headers:
+          Subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+
+  # Finance team (cost alerts)
+  - name: 'finance-team'
+    email_configs:
+      - to: 'finance@neoland.example.com'
+        from: 'alerts@neoland.example.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: "${SMTP_USERNAME}"
+        auth_password: "${SMTP_PASSWORD}"
+        headers:
+          Subject: '[COST ALERT] {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          {{ range .Alerts }}
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Action:</strong> {{ .Annotations.action }}</p>
+          {{ end }}
+
+  # ML team (LLM and ML-related alerts)
+  - name: 'ml-team'
+    slack_configs:
+      - channel: '#ml-alerts'
+        username: 'NEOLAND ML Monitor'
+        icon_emoji: ':robot_face:'
+        title: 'ML Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Provider:* {{ .Labels.provider }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook }}
+          {{ end }}
+        color: '{{ if eq .GroupLabels.severity "critical" }}danger{{ else }}warning{{ end }}'
+
+# Templates for custom notification formatting
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
