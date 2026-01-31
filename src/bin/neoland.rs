@@ -1,28 +1,39 @@
 use std::process::Command;
 
 use cli::{Cli, Commands};
-use llamachat_poc::{cli, server};
+use llamachat_poc::{cli, logging, server};
+use tracing::Level;
 
 #[tokio::main]
 async fn main() {
     // Parse CLI arguments
     let cli = Cli::parse_args();
 
-    // Setup logging
-    let log_filter = match cli.log_level.as_str() {
-        "trace" => "trace",
-        "debug" => "debug",
-        "info" => "info",
-        "warn" => "warn",
-        "error" => "error",
-        _ => "info",
+    // Phase 4.2: Setup structured logging
+    let log_level = match cli.log_level.as_str() {
+        "trace" => Level::TRACE,
+        "debug" => Level::DEBUG,
+        "info" => Level::INFO,
+        "warn" => Level::WARN,
+        "error" => Level::ERROR,
+        _ => Level::INFO,
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(log_filter)
-        .with_target(false)
-        .with_thread_ids(false)
-        .init();
+    // Initialize logging (respects LOG_FORMAT env var if set)
+    if std::env::var("LOG_FORMAT").is_ok() {
+        // Use environment configuration
+        if let Err(e) = logging::init_from_env() {
+            eprintln!("⚠️  Failed to initialize logging: {}", e);
+            std::process::exit(1);
+        }
+    } else {
+        // Use CLI-specified level with default format
+        let config = logging::LogConfig { level: log_level, ..Default::default() };
+        if let Err(e) = logging::init_logging(config) {
+            eprintln!("⚠️  Failed to initialize logging: {}", e);
+            std::process::exit(1);
+        }
+    }
 
     // Match subcommands
     match cli.command {

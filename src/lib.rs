@@ -6,6 +6,7 @@ pub mod cli;
 pub mod engine;
 pub mod hyprland_ops;
 pub mod llm;
+pub mod logging; // Phase 4.2: Structured Logging
 pub mod metrics; // Phase 4.1: Prometheus Metrics
 pub mod ml_offload;
 pub mod nlp;

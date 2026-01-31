@@ -12,7 +12,7 @@ path = "src/bin/neoland.rs"
 # CLI & Logging
 clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
 # TUI (novo para neoland-tui)
 ratatui = "0.28"

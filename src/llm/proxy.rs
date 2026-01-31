@@ -63,8 +63,8 @@ impl SecureLLMProxy {
                 } else {
                     (8081, "local-model".to_string())
                 };
-                let provider =
-                    LlamaCppProvider::new(port, model).context("Failed to create LlamaCPP provider")?;
+                let provider = LlamaCppProvider::new(port, model)
+                    .context("Failed to create LlamaCPP provider")?;
                 Arc::new(provider)
             },
             "gemini" => {
@@ -75,7 +75,8 @@ impl SecureLLMProxy {
             },
             "groq" => {
                 let config = GroqConfig::new(api_key);
-                let provider = GroqProvider::new(config).context("Failed to create Groq provider")?;
+                let provider =
+                    GroqProvider::new(config).context("Failed to create Groq provider")?;
                 Arc::new(provider)
             },
             _ => anyhow::bail!(

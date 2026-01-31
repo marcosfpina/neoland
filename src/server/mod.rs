@@ -16,8 +16,9 @@ use axum::{
     Router,
 };
 use futures::stream::Stream;
-// Integration dependencies (currently used for demonstration)
-// use securellm_core;
+use tracing::Instrument; // Phase 4.2: For span instrumentation
+                         // Integration dependencies (currently used for demonstration)
+                         // use securellm_core;
 use intelagent_core::TaskId;
 use llamachat::{
     llama_service_server::{LlamaService, LlamaServiceServer},
@@ -484,6 +485,40 @@ async fn rate_limit_middleware(
     Ok(next.run(req).await)
 }
 
+/// Correlation ID middleware (Phase 4.2)
+///
+/// Extracts or generates correlation IDs for request tracing
+async fn correlation_middleware(
+    headers: HeaderMap,
+    mut req: HttpRequest<Body>,
+    next: Next,
+) -> Result<axum::response::Response, StatusCode> {
+    use crate::logging::CorrelationId;
+
+    // Extract correlation ID from header or generate new one
+    let correlation_id = headers
+        .get("X-Correlation-ID")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| CorrelationId::from_string(s.to_string()))
+        .unwrap_or_else(CorrelationId::new);
+
+    // Store correlation ID in request extensions for handlers
+    req.extensions_mut().insert(correlation_id.clone());
+
+    // Create tracing span with correlation ID
+    let span = tracing::info_span!(
+        "http_request",
+        correlation_id = %correlation_id,
+        method = %req.method(),
+        uri = %req.uri(),
+    );
+
+    // Run the rest of the middleware stack within this span
+    let response = next.run(req).instrument(span).await;
+
+    Ok(response)
+}
+
 /// Input validation middleware (Phase 1.4)
 ///
 /// Validates and sanitizes request body before processing
@@ -676,14 +711,14 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         .serve(grpc_addr);
 
     // 2. Start REST Server (Axum)
-    // Protected routes with full security stack (Phase 1.4)
-    // Middleware order (applied in reverse): rate_limit → validation → auth →
-    // handler
+    // Protected routes with full security stack (Phase 1.4 + 4.2)
+    // Middleware order (applied in reverse): correlation → rate_limit → validation → auth → handler
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))
         .layer(middleware::from_fn_with_state(shared_state.clone(), validation_middleware))
-        .layer(middleware::from_fn_with_state(shared_state.clone(), rate_limit_middleware));
+        .layer(middleware::from_fn_with_state(shared_state.clone(), rate_limit_middleware))
+        .layer(middleware::from_fn(correlation_middleware)); // Phase 4.2: Correlation IDs
 
     // Public routes (no authentication)
     let public_routes = Router::new()
