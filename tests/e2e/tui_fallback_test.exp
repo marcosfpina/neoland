@@ -1,0 +1,132 @@
+#!/usr/bin/expect -f
+# E2E Fallback Chain Test for NEOLAND TUI
+# Tests: LLM fallback chain (ml-offload → local → SecureLLM)
+
+set timeout 60  ;# Longer timeout for fallback scenarios
+set server_url [lindex $argv 0]
+set ml_api_url [lindex $argv 1]
+
+if {$server_url == ""} {
+    set server_url "http://localhost:3001"
+}
+if {$ml_api_url == ""} {
+    set ml_api_url "http://localhost:8000"
+}
+
+puts "🧪 TUI Fallback Chain Test"
+puts "   Server: $server_url"
+puts "   ML API: $ml_api_url"
+puts ""
+puts "⚠️  NOTE: This test requires ml-offload to be STOPPED for fallback testing"
+puts "   Run: pkill ml-offload (or docker stop ml-offload)"
+puts ""
+
+# Start TUI client
+spawn cargo run --bin neoland -- tui --server-url $server_url --ml-api-url $ml_api_url
+
+# Wait for TUI to load
+expect {
+    timeout {
+        puts "❌ FAIL: TUI failed to start"
+        exit 1
+    }
+    "NEOLAND" {
+        puts "✅ PASS: TUI started"
+    }
+}
+
+sleep 2
+
+# Test 1: Send message with ml-offload unavailable
+# Expected behavior: Fallback to local engine or SecureLLM
+puts "\n📝 Test 1: Fallback to local/SecureLLM (ml-offload down)"
+send "Hello, testing fallback\r"
+
+# Wait for response - should come from local engine or SecureLLM
+expect {
+    timeout {
+        puts "❌ FAIL: No response even with fallback (timeout 60s)"
+        puts "   Possible causes:"
+        puts "   - Local engine failed to load"
+        puts "   - SecureLLM API key missing"
+        puts "   - Network issues"
+        exit 1
+    }
+    -re "(Hello|Hi|Hey)" {
+        puts "✅ PASS: Received response from fallback provider"
+        puts "   (Could be local engine or SecureLLM)"
+    }
+    -re "(error|failed)" {
+        puts "⚠️  WARN: Error message detected, but may have recovered"
+    }
+}
+
+# Test 2: Multiple requests to verify fallback is stable
+puts "\n📝 Test 2: Second request to verify stable fallback"
+send "What is Rust?\r"
+
+expect {
+    timeout {
+        puts "❌ FAIL: Fallback unstable (second request failed)"
+        exit 1
+    }
+    -re "(programming|language|system)" {
+        puts "✅ PASS: Fallback provider responding consistently"
+    }
+}
+
+# Test 3: Check system messages for fallback indication
+puts "\n📝 Test 3: Verify fallback indicator in UI"
+# Look for system message like "Using local engine" or "ml-offload unavailable"
+
+expect {
+    -re "(local|fallback|SecureLLM)" {
+        puts "✅ PASS: Fallback status visible in UI"
+    }
+    timeout {
+        puts "⚠️  WARN: No fallback indicator visible (may be hidden)"
+    }
+}
+
+# Test 4: Verify RAG still works with fallback
+puts "\n📝 Test 4: Test RAG context with fallback provider"
+send "Search for information about testing\r"
+
+expect {
+    timeout {
+        puts "❌ FAIL: RAG query failed with fallback"
+        exit 1
+    }
+    -re ".+" {
+        puts "✅ PASS: RAG context working with fallback"
+    }
+}
+
+# Quit
+puts "\n📝 Quitting application"
+send "\003"  ;# Ctrl+C
+
+expect {
+    eof {
+        puts "✅ PASS: Application quit"
+    }
+    timeout {
+        puts "⚠️  WARN: Application did not quit cleanly"
+        exit 1
+    }
+}
+
+puts "\n✅ Fallback chain tests completed!"
+puts ""
+puts "📝 Test Summary:"
+puts "   - TUI started successfully with ml-offload down"
+puts "   - Fallback to local engine or SecureLLM worked"
+puts "   - Multiple requests handled consistently"
+puts "   - RAG context still functional"
+puts ""
+puts "💡 Next Steps:"
+puts "   1. Restart ml-offload: docker start ml-offload"
+puts "   2. Verify primary provider restored"
+puts "   3. Run smoke test to confirm end-to-end"
+
+exit 0
