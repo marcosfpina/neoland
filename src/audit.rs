@@ -331,9 +331,12 @@ impl AlertHandler for ConsoleAlertHandler {
     }
 }
 
+/// Failed authentication entry (user_id, timestamp)
+type FailureEntry = (String, DateTime<Utc>);
+
 /// Failed authentication tracker for rate limiting alerts
 pub struct FailedAuthTracker {
-    failures: Arc<RwLock<Vec<(String, DateTime<Utc>)>>>, // (user_id, timestamp)
+    failures: Arc<RwLock<Vec<FailureEntry>>>,
     threshold: usize,
     window_minutes: i64,
 }
