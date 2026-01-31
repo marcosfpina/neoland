@@ -1,0 +1,170 @@
+# Phase 4.4: Prometheus Configuration for NEOLAND
+# Scrape configs, alert rules, and remote write setup
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'neoland-production'
+    environment: 'prod'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load alert rules
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # NEOLAND application metrics
+  - job_name: 'neoland'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - 'neoland:3001'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'neoland:3001'
+
+  # Kubernetes service discovery (for multi-pod deployments)
+  - job_name: 'kubernetes-neoland'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - default
+            - neoland
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: neoland
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: '$1:3001'
+
+  # NEOLAND health check probe
+  - job_name: 'neoland-health'
+    scrape_interval: 30s
+    metrics_path: '/health'
+    static_configs:
+      - targets:
+          - 'neoland:3001'
+    metric_relabel_configs:
+      - source_labels: [status]
+        target_label: health_status
+      - action: replace
+        source_labels: [health_status]
+        target_label: probe_success
+        regex: healthy
+        replacement: '1'
+      - action: replace
+        source_labels: [health_status]
+        target_label: probe_success
+        regex: degraded
+        replacement: '0.5'
+      - action: replace
+        source_labels: [health_status]
+        target_label: probe_success
+        regex: unhealthy
+        replacement: '0'
+
+  # Blackbox exporter (external health checks)
+  - job_name: 'blackbox-neoland'
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://neoland.example.com/health
+          - https://neoland.example.com/ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets:
+          - 'localhost:9090'
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets:
+          - 'alertmanager:9093'
+
+  # Node exporter (system metrics)
+  - job_name: 'node-exporter'
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+
+  # Kubernetes API server
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  # PostgreSQL metrics (when vector store migrated)
+  - job_name: 'postgres'
+    static_configs:
+      - targets:
+          - 'postgres-exporter:9187'
+
+# Remote write configuration (for long-term storage)
+remote_write:
+  - url: "${PROMETHEUS_REMOTE_WRITE_URL}"
+    basic_auth:
+      username: "${PROMETHEUS_REMOTE_WRITE_USER}"
+      password: "${PROMETHEUS_REMOTE_WRITE_PASSWORD}"
+    queue_config:
+      capacity: 10000
+      max_shards: 10
+      min_shards: 1
+      max_samples_per_send: 5000
+      batch_send_deadline: 5s
+      min_backoff: 30ms
+      max_backoff: 100ms
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /prometheus
+    retention:
+      time: 15d
+      size: 50GB
+
+# Recording rules (pre-computed queries for performance)
+# Could be in separate file, but included here for example
+# rule_files:
+#   - '/etc/prometheus/recording_rules.yml'

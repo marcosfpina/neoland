@@ -1,0 +1,413 @@
+# Phase 4.4: Prometheus Alerting Rules
+# Production-ready alerts for NEOLAND operational monitoring
+
+groups:
+  # ==========================================
+  # Service Availability Alerts
+  # ==========================================
+  - name: neoland_availability
+    interval: 30s
+    rules:
+      - alert: NeolandDown
+        expr: up{job="neoland"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: service
+          team: platform
+        annotations:
+          summary: "NEOLAND service is down"
+          description: "Instance {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook: "https://docs.neoland/runbooks/service-down"
+          impact: "Users cannot access the service"
+          action: "Check pod logs: kubectl logs -l app=neoland --tail=100"
+
+      - alert: NeolandHighRestartRate
+        expr: rate(kube_pod_container_status_restarts_total{pod=~"neoland-.*"}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: service
+          team: platform
+        annotations:
+          summary: "NEOLAND pod restarting frequently"
+          description: "Pod {{ $labels.pod }} is restarting more than once per 10 minutes."
+          runbook: "https://docs.neoland/runbooks/pod-crashes"
+          action: "Investigate crash loop: kubectl describe pod {{ $labels.pod }}"
+
+  # ==========================================
+  # Health Check Alerts
+  # ==========================================
+  - name: neoland_health
+    interval: 30s
+    rules:
+      - alert: NeolandUnhealthy
+        expr: |
+          neoland_health_status{status!="healthy"} == 1
+          or
+          probe_success{job="neoland-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: health
+          team: platform
+        annotations:
+          summary: "NEOLAND health check failing"
+          description: "Health check for {{ $labels.instance }} has been failing for >2 minutes."
+          runbook: "https://docs.neoland/runbooks/health-check-failure"
+          action: "Check /health endpoint: curl http://{{ $labels.instance }}:3001/health"
+
+      - alert: NeolandNotReady
+        expr: neoland_readiness_status == 0
+        for: 1m
+        labels:
+          severity: warning
+          component: health
+          team: platform
+        annotations:
+          summary: "NEOLAND not ready to serve traffic"
+          description: "Instance {{ $labels.instance }} failing readiness checks."
+          runbook: "https://docs.neoland/runbooks/readiness-failure"
+          action: "Check /ready endpoint: curl http://{{ $labels.instance }}:3001/ready"
+
+      - alert: NeolandComponentDegraded
+        expr: neoland_component_health{status="degraded"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: "{{ $labels.component }}"
+          team: platform
+        annotations:
+          summary: "NEOLAND component {{ $labels.component }} degraded"
+          description: "Component {{ $labels.component }} has been degraded for >5 minutes."
+          runbook: "https://docs.neoland/runbooks/component-degraded"
+
+  # ==========================================
+  # Performance & Latency Alerts
+  # ==========================================
+  - name: neoland_performance
+    interval: 30s
+    rules:
+      - alert: NeolandHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(neoland_http_request_duration_seconds_bucket[5m])
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+          team: platform
+        annotations:
+          summary: "NEOLAND p99 latency is high"
+          description: "99th percentile latency is {{ $value }}s for endpoint {{ $labels.endpoint }}."
+          runbook: "https://docs.neoland/runbooks/high-latency"
+          threshold: "2.0s"
+          action: "Check slow queries and LLM provider response times"
+
+      - alert: NeolandVeryHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(neoland_http_request_duration_seconds_bucket[5m])
+          ) > 5.0
+        for: 2m
+        labels:
+          severity: critical
+          component: performance
+          team: platform
+        annotations:
+          summary: "NEOLAND p99 latency is critically high"
+          description: "99th percentile latency is {{ $value }}s for endpoint {{ $labels.endpoint }}."
+          runbook: "https://docs.neoland/runbooks/critical-latency"
+          threshold: "5.0s"
+          action: "Immediate investigation required. Check LLM provider status."
+
+      - alert: NeolandSlowLLMInference
+        expr: |
+          histogram_quantile(0.95,
+            rate(neoland_llm_request_duration_seconds_bucket[5m])
+          ) > 10.0
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+          team: ml
+        annotations:
+          summary: "LLM inference is slow"
+          description: "95th percentile LLM inference time is {{ $value }}s for provider {{ $labels.provider }}."
+          runbook: "https://docs.neoland/runbooks/slow-llm-inference"
+          action: "Check ml-offload service health and SecureLLM API status"
+
+  # ==========================================
+  # Error Rate Alerts
+  # ==========================================
+  - name: neoland_errors
+    interval: 30s
+    rules:
+      - alert: NeolandHighErrorRate
+        expr: |
+          (
+            rate(neoland_http_requests_total{status=~"5.."}[5m])
+            /
+            rate(neoland_http_requests_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: errors
+          team: platform
+        annotations:
+          summary: "NEOLAND error rate is elevated"
+          description: "Error rate is {{ $value | humanizePercentage }} on endpoint {{ $labels.endpoint }}."
+          runbook: "https://docs.neoland/runbooks/high-error-rate"
+          threshold: "5%"
+          action: "Check application logs for errors: kubectl logs -l app=neoland | grep ERROR"
+
+      - alert: NeolandCriticalErrorRate
+        expr: |
+          (
+            rate(neoland_http_requests_total{status=~"5.."}[5m])
+            /
+            rate(neoland_http_requests_total[5m])
+          ) > 0.25
+        for: 2m
+        labels:
+          severity: critical
+          component: errors
+          team: platform
+        annotations:
+          summary: "NEOLAND error rate is critically high"
+          description: "Error rate is {{ $value | humanizePercentage }} on endpoint {{ $labels.endpoint }}."
+          runbook: "https://docs.neoland/runbooks/critical-error-rate"
+          threshold: "25%"
+          action: "IMMEDIATE ACTION REQUIRED. Service may be failing."
+
+      - alert: NeolandLLMProviderFailures
+        expr: |
+          rate(neoland_llm_requests_total{status="error"}[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: llm
+          team: ml
+        annotations:
+          summary: "LLM provider {{ $labels.provider }} experiencing failures"
+          description: "LLM provider {{ $labels.provider }} error rate is {{ $value }} req/s."
+          runbook: "https://docs.neoland/runbooks/llm-provider-failures"
+          action: "Check fallback chain is working. Verify API keys are valid."
+
+  # ==========================================
+  # Security Alerts
+  # ==========================================
+  - name: neoland_security
+    interval: 30s
+    rules:
+      - alert: NeolandHighAuthFailureRate
+        expr: |
+          rate(neoland_auth_failures_total[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: security
+          team: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Auth failure rate is {{ $value }} failures/sec."
+          runbook: "https://docs.neoland/runbooks/auth-failures"
+          action: "Check audit logs for suspicious IPs: grep auth_failure /var/log/neoland/audit.log"
+
+      - alert: NeolandBruteForceAttack
+        expr: |
+          rate(neoland_auth_failures_total[1m]) > 20
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+          team: security
+        annotations:
+          summary: "Potential brute force attack detected"
+          description: "Auth failure rate is {{ $value }} failures/sec from {{ $labels.source_ip }}."
+          runbook: "https://docs.neoland/runbooks/brute-force-attack"
+          action: "IMMEDIATE ACTION: Block source IP in firewall. Check audit logs."
+
+      - alert: NeolandRateLimitExceeded
+        expr: |
+          rate(neoland_rate_limit_exceeded_total[5m]) > 10
+        for: 3m
+        labels:
+          severity: info
+          component: security
+          team: platform
+        annotations:
+          summary: "Rate limits frequently exceeded"
+          description: "Rate limit exceeded {{ $value }} times/sec for user {{ $labels.user_id }}."
+          runbook: "https://docs.neoland/runbooks/rate-limit-exceeded"
+          action: "Investigate if legitimate traffic spike or abuse"
+
+      - alert: NeolandSuspiciousActivity
+        expr: |
+          rate(neoland_audit_events_total{action="suspicious"}[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+          component: security
+          team: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "{{ $value }} suspicious events/sec detected."
+          runbook: "https://docs.neoland/runbooks/suspicious-activity"
+          action: "Review audit logs immediately"
+
+  # ==========================================
+  # Resource Utilization Alerts
+  # ==========================================
+  - name: neoland_resources
+    interval: 30s
+    rules:
+      - alert: NeolandHighMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{pod=~"neoland-.*"}
+            /
+            container_spec_memory_limit_bytes{pod=~"neoland-.*"}
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+          team: platform
+        annotations:
+          summary: "NEOLAND memory usage is high"
+          description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit."
+          runbook: "https://docs.neoland/runbooks/high-memory"
+          threshold: "85%"
+          action: "Consider increasing memory limits or investigating memory leaks"
+
+      - alert: NeolandCriticalMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{pod=~"neoland-.*"}
+            /
+            container_spec_memory_limit_bytes{pod=~"neoland-.*"}
+          ) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          component: resources
+          team: platform
+        annotations:
+          summary: "NEOLAND memory usage is critical"
+          description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit. OOMKill imminent."
+          runbook: "https://docs.neoland/runbooks/critical-memory"
+          threshold: "95%"
+          action: "IMMEDIATE: Increase memory limits or restart pod"
+
+      - alert: NeolandHighCPUUsage
+        expr: |
+          (
+            rate(container_cpu_usage_seconds_total{pod=~"neoland-.*"}[5m])
+            /
+            container_spec_cpu_quota{pod=~"neoland-.*"}
+          ) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+          team: platform
+        annotations:
+          summary: "NEOLAND CPU usage is high"
+          description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of CPU limit."
+          runbook: "https://docs.neoland/runbooks/high-cpu"
+          threshold: "90%"
+          action: "Consider horizontal scaling or CPU limit increase"
+
+  # ==========================================
+  # Dependency Alerts
+  # ==========================================
+  - name: neoland_dependencies
+    interval: 30s
+    rules:
+      - alert: NeolandVectorStoreUnavailable
+        expr: neoland_component_health{component="vector_store", status="unhealthy"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: vector_store
+          team: platform
+        annotations:
+          summary: "Vector store is unavailable"
+          description: "Vector store health check failing for >2 minutes."
+          runbook: "https://docs.neoland/runbooks/vector-store-down"
+          action: "Check PostgreSQL connectivity and pgvector extension"
+
+      - alert: NeolandAllLLMProvidersFailing
+        expr: |
+          sum(neoland_component_health{component=~"llm_.*", status="healthy"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: llm
+          team: ml
+        annotations:
+          summary: "All LLM providers are failing"
+          description: "No healthy LLM providers available. Fallback chain exhausted."
+          runbook: "https://docs.neoland/runbooks/all-llm-providers-down"
+          action: "IMMEDIATE: Check ml-offload, local engine, and SecureLLM API status"
+
+  # ==========================================
+  # Cost & Usage Alerts
+  # ==========================================
+  - name: neoland_cost
+    interval: 1h
+    rules:
+      - alert: NeolandHighLLMCost
+        expr: |
+          increase(neoland_llm_cost_usd_total[1h]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: cost
+          team: finance
+        annotations:
+          summary: "LLM costs are unusually high"
+          description: "LLM costs increased by ${{ $value }} in the last hour."
+          runbook: "https://docs.neoland/runbooks/high-llm-cost"
+          action: "Investigate unusual usage patterns or API abuse"
+
+      - alert: NeolandExcessiveTokenUsage
+        expr: |
+          rate(neoland_llm_tokens_total[5m]) > 10000
+        for: 10m
+        labels:
+          severity: info
+          component: usage
+          team: platform
+        annotations:
+          summary: "Token usage is very high"
+          description: "Token consumption is {{ $value }} tokens/sec."
+          runbook: "https://docs.neoland/runbooks/high-token-usage"
+          action: "Review large prompts and check for inefficient queries"
+
+  # ==========================================
+  # Data Quality Alerts
+  # ==========================================
+  - name: neoland_data_quality
+    interval: 5m
+    rules:
+      - alert: NeolandHighPromptRejectionRate
+        expr: |
+          (
+            rate(neoland_validation_failures_total[5m])
+            /
+            rate(neoland_http_requests_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          component: validation
+          team: platform
+        annotations:
+          summary: "High prompt rejection rate"
+          description: "{{ $value | humanizePercentage }} of requests are being rejected by validation."
+          runbook: "https://docs.neoland/runbooks/high-rejection-rate"
+          action: "Review validation rules or investigate client issues"
