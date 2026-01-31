@@ -567,8 +567,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_failed_auth_window_expiry() {
-        use tokio::time::{sleep, Duration};
-
         let tracker = FailedAuthTracker::new(5, 1); // 5 failures in 1 minute
 
         // Track 4 failures
