@@ -86,3 +86,8 @@ harness = true
 name = "pentest_scenarios"
 path = "tests/security/pentest_scenarios.rs"
 harness = true
+
+[[bench]]
+name = "inference_benchmark"
+path = "benches/inference_benchmark.rs"
+harness = false
