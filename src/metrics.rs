@@ -233,14 +233,33 @@ pub mod utils {
         prompt_tokens: u32,
         completion_tokens: u32,
     ) -> f64 {
-        // Prices per 1M tokens (approximate)
+        // Prices per 1M tokens (approximate as of 2026-01)
         let (prompt_price, completion_price) = match (provider, model) {
-            ("deepseek", _) => (0.14, 0.28), // DeepSeek Chat
+            // Local providers (FREE)
+            ("llamacpp", _) => (0.0, 0.0), // Local model, no cost
+            ("ollama", _) => (0.0, 0.0),   // Local model, no cost
+
+            // DeepSeek (very cheap)
+            ("deepseek", _) => (0.14, 0.28),
+
+            // OpenAI
             ("openai", m) if m.contains("gpt-4") => (30.0, 60.0),
             ("openai", m) if m.contains("gpt-3.5") => (0.50, 1.50),
+
+            // Anthropic Claude
             ("anthropic", m) if m.contains("claude-3-opus") => (15.0, 75.0),
             ("anthropic", m) if m.contains("claude-3-sonnet") => (3.0, 15.0),
-            _ => (1.0, 2.0), // Default fallback
+            ("anthropic", m) if m.contains("claude-3-haiku") => (0.25, 1.25),
+
+            // Google Gemini
+            ("gemini", m) if m.contains("pro") => (0.50, 1.50),
+            ("gemini", m) if m.contains("flash") => (0.075, 0.30),
+
+            // Groq (very fast, cheap)
+            ("groq", _) => (0.05, 0.10),
+
+            // Default fallback
+            _ => (1.0, 2.0),
         };
 
         let prompt_cost = (prompt_tokens as f64 / 1_000_000.0) * prompt_price;
@@ -312,13 +331,25 @@ mod tests {
 
     #[test]
     fn test_llm_cost_estimation() {
-        // Test DeepSeek pricing
+        // Test local providers (FREE)
+        let cost = utils::estimate_llm_cost("llamacpp", "local", 1_000_000, 1_000_000);
+        assert_eq!(cost, 0.0);
+
+        // Test DeepSeek pricing (very cheap)
         let cost = utils::estimate_llm_cost("deepseek", "chat", 1_000_000, 1_000_000);
         assert!((cost - 0.42).abs() < 0.01); // 0.14 + 0.28 = 0.42
 
-        // Test GPT-4 pricing
+        // Test GPT-4 pricing (expensive)
         let cost = utils::estimate_llm_cost("openai", "gpt-4", 1_000_000, 1_000_000);
         assert!((cost - 90.0).abs() < 0.01); // 30 + 60 = 90
+
+        // Test Gemini Flash (cheap)
+        let cost = utils::estimate_llm_cost("gemini", "flash", 1_000_000, 1_000_000);
+        assert!((cost - 0.375).abs() < 0.01); // 0.075 + 0.30 = 0.375
+
+        // Test Groq (very cheap and fast)
+        let cost = utils::estimate_llm_cost("groq", "llama", 1_000_000, 1_000_000);
+        assert!((cost - 0.15).abs() < 0.01); // 0.05 + 0.10 = 0.15
     }
 
     #[test]
