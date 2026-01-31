@@ -137,7 +137,7 @@ deploy/prometheus/
   labels:
     severity: warning
     component: performance
-    team: platform
+    team: voidnx
   annotations:
     summary: "NEOLAND p99 latency is high"
     description: "99th percentile latency is {{ $value }}s."
@@ -385,7 +385,7 @@ Every alert must have a runbook documenting:
 ## Escalation
 - After 30 min: Escalate to Team Lead
 - After 1 hour: Escalate to Engineering Manager
-- Contact: @oncall-platform in Slack
+- Contact: @oncall-voidnx in Slack
 ```
 
 ---
