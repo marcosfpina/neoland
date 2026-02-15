@@ -2404,49 +2404,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
-name = "llamachat-poc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-channel",
- "async-trait",
- "axum",
- "candle-core",
- "candle-nn",
- "candle-transformers",
- "chrono",
- "clap",
- "criterion",
- "crossterm",
- "futures",
- "hf-hub",
- "hyprland-ipc",
- "intelagent-core",
- "lazy_static",
- "prometheus",
- "prost",
- "ratatui",
- "regex",
- "reqwest",
- "securellm-core",
- "securellm-providers",
- "securellm-security",
- "serde",
- "serde_json",
- "tempfile",
- "tokenizers",
- "tokio",
- "tokio-stream",
- "tonic",
- "tonic-build",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "vaultrs",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2620,6 +2577,51 @@ dependencies = [
  "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "neoland"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "async-trait",
+ "axum",
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "chrono",
+ "clap",
+ "criterion",
+ "crossterm",
+ "futures",
+ "hf-hub",
+ "hyprland-ipc",
+ "intelagent-core",
+ "lazy_static",
+ "pgvector",
+ "prometheus",
+ "prost",
+ "ratatui",
+ "regex",
+ "reqwest",
+ "securellm-core",
+ "securellm-providers",
+ "securellm-security",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokenizers",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-build",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "vaultrs",
 ]
 
 [[package]]
@@ -2964,6 +2966,15 @@ checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset",
  "indexmap 2.13.0",
+]
+
+[[package]]
+name = "pgvector"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc58e2d255979a31caa7cabfa7aac654af0354220719ab7a68520ae7a91e8c0b"
+dependencies = [
+ "sqlx",
 ]
 
 [[package]]
@@ -4144,6 +4155,7 @@ checksum = "ee6798b1838b6a0f69c007c133b8df5866302197e404e8b6ee8ed3e3a5e68dc6"
 dependencies = [
  "base64 0.22.1",
  "bytes",
+ "chrono",
  "crc",
  "crossbeam-queue",
  "either",
@@ -4169,6 +4181,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "uuid",
  "webpki-roots 0.26.11",
 ]
 
@@ -4221,6 +4234,7 @@ dependencies = [
  "bitflags 2.10.0",
  "byteorder",
  "bytes",
+ "chrono",
  "crc",
  "digest",
  "dotenvy",
@@ -4249,6 +4263,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.17",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -4262,6 +4277,7 @@ dependencies = [
  "base64 0.22.1",
  "bitflags 2.10.0",
  "byteorder",
+ "chrono",
  "crc",
  "dotenvy",
  "etcetera",
@@ -4286,6 +4302,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.17",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -4296,6 +4313,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2d12fe70b2c1b4401038055f90f151b78208de1f9f89a7dbfd41587a10c3eea"
 dependencies = [
  "atoi",
+ "chrono",
  "flume",
  "futures-channel",
  "futures-core",
@@ -4311,6 +4329,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]

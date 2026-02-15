@@ -1,14 +1,16 @@
-# Neoland - Enterprise AI Agent Platform
+# Neoland - AI Agent Platform
 
-**Status**: Production-Ready | Security-Hardened | NixOS/Hyprland Integrated
+**Status**: Active Development | Security-Hardened | NixOS/Hyprland Integrated
 
-Neoland is an enterprise-grade, terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a sleek TUI interface, comprehensive security hardening, robust fallback mechanisms, and deep OS integration.
+Neoland is a terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a TUI interface, comprehensive security hardening, robust fallback mechanisms, and deep OS integration.
 
-**Production Readiness**: 58/100
-- ✅ Security Hardening Complete (85%)
-- ✅ Testing Coverage (65% - 73 tests)
-- ⏳ CI/CD Pipeline (Planned)
-- ⏳ Operational Readiness (Planned)
+**Version**: 0.1.0
+**Production Readiness**: 61/100
+- ✅ Security Hardening (Phase 1 Complete)
+- ✅ Testing: 118 tests (98 passing, 20 ignored/require external services)
+- ✅ CI/CD Pipeline (GitHub Actions + Pre-commit Hooks)
+- ⚠️ Coverage: ~60% (Target: 70%)
+- ⏳ Operational Readiness (In Progress)
 
 ---
 
@@ -93,22 +95,26 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 - ✅ **Path Traversal Prevention**: Secure document upload
 - ✅ **DoS Protection**: Size limits prevent memory exhaustion
 
-**Security Posture**: 85% hardened ✅
+**Security Posture**: Phase 1 Complete (RBAC + Vault + Audit + Rate Limiting)
 
 See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/ADR/`
 
 ---
 
-## 🧪 Testing & Quality
+## Testing & Quality
 
-**Test Suite**: 73 tests (100% passing)
-- **Unit Tests**: 55 tests (~50-55% code coverage)
-- **Integration Tests**: 18 tests (REST + gRPC)
+**Test Suite**: 118 total tests (98 passing, 20 ignored)
+- **Unit Tests**: 82 tests (77 passing, 5 ignored - require PostgreSQL/ml-offload)
+- **Integration Tests**: 19 tests (18 passing, 1 ignored)
+- **Security Tests**: 14 tests (all ignored - require `--ignored` flag)
+- **Storage Tests**: 2 tests (ignored - require PostgreSQL + pgvector)
+- **Benchmark Suite**: Compiles, not yet baselined
 
-**Coverage by Module**:
-- ✅ 100%: validation.rs, test_utils.rs
-- ✅ High: auth.rs, audit.rs
-- ⚠️ Medium: secrets.rs, llm modules
+**Coverage by Module** (~60%):
+- ✅ High: validation.rs (11), auth.rs (11), audit.rs (14), health.rs (9)
+- ✅ Medium: logging.rs (8), secrets.rs (5), metrics.rs (5), test_utils.rs (8)
+- ⚠️ Low: llm/proxy.rs (4), nlp.rs (1)
+- ❌ None: engine.rs (0 tests - core inference engine)
 
 **Run Tests**:
 ```bash
@@ -358,81 +364,33 @@ src/
 
 ### Strategic Roadmap (Q2-Q3 2026)
 
+> **Note**: The following features are in planning/early design phase. No code has been written for these yet.
+
+#### Neutron (NEXUS Platform) - AI Compliance (Q2 2026)
+
+**Status**: Separate project, PoC stage. See `neutron/` directory.
+
+Kernel-level AI compliance enforcement using seccomp-BPF. Targeting EU AI Act high-risk deadline (Aug 2, 2026).
+
 #### ADR-Ledger Integration (Q2 2026)
 
-**Objective**: Intelligent governance for architecture decisions
+**Status**: Planned, 0% implemented.
 
-**Key Features**:
-
-- Auto-tracking of critical decisions (routing changes, provider switches)
-- Semantic search over historical ADRs via embeddings
-- CI/CD compliance validation against documented ADRs
-- Impact analysis when modifying architecture
-
-**Value**: Governance automation + knowledge discovery
-
-**See**: [`docs/ADR.md#ADR-008`](file:///home/kernelcore/arch/neoland/docs/ADR.md#ADR-008)
+Intelligent governance for architecture decisions with semantic search over ADRs.
 
 ---
 
-#### Neutron - Autonomous Low-Level Security (Q2 2026)
+## Performance Characteristics
 
-**Objective**: Independent threat neutralization operating autonomously
+| Metric               | Value            | Notes |
+| -------------------- | ---------------- | ----- |
+| TUI Startup          | <50ms            | |
+| Memory (TUI)         | ~15MB            | |
+| Memory (Server)      | ~200MB (idle)    | |
+| Qwen 1.8B Inference  | 5-10 tok/s (CPU) | Candle backend; consider llama.cpp for production |
+| Build Time (release) | ~10s             | |
 
-**Core Capabilities**:
-
-- **Provenance Verification**: Cryptographic validation of model/data origins
-- **Syscall Interception**: eBPF-based anomaly detection (network, file I/O)
-- **Autonomous Response**: Self-healing without human intervention (quarantine, snapshot, rollback)
-- **Zero-Trust**: Verifies everything, trusts nothing
-
-**Architecture**: Operates **independently** of Neoland (stateless, low-level kernel/syscall layer)
-
-**Threat Protection**:
-
-- Supply chain attacks (binary verification via SHA-256)
-- Model poisoning (output anomaly detection)
-- Memory corruption (eBPF memory monitoring)
-
-**Value**: Protection against low-level attacks that bypass application security
-
-**See**: [`docs/ADR.md#ADR-009`](file:///home/kernelcore/arch/neoland/docs/ADR.md#ADR-009)
-
----
-
-#### Spectre - Enterprise Observability & Scale (Q3 2026)
-
-**Objective**: Enterprise-ready features to unlock Fortune 500 market + revenue
-
-**Enterprise Features**:
-
-- **Multi-Tenancy**: Resource quotas, cost attribution per tenant, SLA tiers (Gold/Silver/Bronze)
-- **Distributed Tracing**: OpenTelemetry → SIEM integration (Datadog/Splunk)
-- **Compliance Automation**: SOC2/ISO27001/GDPR automated validation
-- **HA/Multi-Region**: 99.99% SLA with global deployment
-
-**Business Model**: SaaS pricing ($99-$999+/month based on tier)
-
-**Value Proposition for Investors**:
-
-- 📈 Recurring revenue stream (SaaS)
-- 🏢 Fortune 500 addressable market
-- 🔒 Vendor lock-in via proprietary observability
-- 🌍 International expansion via multi-region
-
-**See**: [`docs/ADR.md#ADR-010`](file:///home/kernelcore/arch/neoland/docs/ADR.md#ADR-010)
-
----
-
-## 📊 Performance Characteristics
-
-| Metric               | Value            |
-| -------------------- | ---------------- |
-| TUI Startup          | <50ms            |
-| Memory (TUI)         | ~15MB            |
-| Memory (Server)      | ~200MB (idle)    |
-| Qwen 1.8B Inference  | 5-10 tok/s (CPU) |
-| Build Time (release) | ~10s             |
+**Note**: Local inference at 5-10 tok/s CPU is suitable for development/testing. For production workloads, use the ml-offload API backend (GPU-accelerated) or the SecureLLM cloud fallback. SLO targets (500 RPS, p99 <200ms) have not been validated yet.
 
 ---
 
@@ -451,11 +409,16 @@ cargo check --all-targets
 
 ---
 
-## 🐛 Known Issues
+## Known Issues
 
 1. **Legacy Scripts**: `run-*.sh` still present (marked for removal)
-2. **Dead Code**: `engine.rs` and `nlp.rs` have unused structs (future RAG feature)
-3. **Warnings**: Unused imports in `securellm-core` (external crate)
+2. **engine.rs has 0 tests**: Core inference engine has no unit test coverage
+3. **In-memory Vector Store**: `nlp.rs` uses `Vec<Document>` - data lost on restart. Persistent store (`storage/vector_store.rs`) exists but requires PostgreSQL + pgvector setup
+4. **Path Dependencies**: 5 path dependencies in Cargo.toml require sibling projects to build (see Cargo.toml comments for setup)
+5. **Local inference performance**: 5-10 tok/s CPU via Candle is below production threshold; use ml-offload or SecureLLM fallback
+6. **Lock contention risk**: `Arc<Mutex<>>` on engine/vector store may bottleneck above ~50 req/s
+7. **Warnings**: Unused imports in `securellm-core` (external crate)
+8. **SLO targets unvalidated**: 500 RPS / p99 <200ms targets have never been load-tested
 
 ---
 
@@ -468,17 +431,17 @@ cargo check --all-targets
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 This is part of a larger research project. External contributions are not currently accepted.
 
 ---
 
-## 📜 License
+## License
 
 Proprietary - Internal Research Project
 
 ---
 
-**Maintained by**: VoidNxSEC Team  
-**Last Updated**: 2026-01-18
+**Maintained by**: VoidNxSEC Team
+**Last Updated**: 2026-02-15

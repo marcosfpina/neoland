@@ -127,6 +127,19 @@ impl RateLimiter {
 }
 
 // Shared State for gRPC and REST
+//
+// ## Lock Ordering (MUST be followed to prevent deadlocks)
+//
+// When acquiring multiple locks, always acquire them in this order:
+//   1. engine (Arc<Mutex<Option<LocalEngine>>>)
+//   2. vector_store (Arc<Mutex<VectorStore>>)
+//
+// The chat_stream handler acquires engine first, then vector_store while
+// holding the engine lock. All other code paths must follow this same
+// ordering. Never acquire engine while holding vector_store.
+//
+// Other fields (auth_manager, audit_logger, etc.) use interior mutability
+// or Arc-only patterns and don't participate in lock ordering.
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,

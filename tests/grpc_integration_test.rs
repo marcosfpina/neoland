@@ -21,7 +21,7 @@ const TEST_REST_PORT: u16 = 3004;
 /// Helper to start test server
 async fn start_test_server() -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let _ = llamachat_poc::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await;
+        let _ = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await;
     })
 }
 

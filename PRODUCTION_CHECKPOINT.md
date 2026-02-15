@@ -1,7 +1,7 @@
 # NEOLAND Production Readiness Checkpoint
-**Date**: 2026-01-31
-**Version**: 0.3.0
-**Overall Status**: 72% Production Ready
+**Date**: 2026-01-31 (Updated: 2026-02-15)
+**Version**: 0.1.0
+**Overall Status**: 61% Production Ready (weighted score)
 
 ---
 
@@ -85,25 +85,33 @@ Finished dev [unoptimized + debuginfo] target(s) in 0.15s
 ### Phase 2: Testing & QA ⚠️ 68%
 
 #### 2.1 Unit Testing ✅ 100%
-- **Test Count**: 60 unit tests
-- **Coverage**: 60-65% (Target: 70%)
+- **Test Count**: 82 unit tests (77 passing, 5 ignored)
+- **Coverage**: ~60% (Target: 70%)
 - **Test Utilities**: `src/test_utils.rs` with mocks and assertions
-- **Status**: All tests passing
+- **Status**: All runnable tests passing
 
 **Evidence**:
 ```bash
 $ cargo test --lib
-running 60 tests
-test result: ok. 60 passed; 0 failed; 3 ignored
+running 82 tests
+test result: ok. 77 passed; 0 failed; 5 ignored
 ```
 
 **Test Distribution**:
+- `audit.rs`: 14 tests
 - `auth.rs`: 11 tests
-- `audit.rs`: 15 tests
-- `validation.rs`: 8 tests
-- `secrets.rs`: 9 tests
+- `validation.rs`: 11 tests
+- `health.rs`: 9 tests
+- `logging.rs`: 8 tests
+- `test_utils.rs`: 8 tests
+- `secrets.rs`: 5 tests
 - `metrics.rs`: 5 tests
-- Other modules: 12 tests
+- `llm/proxy.rs`: 4 tests
+- `ml_offload/client.rs`: 3 tests (ignored)
+- `storage/vector_store.rs`: 2 tests (ignored)
+- `nlp.rs`: 1 test
+- `llm/unified_client.rs`: 1 test
+- `engine.rs`: **0 tests** (critical gap)
 
 #### 2.2 Integration Tests ✅ 100%
 - **REST API Tests**: 10 tests (`tests/rest_api_test.rs`)
@@ -111,14 +119,18 @@ test result: ok. 60 passed; 0 failed; 3 ignored
 - **Coverage**: Health check, auth, streaming, vector store
 - **Status**: All 18 integration tests passing
 
-#### 2.3 E2E & Security Testing ❌ 0%
-**Pending**:
-- TUI automation tests
-- Mock provider testing
-- Security fuzzing (AFL, cargo-fuzz)
-- Penetration testing
+#### 2.3 E2E & Security Testing ⚠️ 30%
+**Implemented**:
+- TUI automation: 3 expect scripts (`tests/e2e/`) - smoke, presets, fallback
+- Security fuzzing: 6 fuzz tests (`tests/security/fuzz_endpoints.rs`) - marked `#[ignore]`
+- Penetration testing: 8 pentest scenarios (`tests/security/pentest_scenarios.rs`) - marked `#[ignore]`
 
-**Estimated Effort**: 28 hours
+**Pending**:
+- Execute security tests in CI (require full server setup)
+- Mock provider testing
+- AFL/cargo-fuzz integration
+
+**Estimated Effort**: 16 hours
 
 #### 2.4 Load Testing ❌ 0%
 **Pending**:
@@ -301,11 +313,12 @@ test result: ok. 60 passed; 0 failed; 3 ignored
 | Phase 6: Compliance | 10% | 10% | 1.0 |
 | **TOTAL** | **100%** | | **61.2%** |
 
-**Adjusted Score with Critical Path**: **72%**
-- Security Hardening (Critical): 100% ✅
-- CI/CD (Critical): 100% ✅
-- Testing (Critical): 68% ⚠️
-- Metrics (Critical): 100% ✅
+**Note**: The weighted score above (61.2%) is the accurate production readiness metric.
+Critical path items completed:
+- Security Hardening: 100% ✅
+- CI/CD: 100% ✅
+- Testing: 68% ⚠️
+- Metrics: 100% ✅
 
 ---
 
@@ -378,7 +391,7 @@ test result: ok. 60 passed; 0 failed; 3 ignored
 
 ### ✅ You Can Deploy Today With:
 - **Security**: Full RBAC, secrets management, audit logging
-- **Quality**: 60 tests, 60% coverage, CI/CD pipeline
+- **Quality**: 118 tests (98 passing), ~60% coverage, CI/CD pipeline
 - **Observability**: 14 Prometheus metrics, cost tracking
 - **Reliability**: Rate limiting, input validation, error handling
 
@@ -451,10 +464,12 @@ aaef7d3 - feat(phase4.1): implement Prometheus metrics and observability
 
 ### Test Results
 ```
-Unit Tests:      60 passed, 0 failed, 3 ignored
-Integration:     18 passed, 0 failed
-Total:           78 tests ✅
-Coverage:        60-65% (Target: 70%)
+Unit Tests:      77 passed, 0 failed, 5 ignored (82 total)
+Integration:     18 passed, 0 failed, 1 ignored (19 total)
+Security:        0 passed, 0 failed, 14 ignored (require --ignored flag)
+Benchmarks:      Compile only (not baselined)
+Total:           118 tests (98 passing, 20 ignored)
+Coverage:        ~60% (Target: 70%)
 ```
 
 ### Metrics Available

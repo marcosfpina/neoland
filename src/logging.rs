@@ -145,7 +145,7 @@ pub fn init_logging(config: LogConfig) -> anyhow::Result<()> {
 /// Initialize logging from environment variables
 ///
 /// Environment variables:
-/// - `RUST_LOG`: Log level filter (e.g., "info", "debug", "llamachat_poc=trace")
+/// - `RUST_LOG`: Log level filter (e.g., "info", "debug", "neoland=trace")
 /// - `LOG_FORMAT`: Output format ("pretty", "json", "compact")
 pub fn init_from_env() -> anyhow::Result<()> {
     let format = std::env::var("LOG_FORMAT")
