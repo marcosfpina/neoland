@@ -1,8 +1,8 @@
 [package]
-name = "llamachat-poc"
+name = "neoland"
 version = "0.1.0"
 edition = "2021"
-maintainer = "kernelcore"
+authors = ["kernelcore"]
 
 [[bin]]
 name = "neoland"
@@ -56,16 +56,16 @@ candle-nn = "0.8"
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 hf-hub = "0.3"
 
-# Integration Dependencies (Path-based - TEMPORARY)
-# NOTE: Path dependencies are used for active development but break build reproducibility.
-# Production deployment requires converting these to git dependencies or a private registry.
-# See DEPENDENCIES.md for migration roadmap and setup instructions.
-# TODO (Phase 0): Convert to git dependencies once phantom-ray is migrated to git
-securellm-core = { path = "../securellm-bridge/crates/core" }
-securellm-providers = { path = "../securellm-bridge/crates/providers" }
-securellm-security = { path = "../securellm-bridge/crates/security" }
-intelagent-core = { path = "../phantom-ray/phantom/intelagent/crates/core" }
-hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
+# Integration Dependencies
+# Git dependencies with pinned revisions for reproducible builds.
+# For local development, override with path in .cargo/config.toml:
+#   [patch.'ssh://git@github.com/marcosfpina/securellm-bridge.git']
+#   securellm-core = { path = "../securellm-bridge/crates/core" }
+securellm-core = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
+securellm-providers = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
+securellm-security = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
+intelagent-core = { git = "ssh://git@github.com/marcosfpina/phantom.git", rev = "6089119", default-features = false }
+hyprland-ipc = { git = "ssh://git@github.com/marcosfpina/ai-agent-os.git", rev = "f583d01", default-features = false }
 
 
 [build-dependencies]

@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use cli::{Cli, Commands};
-use llamachat_poc::{cli, logging, server};
+use neoland::{cli, logging, server};
 use tracing::Level;
 
 #[tokio::main]
@@ -45,7 +45,7 @@ async fn main() {
         },
 
         Commands::Client { server_url, ml_api_url } => {
-            if let Err(e) = llamachat_poc::tui::run_client(&server_url, &ml_api_url).await {
+            if let Err(e) = neoland::tui::run_client(&server_url, &ml_api_url).await {
                 eprintln!("❌ Erro no cliente TUI: {}", e);
                 std::process::exit(1);
             }
@@ -98,7 +98,7 @@ async fn run_health_check(rest_endpoint: &str, grpc_endpoint: &str) {
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            if stdout.contains("llamachat-server") {
+            if stdout.contains("neoland") {
                 info!("   ✅ Servidor rodando");
             } else {
                 error!("   ❌ Servidor não encontrado");
@@ -124,7 +124,7 @@ async fn restart_server(grpc_port: u16, rest_port: u16) {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
             for line in stdout.lines() {
-                if line.contains("llamachat-server") && !line.contains("grep") {
+                if line.contains("neoland") && !line.contains("grep") {
                     // Extract PID (second column)
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() > 1 {

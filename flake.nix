@@ -1,5 +1,5 @@
 {
-  description = "LlamaChat PoC Dev Environment";
+  description = "Neoland - AI Agent Platform with Security-First Architecture";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -54,7 +54,7 @@
             doCheck = true;
 
             meta = with pkgs.lib; {
-              description = "LlamaChat PoC - GTK4 Chat Client with gRPC Backend";
+              description = "Neoland - Terminal AI Agent with Enterprise Security";
               license = licenses.mit;
               maintainers = [ "kernelcore" ];
             };
@@ -78,8 +78,8 @@
           shellHook = ''
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
-            echo "│  🚀 Neoland Development Environment (v0.2.0)                   │"
-            echo "│  LocalFirst AI Assistant | ML-Offload + SecureLLM             │"
+            echo "│  🚀 Neoland Development Environment (v0.1.0)                   │"
+            echo "│  AI Agent Platform | Security-First Architecture             │"
             echo "└─────────────────────────────────────────────────────────────────┘"
             echo ""
             echo "📦 Quick Commands:"

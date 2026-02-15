@@ -122,9 +122,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_document_creation() {
+        let doc = Document {
+            id: "test-123".to_string(),
+            content: "How to move a window?".to_string(),
+            metadata: "manual:move".to_string(),
+        };
+        assert_eq!(doc.id, "test-123");
+        assert_eq!(doc.content, "How to move a window?");
+        assert_eq!(doc.metadata, "manual:move");
+    }
+
+    #[test]
+    fn test_document_clone() {
+        let doc = Document {
+            id: "test-456".to_string(),
+            content: "Test content".to_string(),
+            metadata: "test:meta".to_string(),
+        };
+        let cloned = doc.clone();
+        assert_eq!(doc.id, cloned.id);
+        assert_eq!(doc.content, cloned.content);
+        assert_eq!(doc.metadata, cloned.metadata);
+    }
+
+    #[test]
+    fn test_document_debug() {
+        let doc = Document {
+            id: "test".to_string(),
+            content: "content".to_string(),
+            metadata: "meta".to_string(),
+        };
+        let debug = format!("{:?}", doc);
+        assert!(debug.contains("test"));
+        assert!(debug.contains("content"));
+    }
+
+    #[test]
+    #[ignore] // Requires internet access or cached MiniLM model
     fn test_vector_store_basic() {
-        // NOTE: This test requires internet access to download the MiniLM model
-        // or a pre-cached model in ~/.cache/huggingface
         let mut store = VectorStore::new().expect("Failed to create VectorStore");
 
         store
@@ -139,5 +175,41 @@ mod tests {
         assert!(!results.is_empty());
         assert!(results[0].0.content.contains("move a window"));
         assert!(results[0].1 > 0.5); // Should have high similarity
+    }
+
+    #[test]
+    #[ignore] // Requires internet access or cached MiniLM model
+    fn test_vector_store_empty_search() {
+        let store = VectorStore::new().expect("Failed to create VectorStore");
+        let results = store.search("anything", 5).expect("Search failed");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    #[ignore] // Requires internet access or cached MiniLM model
+    fn test_vector_store_top_k_limit() {
+        let mut store = VectorStore::new().expect("Failed to create VectorStore");
+
+        store.add_document("Doc A", "meta:a").expect("Failed to add doc");
+        store.add_document("Doc B", "meta:b").expect("Failed to add doc");
+        store.add_document("Doc C", "meta:c").expect("Failed to add doc");
+
+        let results = store.search("doc", 2).expect("Search failed");
+        assert!(results.len() <= 2);
+    }
+
+    #[test]
+    #[ignore] // Requires internet access or cached MiniLM model
+    fn test_embedding_model_consistency() {
+        let model = EmbeddingModel::new().expect("Failed to create embedding model");
+        let emb1 = model.embed("hello world").expect("Failed to embed");
+        let emb2 = model.embed("hello world").expect("Failed to embed");
+        // Same input should produce same embedding
+        let diff = (&emb1 - &emb2)
+            .and_then(|t| t.sqr())
+            .and_then(|t| t.sum_all())
+            .and_then(|t| t.to_scalar::<f32>())
+            .unwrap_or(f32::MAX);
+        assert!(diff < 1e-6, "Same input should produce identical embeddings");
     }
 }
