@@ -163,7 +163,28 @@ impl AuthManager {
             }
         }
 
-        Self { api_keys: Arc::new(RwLock::new(keys)) }
+        let manager = Self { api_keys: Arc::new(RwLock::new(keys)) };
+
+        // Production safety check: refuse to start with dev keys when explicitly required.
+        // Set NEOLAND_REQUIRE_VAULT_KEYS=1 in production to enforce this.
+        if std::env::var("NEOLAND_REQUIRE_VAULT_KEYS").as_deref() == Ok("1") {
+            let has_dev_keys = manager
+                .api_keys
+                .read()
+                .map(|k| k.keys().any(|key| key.contains("_dev_key_")))
+                .unwrap_or(false);
+
+            if has_dev_keys {
+                tracing::error!(
+                    "⛔ NEOLAND_REQUIRE_VAULT_KEYS=1 is set but development API keys are active. \
+                     Set NEOLAND_ADMIN_API_KEY / NEOLAND_USER_API_KEY / NEOLAND_READONLY_API_KEY \
+                     or configure Vault before starting in production."
+                );
+                panic!("Production key requirement violated — refusing to start with dev keys");
+            }
+        }
+
+        manager
     }
 
     /// Validate an API key and return the associated metadata
