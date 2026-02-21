@@ -151,9 +151,9 @@ async fn check_vector_store_health_with_url(db_url: Option<String>) -> Component
 pub async fn check_llm_health() -> ComponentHealth {
     let start = std::time::Instant::now();
 
-    // Check if at least one LLM backend is available
-    // For now, we assume local engine is always available
-    // TODO: Add actual connectivity checks to ml-offload and SecureLLM
+    // Check if at least one LLM backend is available.
+    // For now, we assume local engine is always available.
+    // Phase 5.4: Add real connectivity check via UnifiedLLMClient.health_status()
     let status = HealthStatus::Healthy;
     let message = "LLM inference engine operational".to_string();
 

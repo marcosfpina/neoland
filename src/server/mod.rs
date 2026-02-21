@@ -18,7 +18,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use futures::stream::Stream;
 use tracing::Instrument; // Phase 4.2: For span instrumentation
                          // Integration dependencies (currently used for demonstration)
                          // use securellm_core;

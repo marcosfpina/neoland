@@ -61,9 +61,11 @@ pub struct AuthManager {
 }
 
 impl AuthManager {
-    /// Create a new AuthManager with default keys
+    /// Create a new AuthManager with default development keys.
     ///
-    /// TODO (Phase 1.2): Load keys from Vault instead of hardcoding
+    /// **Development only.** In production use `new_with_secrets()` (Phase 1.2, completed)
+    /// which loads keys from Vault/environment. Set `NEOLAND_REQUIRE_VAULT_KEYS=1` to enforce
+    /// this at startup and reject dev keys.
     pub fn new() -> Self {
         let mut keys = HashMap::new();
 
