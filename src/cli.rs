@@ -58,6 +58,17 @@ pub enum Commands {
         #[arg(long, default_value = "3001")]
         rest_port: u16,
     },
+
+    /// Diagnóstica o ambiente de desenvolvimento
+    Doctor {
+        /// URL do servidor REST para verificar conectividade
+        #[arg(long, default_value = "http://localhost:3001")]
+        server_url: String,
+
+        /// URL do endpoint ml-offload para verificar
+        #[arg(long, default_value = "http://localhost:8080")]
+        ml_api_url: String,
+    },
 }
 
 impl Cli {

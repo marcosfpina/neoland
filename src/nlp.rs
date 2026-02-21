@@ -75,6 +75,10 @@ impl VectorStore {
         Ok(Self { documents: Vec::new(), embeddings: Vec::new(), model })
     }
 
+    pub fn len(&self) -> usize {
+        self.documents.len()
+    }
+
     pub fn add_document(&mut self, content: &str, metadata: &str) -> Result<()> {
         let embedding = self.model.embed(content)?;
         let doc = Document {

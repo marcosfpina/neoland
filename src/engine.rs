@@ -134,6 +134,9 @@ Always output commands in format [[CMD:action:args]] when executing system actio
         let mut logits_processor =
             LogitsProcessor::new(299792458, Some(config.temperature), Some(config.top_p));
 
+        let gen_start = std::time::Instant::now();
+        let mut output_tokens: u32 = 0;
+
         for _ in 0..config.max_tokens {
             let input = Tensor::new(&tokens[tokens.len() - 1..], &self.device)?.unsqueeze(0)?;
             let logits = self.model.forward(&input, tokens.len() - 1)?;
@@ -145,9 +148,22 @@ Always output commands in format [[CMD:action:args]] when executing system actio
                 if token_str.contains("<|im_end|>") || token_str.contains("<|endoftext|>") {
                     break;
                 }
+                output_tokens += 1;
                 callback(token_str);
             }
         }
+
+        // Record LLM generation metrics
+        let elapsed = gen_start.elapsed().as_secs_f64();
+        crate::metrics::utils::record_llm_request(
+            "local",
+            "qwen-1.8b",
+            "success",
+            0,            // prompt tokens not counted at this layer
+            output_tokens,
+            elapsed,
+        );
+
         Ok(context_doc_ids)
     }
 }
