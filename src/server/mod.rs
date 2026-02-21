@@ -40,6 +40,7 @@ use crate::{
     health, // Phase 4.3: Health Checks
     nlp::VectorStore,
     secrets::SecretsManager,
+    storage::PersistentVectorStore,
     validation::{ChatRequestValidation, MessageValidator},
 };
 
@@ -147,6 +148,9 @@ impl RateLimiter {
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,
+    /// Optional pgvector-backed persistent store (set when DATABASE_URL is configured).
+    /// When present, gRPC search uses it as primary and add_document mirrors to it.
+    persistent_store: Option<Arc<PersistentVectorStore>>,
     auth_manager: Arc<AuthManager>,
     audit_logger: Arc<AuditLogger>,
     failed_auth_tracker: Arc<FailedAuthTracker>,
@@ -341,30 +345,60 @@ impl LlamaService for MyLlamaService {
     ) -> Result<Response<AddDocumentResponse>, Status> {
         let grpc_start = Instant::now();
         let req = request.into_inner();
-        let mut vs = self
-            .state
-            .vector_store
-            .lock()
-            .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
-        let result = match vs.add_document(&req.content, &req.metadata) {
-            Ok(_) => {
-                tracing::info!(metadata = %req.metadata, "gRPC: document added");
-                crate::metrics::utils::update_vector_store_documents(vs.len());
-                Ok(Response::new(AddDocumentResponse { id: "ok".to_string(), success: true }))
-            },
-            Err(e) => {
-                tracing::error!(error = %e, "gRPC: add_document failed");
-                Err(Status::internal(e.to_string()))
-            },
+
+        // 1. Add to in-memory VectorStore (sync, used for context injection)
+        let doc_id = {
+            let mut vs = self
+                .state
+                .vector_store
+                .lock()
+                .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
+            match vs.add_document(&req.content, &req.metadata) {
+                Ok(()) => {
+                    crate::metrics::utils::update_vector_store_documents(vs.len());
+                    uuid::Uuid::new_v4().to_string()
+                },
+                Err(e) => {
+                    tracing::error!(error = %e, "gRPC: add_document (in-memory) failed");
+                    crate::metrics::GRPC_REQUESTS_TOTAL
+                        .with_label_values(&["add_document", "error"])
+                        .inc();
+                    crate::metrics::GRPC_REQUEST_DURATION_SECONDS
+                        .with_label_values(&["add_document"])
+                        .observe(grpc_start.elapsed().as_secs_f64());
+                    return Err(Status::internal(e.to_string()));
+                },
+            }
         };
-        let status_label = if result.is_ok() { "ok" } else { "error" };
+
+        // 2. Mirror to PersistentVectorStore if configured (fire-and-forget)
+        if let Some(ps) = self.state.persistent_store.clone() {
+            let content = req.content.clone();
+            let metadata = req.metadata.clone();
+            tokio::spawn(async move {
+                match ps.add_document(&content, &metadata).await {
+                    Ok(uuid) => tracing::debug!(
+                        uuid = %uuid,
+                        "Mirrored document to PersistentVectorStore"
+                    ),
+                    Err(e) => tracing::warn!(
+                        error = %e,
+                        "Failed to mirror document to PersistentVectorStore (in-memory write succeeded)"
+                    ),
+                }
+            });
+        }
+
+        tracing::info!(id = %doc_id, metadata = %req.metadata, "gRPC: document added");
+
         crate::metrics::GRPC_REQUESTS_TOTAL
-            .with_label_values(&["add_document", status_label])
+            .with_label_values(&["add_document", "ok"])
             .inc();
         crate::metrics::GRPC_REQUEST_DURATION_SECONDS
             .with_label_values(&["add_document"])
             .observe(grpc_start.elapsed().as_secs_f64());
-        result
+
+        Ok(Response::new(AddDocumentResponse { id: doc_id, success: true }))
     }
 
     async fn search(
@@ -373,6 +407,36 @@ impl LlamaService for MyLlamaService {
     ) -> Result<Response<SearchResponse>, Status> {
         let grpc_start = Instant::now();
         let req = request.into_inner();
+
+        // Prefer PersistentVectorStore (pgvector) when configured; fall back to in-memory.
+        if let Some(ps) = &self.state.persistent_store {
+            match ps.search(&req.query, req.top_k as usize, None).await {
+                Ok(results) => {
+                    let grpc_results = results
+                        .into_iter()
+                        .map(|(doc, score)| llamachat::Document {
+                            id: doc.id.to_string(),
+                            content: doc.content,
+                            score,
+                        })
+                        .collect();
+                    crate::metrics::GRPC_REQUESTS_TOTAL.with_label_values(&["search", "ok"]).inc();
+                    crate::metrics::GRPC_REQUEST_DURATION_SECONDS
+                        .with_label_values(&["search"])
+                        .observe(grpc_start.elapsed().as_secs_f64());
+                    return Ok(Response::new(SearchResponse { results: grpc_results }));
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        query = %req.query,
+                        "PersistentVectorStore search failed, falling back to in-memory"
+                    );
+                },
+            }
+        }
+
+        // In-memory fallback
         let vs = self
             .state
             .vector_store
@@ -864,9 +928,37 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     let rate_limiter = Arc::new(RateLimiter::new(100, 60));
     info!("⏱️  Rate limiter enabled (100 req/min)");
 
+    // Initialize PersistentVectorStore (Phase 4.9) when DATABASE_URL is set.
+    // Falls back gracefully to in-memory-only mode if DB is unavailable.
+    let persistent_store = {
+        let db_url = std::env::var("NEOLAND_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .ok();
+        match db_url {
+            Some(url) => match PersistentVectorStore::new(&url, None).await {
+                Ok(ps) => {
+                    info!("📊 PersistentVectorStore initialized (pgvector)");
+                    Some(Arc::new(ps))
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "PersistentVectorStore unavailable, running in-memory only"
+                    );
+                    None
+                },
+            },
+            None => {
+                info!("DATABASE_URL not set — using in-memory VectorStore only");
+                None
+            },
+        }
+    };
+
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
         vector_store,
+        persistent_store,
         auth_manager,
         audit_logger,
         failed_auth_tracker,
