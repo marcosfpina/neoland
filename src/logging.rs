@@ -99,6 +99,10 @@ pub fn init_logging(config: LogConfig) -> anyhow::Result<()> {
         .add_directive("tower_http=info".parse().unwrap())
         .add_directive("hyper=warn".parse().unwrap())
         .add_directive("reqwest=warn".parse().unwrap())
+        // Quiet securellm-bridge internals — provider errors surface via our own warn!/error!
+        .add_directive("securellm_core=warn".parse().unwrap())
+        .add_directive("securellm_providers=warn".parse().unwrap())
+        .add_directive("securellm_bridge=warn".parse().unwrap())
     });
 
     // Build subscriber based on format
