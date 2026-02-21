@@ -158,8 +158,49 @@ pub enum RoutingStrategy {
     LocalFirst,
     /// Prioriza SecureLLM externo, fallback para ml-offload local
     ExternalFirst,
-    /// (Não implementado) Alterna baseado em latência
+    /// Selecciona backend com menor latência média (EMA)
     LoadBalanced,
+}
+
+/// Exponential moving average latency tracker per backend.
+///
+/// Records request durations and maintains a smoothed average using:
+/// `new_avg = α * sample + (1 − α) * prev_avg`
+///
+/// Until at least one sample is recorded, `avg_ms()` returns `f64::MAX`
+/// so that a backend with real measurements is always preferred.
+#[derive(Debug)]
+pub struct LatencyTracker {
+    /// Current EMA in milliseconds; `None` until first sample.
+    avg_ms: Option<f64>,
+    /// Smoothing factor α ∈ (0, 1].  Higher = more weight on recent samples.
+    alpha: f64,
+}
+
+impl LatencyTracker {
+    pub fn new() -> Self {
+        Self { avg_ms: None, alpha: 0.3 }
+    }
+
+    /// Record a request duration and update the moving average.
+    pub fn record(&mut self, elapsed: Duration) {
+        let sample_ms = elapsed.as_secs_f64() * 1_000.0;
+        self.avg_ms = Some(match self.avg_ms {
+            None => sample_ms,
+            Some(prev) => self.alpha * sample_ms + (1.0 - self.alpha) * prev,
+        });
+    }
+
+    /// Current average latency in milliseconds.
+    /// Returns `f64::MAX` when no samples have been recorded yet.
+    pub fn avg_ms(&self) -> f64 {
+        self.avg_ms.unwrap_or(f64::MAX)
+    }
+
+    /// `true` if at least one sample has been recorded.
+    pub fn has_data(&self) -> bool {
+        self.avg_ms.is_some()
+    }
 }
 
 /// Cliente LLM unificado com roteamento inteligente e circuit breakers
@@ -170,6 +211,9 @@ pub struct UnifiedLLMClient {
     ml_circuit: Arc<Mutex<CircuitBreaker>>,
     sec_circuit: Arc<Mutex<CircuitBreaker>>,
     max_retries: u32,
+    /// Per-backend latency EMA for LoadBalanced routing
+    ml_latency: Arc<Mutex<LatencyTracker>>,
+    sec_latency: Arc<Mutex<LatencyTracker>>,
 }
 
 impl UnifiedLLMClient {
@@ -222,7 +266,15 @@ impl UnifiedLLMClient {
             ml_circuit,
             sec_circuit,
             max_retries: 2,
+            ml_latency: Arc::new(Mutex::new(LatencyTracker::new())),
+            sec_latency: Arc::new(Mutex::new(LatencyTracker::new())),
         })
+    }
+
+    /// Override the routing strategy (builder pattern).
+    pub fn with_strategy(mut self, strategy: RoutingStrategy) -> Self {
+        self.strategy = strategy;
+        self
     }
 
     /// Envia chat request com roteamento baseado na estratégia
@@ -240,7 +292,7 @@ impl UnifiedLLMClient {
                 self.chat_external_first(prompt, temperature, max_tokens).await
             },
             RoutingStrategy::LoadBalanced => {
-                anyhow::bail!("LoadBalanced strategy not yet implemented")
+                self.chat_load_balanced(prompt, temperature, max_tokens).await
             },
         }
     }
@@ -384,6 +436,174 @@ impl UnifiedLLMClient {
         }
 
         anyhow::bail!("All LLM backends failed (circuit breakers may be open)")
+    }
+
+    /// LoadBalanced: picks the backend with the lower latency EMA.
+    ///
+    /// Both backends are checked against their circuit breakers.
+    /// The backend with the lower average response time (or the only available one)
+    /// is tried first; on failure the other backend is used as fallback.
+    /// After each successful call the measured latency is folded into the EMA.
+    async fn chat_load_balanced(
+        &self,
+        prompt: &str,
+        temperature: Option<f32>,
+        max_tokens: Option<u32>,
+    ) -> Result<String> {
+        let ml_avg = self.ml_latency.lock().await.avg_ms();
+        let sec_avg = self.sec_latency.lock().await.avg_ms();
+
+        // prefer ml-offload when its EMA is ≤ securellm (or when no data yet — both MAX)
+        let try_ml_first = ml_avg <= sec_avg;
+
+        info!(
+            ml_avg_ms = format!("{:.1}", if ml_avg == f64::MAX { -1.0 } else { ml_avg }),
+            sec_avg_ms = format!("{:.1}", if sec_avg == f64::MAX { -1.0 } else { sec_avg }),
+            try_ml_first,
+            "LoadBalanced: selecting backend"
+        );
+
+        if try_ml_first {
+            // ── Primary: ml-offload ────────────────────────────────────────
+            if let Some(ml) = &self.ml_offload {
+                let mut cb = self.ml_circuit.lock().await;
+                if cb.should_allow() {
+                    drop(cb);
+                    let start = Instant::now();
+                    let ml_ref = ml;
+                    let max_retries = self.max_retries;
+                    let result =
+                        retry_with_backoff(max_retries, Duration::from_millis(200), || {
+                            self.try_ml_offload(ml_ref, prompt, temperature, max_tokens)
+                        })
+                        .await;
+                    let elapsed = start.elapsed();
+
+                    let mut cb = self.ml_circuit.lock().await;
+                    match result {
+                        Ok(response) => {
+                            cb.record_success();
+                            record_circuit_metric("ml-offload", cb.state());
+                            drop(cb);
+                            self.ml_latency.lock().await.record(elapsed);
+                            info!(latency_ms = elapsed.as_millis(), "LoadBalanced: ml-offload");
+                            return Ok(response);
+                        },
+                        Err(e) => {
+                            cb.record_failure();
+                            record_circuit_metric("ml-offload", cb.state());
+                            warn!("LoadBalanced: ml-offload failed ({e}), trying securellm");
+                        },
+                    }
+                } else {
+                    warn!("LoadBalanced: ml-offload circuit open, trying securellm");
+                }
+            }
+
+            // ── Fallback: securellm ────────────────────────────────────────
+            if let Some(sec) = &self.securellm {
+                let mut cb = self.sec_circuit.lock().await;
+                if cb.should_allow() {
+                    drop(cb);
+                    let start = Instant::now();
+                    let result = sec.send_secure(prompt).await;
+                    let elapsed = start.elapsed();
+
+                    let mut cb = self.sec_circuit.lock().await;
+                    match result {
+                        Ok(response) => {
+                            cb.record_success();
+                            record_circuit_metric("securellm", cb.state());
+                            drop(cb);
+                            self.sec_latency.lock().await.record(elapsed);
+                            info!(
+                                latency_ms = elapsed.as_millis(),
+                                "LoadBalanced: securellm fallback"
+                            );
+                            return Ok(response);
+                        },
+                        Err(e) => {
+                            cb.record_failure();
+                            record_circuit_metric("securellm", cb.state());
+                            warn!("LoadBalanced: securellm fallback failed: {e}");
+                        },
+                    }
+                } else {
+                    warn!("LoadBalanced: securellm circuit open");
+                }
+            }
+        } else {
+            // ── Primary: securellm ─────────────────────────────────────────
+            if let Some(sec) = &self.securellm {
+                let mut cb = self.sec_circuit.lock().await;
+                if cb.should_allow() {
+                    drop(cb);
+                    let start = Instant::now();
+                    let result = sec.send_secure(prompt).await;
+                    let elapsed = start.elapsed();
+
+                    let mut cb = self.sec_circuit.lock().await;
+                    match result {
+                        Ok(response) => {
+                            cb.record_success();
+                            record_circuit_metric("securellm", cb.state());
+                            drop(cb);
+                            self.sec_latency.lock().await.record(elapsed);
+                            info!(latency_ms = elapsed.as_millis(), "LoadBalanced: securellm");
+                            return Ok(response);
+                        },
+                        Err(e) => {
+                            cb.record_failure();
+                            record_circuit_metric("securellm", cb.state());
+                            warn!("LoadBalanced: securellm failed ({e}), trying ml-offload");
+                        },
+                    }
+                } else {
+                    warn!("LoadBalanced: securellm circuit open, trying ml-offload");
+                }
+            }
+
+            // ── Fallback: ml-offload ────────────────────────────────────────
+            if let Some(ml) = &self.ml_offload {
+                let mut cb = self.ml_circuit.lock().await;
+                if cb.should_allow() {
+                    drop(cb);
+                    let start = Instant::now();
+                    let ml_ref = ml;
+                    let max_retries = self.max_retries;
+                    let result =
+                        retry_with_backoff(max_retries, Duration::from_millis(200), || {
+                            self.try_ml_offload(ml_ref, prompt, temperature, max_tokens)
+                        })
+                        .await;
+                    let elapsed = start.elapsed();
+
+                    let mut cb = self.ml_circuit.lock().await;
+                    match result {
+                        Ok(response) => {
+                            cb.record_success();
+                            record_circuit_metric("ml-offload", cb.state());
+                            drop(cb);
+                            self.ml_latency.lock().await.record(elapsed);
+                            info!(
+                                latency_ms = elapsed.as_millis(),
+                                "LoadBalanced: ml-offload fallback"
+                            );
+                            return Ok(response);
+                        },
+                        Err(e) => {
+                            cb.record_failure();
+                            record_circuit_metric("ml-offload", cb.state());
+                            warn!("LoadBalanced: ml-offload fallback failed: {e}");
+                        },
+                    }
+                } else {
+                    warn!("LoadBalanced: ml-offload circuit open");
+                }
+            }
+        }
+
+        anyhow::bail!("All LLM backends failed (LoadBalanced — circuit breakers may be open)")
     }
 
     /// Helper: Try ml-offload API
@@ -569,5 +789,61 @@ mod tests {
         })
         .await;
         assert!(result.is_err());
+    }
+
+    // ── LatencyTracker tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_latency_tracker_no_data() {
+        let t = LatencyTracker::new();
+        assert!(!t.has_data());
+        assert_eq!(t.avg_ms(), f64::MAX);
+    }
+
+    #[test]
+    fn test_latency_tracker_first_sample() {
+        let mut t = LatencyTracker::new();
+        t.record(Duration::from_millis(100));
+        assert!(t.has_data());
+        // First sample sets avg directly
+        assert!((t.avg_ms() - 100.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_latency_tracker_ema_converges() {
+        let mut t = LatencyTracker::new();
+        // Feed 10 identical 200ms samples; EMA should settle close to 200
+        for _ in 0..10 {
+            t.record(Duration::from_millis(200));
+        }
+        assert!(t.has_data());
+        assert!((t.avg_ms() - 200.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_latency_tracker_load_balanced_order() {
+        // Simulate: ml-offload consistently faster → it should be preferred
+        let mut ml = LatencyTracker::new();
+        let mut sec = LatencyTracker::new();
+
+        for _ in 0..5 {
+            ml.record(Duration::from_millis(50));
+            sec.record(Duration::from_millis(300));
+        }
+
+        let prefer_ml = ml.avg_ms() <= sec.avg_ms();
+        assert!(
+            prefer_ml,
+            "ml-offload (50ms avg) should be preferred over securellm (300ms avg)"
+        );
+    }
+
+    #[test]
+    fn test_latency_tracker_no_data_prefers_ml_first() {
+        // With no data both return MAX → ml_avg <= sec_avg is true → ml first (same as LocalFirst)
+        let ml = LatencyTracker::new();
+        let sec = LatencyTracker::new();
+        let prefer_ml = ml.avg_ms() <= sec.avg_ms();
+        assert!(prefer_ml, "Without data, LoadBalanced should fall back to local-first ordering");
     }
 }
