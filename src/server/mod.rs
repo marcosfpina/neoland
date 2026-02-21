@@ -36,6 +36,7 @@ use crate::{
     engine::{GenerationConfig, LocalEngine},
     health, // Phase 4.3: Health Checks
     nlp::VectorStore,
+    secrets::SecretsManager,
     validation::{ChatRequestValidation, MessageValidator},
 };
 
@@ -769,10 +770,16 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     let phantom_task_id = TaskId::new();
     info!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
 
-    // Initialize authentication manager
-    let auth_manager = Arc::new(AuthManager::new());
+    // Initialize secrets manager (Phase 1.2 / 4.7: Vault integration)
+    let secrets_manager = Arc::new(SecretsManager::new().await?);
+    info!(
+        vault_available = secrets_manager.is_vault_available(),
+        "🔑 Secrets manager initialized"
+    );
+
+    // Initialize authentication manager with Vault/env keys (Phase 4.7)
+    let auth_manager = Arc::new(AuthManager::new_with_secrets(&secrets_manager).await);
     info!("🔐 Authentication manager initialized");
-    info!("⚠️  Using development API keys (change in production)");
 
     // Initialize audit logger (Phase 1.3)
     let audit_log_path = std::env::var("AUDIT_LOG_PATH")
