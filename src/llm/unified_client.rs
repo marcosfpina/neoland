@@ -177,6 +177,12 @@ pub struct LatencyTracker {
     alpha: f64,
 }
 
+impl Default for LatencyTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LatencyTracker {
     pub fn new() -> Self {
         Self { avg_ms: None, alpha: 0.3 }

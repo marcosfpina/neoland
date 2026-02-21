@@ -198,8 +198,10 @@ mod tests {
 
     #[test]
     fn test_generation_config_custom_system_prompt() {
-        let mut config = GenerationConfig::default();
-        config.system_prompt = Some("Custom assistant prompt".to_string());
+        let config = GenerationConfig {
+            system_prompt: Some("Custom assistant prompt".to_string()),
+            ..Default::default()
+        };
         assert_eq!(config.system_prompt.as_deref(), Some("Custom assistant prompt"));
     }
 
