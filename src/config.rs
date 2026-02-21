@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub server: ServerConfig,
@@ -43,17 +43,6 @@ pub struct InferenceConfig {
 #[serde(default)]
 pub struct VaultConfig {
     pub addr: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            client: ClientConfig::default(),
-            inference: InferenceConfig::default(),
-            vault: VaultConfig::default(),
-        }
-    }
 }
 
 impl Default for ServerConfig {
@@ -94,10 +83,7 @@ impl Config {
 
     /// Try loading from ./neoland.toml, then ~/.config/neoland/config.toml
     fn load_from_file() -> Option<Self> {
-        let candidates = [
-            std::path::PathBuf::from("neoland.toml"),
-            dirs_candidate(),
-        ];
+        let candidates = [std::path::PathBuf::from("neoland.toml"), dirs_candidate()];
 
         for path in &candidates {
             if path.exists() {
@@ -157,7 +143,10 @@ impl Config {
 
 fn dirs_candidate() -> std::path::PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    std::path::PathBuf::from(home).join(".config").join("neoland").join("config.toml")
+    std::path::PathBuf::from(home)
+        .join(".config")
+        .join("neoland")
+        .join("config.toml")
 }
 
 #[cfg(test)]

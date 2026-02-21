@@ -79,6 +79,10 @@ impl VectorStore {
         self.documents.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.documents.is_empty()
+    }
+
     pub fn add_document(&mut self, content: &str, metadata: &str) -> Result<()> {
         let embedding = self.model.embed(content)?;
         let doc = Document {
