@@ -382,4 +382,33 @@ mod tests {
         // Cleanup
         std::env::remove_var("TEST_API_KEY");
     }
+
+    #[tokio::test]
+    async fn test_is_vault_available_without_vault_config() {
+        // When VAULT_ADDR / VAULT_TOKEN are absent, vault_client is None
+        std::env::remove_var("VAULT_ADDR");
+        std::env::remove_var("VAULT_TOKEN");
+
+        let manager = SecretsManager::new().await.unwrap();
+        assert!(!manager.is_vault_available(), "Vault should not be available without config");
+    }
+
+    #[tokio::test]
+    async fn test_store_secret_without_vault_returns_error() {
+        // store_secret requires Vault; without it, should fail with a clear message
+        std::env::remove_var("VAULT_ADDR");
+        std::env::remove_var("VAULT_TOKEN");
+
+        let manager = SecretsManager::new().await.unwrap();
+        let result = manager
+            .store_secret(SecretType::LLMApiKey("deepseek".to_string()), "key".to_string())
+            .await;
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("Vault not configured"),
+            "Error should mention Vault not configured, got: {msg}"
+        );
+    }
 }

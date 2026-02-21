@@ -159,7 +159,7 @@ Always output commands in format [[CMD:action:args]] when executing system actio
             "local",
             "qwen-1.8b",
             "success",
-            0,            // prompt tokens not counted at this layer
+            0, // prompt tokens not counted at this layer
             output_tokens,
             elapsed,
         );
