@@ -195,7 +195,10 @@ async fn run_doctor(server_url: &str, ml_api_url: &str) {
             eprintln!("  ⚠  ml-offload at {} returned status {}", ml_api_url, resp.status());
         },
         Err(_) => {
-            eprintln!("  ⚠  ml-offload not reachable at {} (optional — gRPC fallback available)", ml_api_url);
+            eprintln!(
+                "  ⚠  ml-offload not reachable at {} (optional — gRPC fallback available)",
+                ml_api_url
+            );
         },
     }
 
@@ -216,13 +219,13 @@ async fn run_doctor(server_url: &str, ml_api_url: &str) {
     }
 
     // 6. Config file found
-    let config_paths = [
-        std::path::PathBuf::from("neoland.toml"),
-        {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            std::path::PathBuf::from(home).join(".config").join("neoland").join("config.toml")
-        },
-    ];
+    let config_paths = [std::path::PathBuf::from("neoland.toml"), {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        std::path::PathBuf::from(home)
+            .join(".config")
+            .join("neoland")
+            .join("config.toml")
+    }];
     let found_config = config_paths.iter().find(|p| p.exists());
     if let Some(path) = found_config {
         eprintln!("  ✅ Config file found: {}", path.display());

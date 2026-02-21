@@ -448,4 +448,57 @@ mod tests {
         assert_eq!(key1.role, Role::User);
         assert_eq!(key2.role, Role::User);
     }
+
+    // ── NEOLAND_REQUIRE_VAULT_KEYS guard (Phase 4.7) ─────────────────────────
+
+    /// When NEOLAND_REQUIRE_VAULT_KEYS=1 and no API key env vars are set,
+    /// new_with_secrets() falls back to dev keys and then panics.
+    /// Uses tokio::task::spawn so the panic is caught as a JoinError,
+    /// allowing cleanup to run in the parent task.
+    #[tokio::test]
+    async fn test_require_vault_keys_panics_with_dev_keys() {
+        // Ensure no real API keys are set (force dev key fallback)
+        std::env::remove_var("NEOLAND_ADMIN_API_KEY");
+        std::env::remove_var("NEOLAND_USER_API_KEY");
+        std::env::remove_var("NEOLAND_READONLY_API_KEY");
+        std::env::set_var("NEOLAND_REQUIRE_VAULT_KEYS", "1");
+
+        let sm = Arc::new(SecretsManager::new().await.unwrap());
+        let result = tokio::task::spawn(async move {
+            AuthManager::new_with_secrets(&sm).await;
+        })
+        .await;
+
+        // Cleanup before assertion (runs even if task panicked)
+        std::env::remove_var("NEOLAND_REQUIRE_VAULT_KEYS");
+
+        assert!(
+            result.is_err(),
+            "Task should have panicked due to dev keys with REQUIRE_VAULT_KEYS=1"
+        );
+    }
+
+    /// When NEOLAND_REQUIRE_VAULT_KEYS=1 and real API keys are provided via env,
+    /// new_with_secrets() must NOT panic.
+    #[tokio::test]
+    async fn test_require_vault_keys_passes_with_real_keys() {
+        std::env::set_var("NEOLAND_ADMIN_API_KEY", "prod_admin_key_abc123");
+        std::env::set_var("NEOLAND_USER_API_KEY", "prod_user_key_xyz789");
+        std::env::set_var("NEOLAND_READONLY_API_KEY", "prod_readonly_key_def456");
+        std::env::set_var("NEOLAND_REQUIRE_VAULT_KEYS", "1");
+
+        let sm = Arc::new(SecretsManager::new().await.unwrap());
+        let manager = AuthManager::new_with_secrets(&sm).await;
+
+        // Cleanup
+        std::env::remove_var("NEOLAND_ADMIN_API_KEY");
+        std::env::remove_var("NEOLAND_USER_API_KEY");
+        std::env::remove_var("NEOLAND_READONLY_API_KEY");
+        std::env::remove_var("NEOLAND_REQUIRE_VAULT_KEYS");
+
+        // Should load real keys (no dev keys → no panic)
+        assert!(manager.validate_api_key("prod_admin_key_abc123").is_ok());
+        assert!(manager.validate_api_key("prod_user_key_xyz789").is_ok());
+        assert!(manager.validate_api_key("prod_readonly_key_def456").is_ok());
+    }
 }
