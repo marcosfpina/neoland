@@ -1,13 +1,13 @@
 // TUI Rendering (ratatui widgets)
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use super::app::{AppState, MessageRole};
+use super::app::{AppState, ConnectionStatus, MessageRole};
 
 // Tokyo Night Palette
 pub mod colors {
@@ -58,19 +58,43 @@ pub fn render(f: &mut Frame<'_>, app: &AppState) {
 }
 
 fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let status = if app.is_thinking {
-        "⏳ Thinking..."
-    } else {
-        "✅ Ready"
+    let (conn_label, conn_color): (&str, Color) = match app.connection_status {
+        ConnectionStatus::Connected => ("●", colors::SUCCESS),
+        ConnectionStatus::Degraded => ("◐", colors::WARNING),
+        ConnectionStatus::Offline => ("○", colors::ERROR),
+        ConnectionStatus::Unknown => ("◌", colors::MUTED),
     };
-    let title = format!(
-        " 🚀 Neoland TUI | {} | {} | Preset: {} ",
-        app.server_url,
-        status,
-        get_preset_name(&app.config)
-    );
 
-    let header = Paragraph::new(title)
+    let thinking_label = if app.is_thinking {
+        " ⏳ Thinking..."
+    } else {
+        ""
+    };
+
+    let backend_label = match &app.active_backend {
+        Some(b) => format!(" [{}]", b),
+        None => String::new(),
+    };
+
+    let session_label = if app.session_tokens > 0 {
+        format!(" {}tok {}ms", app.session_tokens, app.last_latency_ms)
+    } else {
+        String::new()
+    };
+
+    let spans = vec![
+        Span::raw(" 🚀 Neoland TUI "),
+        Span::styled(conn_label, Style::default().fg(conn_color).add_modifier(Modifier::BOLD)),
+        Span::styled(backend_label, Style::default().fg(colors::ACCENT)),
+        Span::styled(session_label, Style::default().fg(colors::MUTED)),
+        Span::styled(thinking_label, Style::default().fg(colors::WARNING)),
+        Span::styled(
+            format!(" | Preset: {} ", get_preset_name(&app.config)),
+            Style::default().fg(colors::PRIMARY),
+        ),
+    ];
+
+    let header = Paragraph::new(Line::from(spans))
         .style(Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD))
         .block(
             Block::default()
@@ -82,7 +106,7 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
 }
 
 fn render_chat(f: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let messages: Vec<ListItem> = app
+    let mut messages: Vec<ListItem> = app
         .messages
         .iter()
         .skip(app.scroll_offset)
@@ -107,6 +131,22 @@ fn render_chat(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         })
         .collect();
 
+    // Show streaming message in progress (if any)
+    if let Some(ref pending) = app.pending_message {
+        let streaming_content = vec![
+            Line::from(vec![
+                Span::styled(
+                    "🤖 AI",
+                    Style::default().fg(colors::SUCCESS).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" ▍", Style::default().fg(colors::ACCENT)),
+            ]),
+            Line::from(Span::styled(pending.clone(), Style::default().fg(colors::FG))),
+            Line::from(""),
+        ];
+        messages.push(ListItem::new(streaming_content));
+    }
+
     let chat_list = List::new(messages)
         .block(
             Block::default()
@@ -122,8 +162,24 @@ fn render_chat(f: &mut Frame<'_>, area: Rect, app: &AppState) {
 fn render_sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     let config = &app.config;
 
+    let conn_str = match app.connection_status {
+        ConnectionStatus::Connected => "✅ Connected",
+        ConnectionStatus::Degraded => "⚠ Degraded",
+        ConnectionStatus::Offline => "❌ Offline",
+        ConnectionStatus::Unknown => "◌ Checking...",
+    };
+
+    let backend_str = app.active_backend.as_deref().unwrap_or("—");
+
     let info = vec![
-        format!("📊 Config Atual"),
+        format!("🔗 Sessão"),
+        format!(""),
+        format!(" Status: {}", conn_str),
+        format!(" Backend: {}", backend_str),
+        format!(" Tokens: {}", app.session_tokens),
+        format!(" Latência: {}ms", app.last_latency_ms),
+        format!(""),
+        format!("📊 Config"),
         format!(""),
         format!(" Temperature: {:.2}", config.temperature),
         format!(" Top P: {:.2}", config.top_p),
@@ -135,9 +191,8 @@ fn render_sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         format!(" Ctrl+1-5: Presets"),
         format!(" Ctrl+L: Limpar"),
         format!(" Enter: Enviar"),
-        format!(" Tab: Toggle Sidebar"),
+        format!(" Tab: Sidebar"),
         format!(" Esc: Sair"),
-        format!(""),
         format!(" j/k: Scroll"),
     ];
 

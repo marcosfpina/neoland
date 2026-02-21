@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use cli::{Cli, Commands};
-use neoland::{cli, logging, server};
+use neoland::{cli, config::Config, logging, server};
 use tracing::Level;
 
 #[tokio::main]
@@ -57,6 +57,10 @@ async fn main() {
 
         Commands::Restart { grpc_port, rest_port } => {
             restart_server(grpc_port, rest_port).await;
+        },
+
+        Commands::Doctor { server_url, ml_api_url } => {
+            run_doctor(&server_url, &ml_api_url).await;
         },
     }
 }
@@ -145,5 +149,93 @@ async fn restart_server(grpc_port: u16, rest_port: u16) {
     if let Err(e) = server::run_server(grpc_port, rest_port).await {
         eprintln!("❌ Erro ao iniciar servidor: {}", e);
         std::process::exit(1);
+    }
+}
+
+/// Diagnóstica o ambiente — neoland doctor
+async fn run_doctor(server_url: &str, ml_api_url: &str) {
+    let cfg = Config::load();
+    let mut any_error = false;
+
+    eprintln!("🩺 neoland doctor\n");
+
+    // 1. Nix development environment
+    let in_nix = std::env::var("IN_NIX_SHELL").is_ok()
+        || std::env::var("FLAKE_ROOT").is_ok()
+        || std::env::var("NIX_BUILD_TOP").is_ok();
+    if in_nix {
+        eprintln!("  ✅ Nix develop environment detected");
+    } else {
+        eprintln!("  ⚠  Nix develop shell not detected (run `nix develop`)");
+    }
+
+    // 2. Server accessible
+    let health_url = format!("{}/health", server_url);
+    match reqwest::get(&health_url).await {
+        Ok(resp) if resp.status().is_success() => {
+            eprintln!("  ✅ Server accessible at {} (status: {})", server_url, resp.status());
+        },
+        Ok(resp) => {
+            eprintln!("  ⚠  Server at {} returned status {}", server_url, resp.status());
+        },
+        Err(e) => {
+            eprintln!("  ❌ Server not reachable at {} — {}", server_url, e);
+            eprintln!("       Hint: start the server with `neoland server`");
+            any_error = true;
+        },
+    }
+
+    // 3. ml-offload accessible
+    let ml_health_url = format!("{}/health", ml_api_url);
+    match reqwest::get(&ml_health_url).await {
+        Ok(resp) if resp.status().is_success() => {
+            eprintln!("  ✅ ml-offload accessible at {}", ml_api_url);
+        },
+        Ok(resp) => {
+            eprintln!("  ⚠  ml-offload at {} returned status {}", ml_api_url, resp.status());
+        },
+        Err(_) => {
+            eprintln!("  ⚠  ml-offload not reachable at {} (optional — gRPC fallback available)", ml_api_url);
+        },
+    }
+
+    // 4. Vault configured
+    let vault_addr = std::env::var("VAULT_ADDR").unwrap_or_else(|_| cfg.vault.addr.clone());
+    if std::env::var("VAULT_ADDR").is_ok() {
+        eprintln!("  ✅ VAULT_ADDR set: {}", vault_addr);
+    } else {
+        eprintln!("  ⚠  VAULT_ADDR not set — using default: {}", vault_addr);
+        eprintln!("       Hint: `export VAULT_ADDR=http://localhost:8200`");
+    }
+
+    // 5. RUST_LOG defined
+    if let Ok(v) = std::env::var("RUST_LOG") {
+        eprintln!("  ✅ RUST_LOG set: {}", v);
+    } else {
+        eprintln!("  ⚠  RUST_LOG not set — using CLI --log-level (default: info)");
+    }
+
+    // 6. Config file found
+    let config_paths = [
+        std::path::PathBuf::from("neoland.toml"),
+        {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            std::path::PathBuf::from(home).join(".config").join("neoland").join("config.toml")
+        },
+    ];
+    let found_config = config_paths.iter().find(|p| p.exists());
+    if let Some(path) = found_config {
+        eprintln!("  ✅ Config file found: {}", path.display());
+    } else {
+        eprintln!("  ⚠  No config file found (./neoland.toml or ~/.config/neoland/config.toml)");
+        eprintln!("       Using built-in defaults — all options are optional");
+    }
+
+    eprintln!();
+    if any_error {
+        eprintln!("❌ Some checks failed. See hints above.");
+        std::process::exit(1);
+    } else {
+        eprintln!("✅ Environment looks good (warnings above are non-fatal).");
     }
 }

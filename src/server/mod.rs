@@ -163,6 +163,11 @@ impl LlamaService for MyLlamaService {
         &self,
         request: Request<ChatRequest>,
     ) -> Result<Response<Self::ChatStreamStream>, Status> {
+        let grpc_start = Instant::now();
+        crate::metrics::GRPC_REQUESTS_TOTAL
+            .with_label_values(&["chat_stream", "started"])
+            .inc();
+
         let req = request.into_inner();
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let state = self.state.clone();
@@ -229,6 +234,7 @@ impl LlamaService for MyLlamaService {
                 match LocalEngine::new() {
                     Ok(e) => *engine_guard = Some(e),
                     Err(err) => {
+                        tracing::error!(error = %err, "gRPC: failed to initialize LocalEngine");
                         let _ = tx.blocking_send(Err(Status::internal(err.to_string())));
                         return;
                     },
@@ -315,6 +321,13 @@ impl LlamaService for MyLlamaService {
                 }
             }
         });
+        crate::metrics::GRPC_REQUESTS_TOTAL
+            .with_label_values(&["chat_stream", "ok"])
+            .inc();
+        crate::metrics::GRPC_REQUEST_DURATION_SECONDS
+            .with_label_values(&["chat_stream"])
+            .observe(grpc_start.elapsed().as_secs_f64());
+
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
@@ -322,33 +335,46 @@ impl LlamaService for MyLlamaService {
         &self,
         request: Request<AddDocumentRequest>,
     ) -> Result<Response<AddDocumentResponse>, Status> {
+        let grpc_start = Instant::now();
         let req = request.into_inner();
         let mut vs = self
             .state
             .vector_store
             .lock()
             .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
-        match vs.add_document(&req.content, &req.metadata) {
+        let result = match vs.add_document(&req.content, &req.metadata) {
             Ok(_) => {
-                // SecureLLM Audit
-                println!("[SECURELLM] AUDIT: Document added. Metadata: {}", req.metadata);
+                tracing::info!(metadata = %req.metadata, "gRPC: document added");
+                crate::metrics::utils::update_vector_store_documents(vs.len());
                 Ok(Response::new(AddDocumentResponse { id: "ok".to_string(), success: true }))
             },
-            Err(e) => Err(Status::internal(e.to_string())),
-        }
+            Err(e) => {
+                tracing::error!(error = %e, "gRPC: add_document failed");
+                Err(Status::internal(e.to_string()))
+            },
+        };
+        let status_label = if result.is_ok() { "ok" } else { "error" };
+        crate::metrics::GRPC_REQUESTS_TOTAL
+            .with_label_values(&["add_document", status_label])
+            .inc();
+        crate::metrics::GRPC_REQUEST_DURATION_SECONDS
+            .with_label_values(&["add_document"])
+            .observe(grpc_start.elapsed().as_secs_f64());
+        result
     }
 
     async fn search(
         &self,
         request: Request<SearchRequest>,
     ) -> Result<Response<SearchResponse>, Status> {
+        let grpc_start = Instant::now();
         let req = request.into_inner();
         let vs = self
             .state
             .vector_store
             .lock()
             .map_err(|e| Status::internal(format!("VectorStore mutex poisoned: {}", e)))?;
-        match vs.search(&req.query, req.top_k as usize) {
+        let result = match vs.search(&req.query, req.top_k as usize) {
             Ok(results) => {
                 let grpc_results = results
                     .into_iter()
@@ -360,8 +386,19 @@ impl LlamaService for MyLlamaService {
                     .collect();
                 Ok(Response::new(SearchResponse { results: grpc_results }))
             },
-            Err(e) => Err(Status::internal(e.to_string())),
-        }
+            Err(e) => {
+                tracing::error!(error = %e, query = %req.query, "gRPC: search failed");
+                Err(Status::internal(e.to_string()))
+            },
+        };
+        let status_label = if result.is_ok() { "ok" } else { "error" };
+        crate::metrics::GRPC_REQUESTS_TOTAL
+            .with_label_values(&["search", status_label])
+            .inc();
+        crate::metrics::GRPC_REQUEST_DURATION_SECONDS
+            .with_label_values(&["search"])
+            .observe(grpc_start.elapsed().as_secs_f64());
+        result
     }
 }
 
@@ -412,9 +449,7 @@ async fn rest_chat_handler(
     State(state): State<Arc<AppState>>,
     Json(mut req): Json<RestChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    // Phase 4.1: Track metrics
-    // TODO: Add timing metrics for streaming responses
-    // let _start_time = Instant::now();
+    let handler_start = Instant::now();
 
     // Phase 1.4: Validate request
     let validation_req = ChatRequestValidation {
@@ -437,6 +472,12 @@ async fn rest_chat_handler(
             .with_metadata("validation_error", serde_json::json!(true));
         let _ = state.audit_logger.log(event).await;
 
+        crate::metrics::utils::record_http_request(
+            "POST",
+            "/v1/chat/completions",
+            400,
+            handler_start.elapsed().as_secs_f64(),
+        );
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -456,15 +497,23 @@ async fn rest_chat_handler(
     tokio::task::spawn_blocking(move || {
         let mut engine_guard = match state.engine.lock() {
             Ok(guard) => guard,
-            Err(_) => return,
+            Err(e) => {
+                tracing::error!(error = %e, "REST: engine mutex poisoned");
+                return;
+            },
         };
         if engine_guard.is_none() {
-            if let Ok(e) = LocalEngine::new() {
-                *engine_guard = Some(e);
+            match LocalEngine::new() {
+                Ok(e) => *engine_guard = Some(e),
+                Err(e) => {
+                    tracing::error!(error = %e, "REST: failed to initialize LocalEngine");
+                    return;
+                },
             }
         }
         if let Some(engine) = engine_guard.as_mut() {
             let Ok(vs_guard) = state.vector_store.lock() else {
+                tracing::error!("REST: vector_store mutex poisoned");
                 return;
             };
             let _ = engine.generate_stream(&prompt, Some(&vs_guard), &config, |token| {
@@ -480,6 +529,12 @@ async fn rest_chat_handler(
         }
     });
 
+    crate::metrics::utils::record_http_request(
+        "POST",
+        "/v1/chat/completions",
+        200,
+        handler_start.elapsed().as_secs_f64(),
+    );
     Ok(Sse::new(tokio_stream::wrappers::ReceiverStream::new(rx))
         .keep_alive(axum::response::sse::KeepAlive::default()))
 }

@@ -129,6 +129,18 @@ where
     Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retries exhausted")))
 }
 
+/// Update circuit breaker state metric for a backend
+fn record_circuit_metric(backend: &str, state: CircuitState) {
+    let state_str = match state {
+        CircuitState::Closed => "closed",
+        CircuitState::Open => "open",
+        CircuitState::HalfOpen => "half-open",
+    };
+    crate::metrics::CIRCUIT_BREAKER_STATE
+        .with_label_values(&[backend, state_str])
+        .set(1.0);
+}
+
 /// Simple deterministic jitter (0-25% of base delay)
 fn rand_jitter(base_ms: u64) -> u64 {
     // Use current time nanos as cheap entropy source
@@ -257,11 +269,13 @@ impl UnifiedLLMClient {
                 match result {
                     Ok(response) => {
                         cb.record_success();
+                        record_circuit_metric("ml-offload", cb.state());
                         info!("Response from ml-offload (local)");
                         return Ok(response);
                     },
                     Err(e) => {
                         cb.record_failure();
+                        record_circuit_metric("ml-offload", cb.state());
                         warn!(
                             circuit_state = ?cb.state(),
                             "ml-offload failed after retries: {}, trying SecureLLM fallback", e
@@ -285,11 +299,13 @@ impl UnifiedLLMClient {
                 match result {
                     Ok(response) => {
                         cb.record_success();
+                        record_circuit_metric("securellm", cb.state());
                         info!(provider = sec.provider(), "Response from SecureLLM (external)");
                         return Ok(response);
                     },
                     Err(e) => {
                         cb.record_failure();
+                        record_circuit_metric("securellm", cb.state());
                         warn!("SecureLLM fallback failed: {}", e);
                     },
                 }
@@ -320,11 +336,13 @@ impl UnifiedLLMClient {
                 match result {
                     Ok(response) => {
                         cb.record_success();
+                        record_circuit_metric("securellm", cb.state());
                         info!(provider = sec.provider(), "Response from SecureLLM (external)");
                         return Ok(response);
                     },
                     Err(e) => {
                         cb.record_failure();
+                        record_circuit_metric("securellm", cb.state());
                         warn!("SecureLLM failed: {}, trying ml-offload fallback", e);
                     },
                 }
@@ -350,11 +368,13 @@ impl UnifiedLLMClient {
                 match result {
                     Ok(response) => {
                         cb.record_success();
+                        record_circuit_metric("ml-offload", cb.state());
                         info!("Response from ml-offload (local fallback)");
                         return Ok(response);
                     },
                     Err(e) => {
                         cb.record_failure();
+                        record_circuit_metric("ml-offload", cb.state());
                         warn!("ml-offload fallback failed: {}", e);
                     },
                 }

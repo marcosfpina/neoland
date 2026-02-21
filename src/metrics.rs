@@ -144,6 +144,14 @@ lazy_static! {
         &["action", "severity"]
     )
     .unwrap();
+
+    // Circuit Breaker Metrics
+    pub static ref CIRCUIT_BREAKER_STATE: GaugeVec = register_gauge_vec!(
+        "neoland_circuit_breaker_state",
+        "Circuit breaker state (1.0 = active state for this backend+state combo)",
+        &["backend", "state"] // backend: ml-offload, securellm; state: closed, open, half-open
+    )
+    .unwrap();
 }
 
 /// Timer utility for measuring request duration

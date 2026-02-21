@@ -5,12 +5,15 @@
 Neoland is a terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a TUI interface, comprehensive security hardening, robust fallback mechanisms, and deep OS integration.
 
 **Version**: 0.1.0
-**Production Readiness**: 61/100
+**Production Readiness**: 65/100
 - ✅ Security Hardening (Phase 1 Complete)
-- ✅ Testing: 118 tests (98 passing, 20 ignored/require external services)
+- ✅ Testing: 140 tests (114 passing, 26 ignored/require external services)
 - ✅ CI/CD Pipeline (GitHub Actions + Pre-commit Hooks)
+- ✅ Config file support (neoland.toml + env overrides)
+- ✅ Prometheus metrics wired (HTTP, gRPC, LLM, Auth, Circuit Breakers)
+- ✅ TUI: connection status, session stats, streaming display
 - ⚠️ Coverage: ~60% (Target: 70%)
-- ⏳ Operational Readiness (In Progress)
+- ⏳ Operational Readiness (In Progress — see ROADMAP.md)
 
 ---
 
@@ -23,7 +26,8 @@ neoland (Unified CLI Binary)
 ├── server     - gRPC + REST API server
 ├── client     - Modern TUI (ratatui + crossterm)
 ├── test       - Health check suite
-└── restart    - Process management
+├── restart    - Process management
+└── doctor     - Environment diagnostics
 ```
 
 ### Module Structure
@@ -33,6 +37,7 @@ src/
 ├── bin/neoland.rs         # Unified CLI entrypoint
 ├── lib.rs                 # Library root
 ├── cli.rs                 # Argument parsing (clap)
+├── config.rs              # Config loading (neoland.toml → env → CLI)
 ├── server/mod.rs          # gRPC/REST server with security middleware
 ├── engine.rs              # Local inference (Qwen 1.8B)
 ├── nlp.rs                 # Vector store (RAG)
