@@ -240,4 +240,61 @@ mod tests {
 
         std::env::remove_var("TEST_PROVIDER_API_KEY");
     }
+
+    #[tokio::test]
+    async fn test_llamacpp_load_api_key_returns_default() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let api_key = SecureLLMProxy::load_api_key("llamacpp", &secrets_manager).await;
+        assert!(api_key.is_ok());
+        assert_eq!(api_key.unwrap(), "8081:local-model");
+    }
+
+    #[tokio::test]
+    async fn test_llamacpp_creation_with_custom_port_model() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let result = SecureLLMProxy::new(
+            "llamacpp",
+            secrets_manager,
+            Some("5001:my-custom-model".to_string()),
+        )
+        .await;
+        // LlamaCppProvider construction doesn't need a running server
+        assert!(result.is_ok(), "llamacpp proxy should be created without a running server");
+        assert_eq!(result.unwrap().provider(), "llamacpp");
+    }
+
+    #[tokio::test]
+    async fn test_llamacpp_creation_with_default_config() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let result =
+            SecureLLMProxy::new("llamacpp", secrets_manager, Some("8081".to_string())).await;
+        assert!(result.is_ok(), "llamacpp with default port should be created");
+        let proxy = result.unwrap();
+        assert_eq!(proxy.provider(), "llamacpp");
+    }
+
+    #[tokio::test]
+    async fn test_proxy_provider_name_accessor() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        let proxy =
+            SecureLLMProxy::new("llamacpp", secrets_manager, Some("8081:model".to_string()))
+                .await
+                .unwrap();
+        assert_eq!(proxy.provider(), "llamacpp");
+        assert!(!proxy.provider().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_unsupported_providers_list() {
+        let secrets_manager = Arc::new(SecretsManager::new().await.unwrap());
+        for bad_provider in &["anthropic", "openai", "cohere", "unknown"] {
+            let result = SecureLLMProxy::new(
+                bad_provider,
+                Arc::clone(&secrets_manager),
+                Some("test_key".to_string()),
+            )
+            .await;
+            assert!(result.is_err(), "provider {} should be unsupported", bad_provider);
+        }
+    }
 }

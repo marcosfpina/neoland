@@ -70,6 +70,36 @@ pub struct ModelInfo {
 }
 
 // =============================================================================
+// Batch Processing (TensorForge API)
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchRequest {
+    pub requests: Vec<ChatCompletionRequest>,
+    pub priority: String, // e.g. "high", "normal"
+    pub timeout_seconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchResponse {
+    pub batch_id: String,
+    pub status: String,
+}
+
+// =============================================================================
+// WebSocket Telemetry (TensorForge API)
+// =============================================================================
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum TensorForgeWsEvent {
+    #[serde(rename = "vram_update")]
+    VramUpdate { free_gb: f64 },
+    #[serde(rename = "inference_complete")]
+    InferenceComplete { request_id: String },
+}
+
+// =============================================================================
 // Health & Status
 // =============================================================================
 

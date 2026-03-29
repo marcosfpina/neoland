@@ -6,14 +6,15 @@ Neoland is a terminal-based AI assistant built in Rust, designed as a foundation
 
 **Version**: 0.1.0
 **Production Readiness**: 65/100
+
 - ✅ Security Hardening (Phase 1 Complete)
 - ✅ Testing: 140 tests (114 passing, 26 ignored/require external services)
 - ✅ CI/CD Pipeline (GitHub Actions + Pre-commit Hooks)
 - ✅ Config file support (neoland.toml + env overrides)
 - ✅ Prometheus metrics wired (HTTP, gRPC, LLM, Auth, Circuit Breakers)
 - ✅ TUI: connection status, session stats, streaming display
-- ⚠️ Coverage: ~60% (Target: 70%)
-- ⏳ Operational Readiness (In Progress — see ROADMAP.md)
+- ⚠️ Coverage: \~60% (Target: 70%)
+- ⏳ Operational Readiness (In Progress — see docs/ROADMAP.md)
 
 ---
 
@@ -21,7 +22,7 @@ Neoland is a terminal-based AI assistant built in Rust, designed as a foundation
 
 ### Core Components
 
-```
+```javascript
 neoland (Unified CLI Binary)
 ├── server     - gRPC + REST API server
 ├── client     - Modern TUI (ratatui + crossterm)
@@ -32,7 +33,7 @@ neoland (Unified CLI Binary)
 
 ### Module Structure
 
-```
+```javascript
 src/
 ├── bin/neoland.rs         # Unified CLI entrypoint
 ├── lib.rs                 # Library root
@@ -72,6 +73,7 @@ src/
 Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 
 ### Authentication & Authorization (ADR-011)
+
 - ✅ **REST API Key Authentication**: X-API-Key header validation
 - ✅ **Role-Based Access Control (RBAC)**: 3 roles (Admin, User, ReadOnly)
 - ✅ **Hierarchical Permissions**: Admin > User > ReadOnly
@@ -79,6 +81,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 - ⏳ **gRPC mTLS**: Planned for Phase 1.5
 
 ### Secrets Management (ADR-012)
+
 - ✅ **HashiCorp Vault Integration**: Production-grade secrets storage
 - ✅ **Three-Tier Retrieval**: Cache (30s) → Vault → Environment Variables
 - ✅ **Automatic Fallback**: Graceful degradation on Vault unavailability
@@ -86,6 +89,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 - ✅ **Performance**: <1ms cache hit, 50-100ms Vault read
 
 ### Audit Logging (ADR-013)
+
 - ✅ **Structured JSON Events**: Immutable append-only logs
 - ✅ **15 Action Types**: Auth, secrets, API, config, admin operations
 - ✅ **Automatic Sanitization**: PII/credentials redacted from logs
@@ -94,6 +98,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 - ✅ **Compliance Ready**: SOC 2, GDPR, ISO 27001 compatible
 
 ### Rate Limiting & Input Validation (ADR-014)
+
 - ✅ **Rate Limiting**: 100 requests/minute per user/IP
 - ✅ **Input Validation**: Max 100KB prompt, 100 messages, 1MB request
 - ✅ **Sanitization**: Null byte removal, control character filtering
@@ -109,19 +114,22 @@ See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/ADR/`
 ## Testing & Quality
 
 **Test Suite**: 118 total tests (98 passing, 20 ignored)
+
 - **Unit Tests**: 82 tests (77 passing, 5 ignored - require PostgreSQL/ml-offload)
 - **Integration Tests**: 19 tests (18 passing, 1 ignored)
 - **Security Tests**: 14 tests (all ignored - require `--ignored` flag)
 - **Storage Tests**: 2 tests (ignored - require PostgreSQL + pgvector)
 - **Benchmark Suite**: Compiles, not yet baselined
 
-**Coverage by Module** (~60%):
+**Coverage by Module** (\~60%):
+
 - ✅ High: validation.rs (11), auth.rs (11), audit.rs (14), health.rs (9)
-- ✅ Medium: logging.rs (8), secrets.rs (5), metrics.rs (5), test_utils.rs (8)
+- ✅ Medium: logging.rs (8), secrets.rs (5), metrics.rs (5), test\_utils.rs (8)
 - ⚠️ Low: llm/proxy.rs (4), nlp.rs (1)
 - ❌ None: engine.rs (0 tests - core inference engine)
 
 **Run Tests**:
+
 ```bash
 # All tests
 nix develop -c cargo test
@@ -157,7 +165,7 @@ cargo build --bin neoland --release
 
 ### NixOS Integration
 
-```nix
+```javascript
 # /etc/nixos/configuration.nix
 imports = [ ./modules/applications/neoland.nix ];
 
@@ -326,11 +334,11 @@ Window management via `hyprland-ipc` crate:
 
 ### Current Status ✅
 
-- [x] Unified CLI (replaces 4 shell scripts)
-- [x] TUI client (production-ready)
-- [x] Configurable endpoints
-- [x] NixOS declarative config
-- [x] Agent Hub integration
+- Unified CLI (replaces 4 shell scripts)
+- TUI client (production-ready)
+- Configurable endpoints
+- NixOS declarative config
+- Agent Hub integration
 
 ### Next Phase 🚧
 
@@ -387,13 +395,13 @@ Intelligent governance for architecture decisions with semantic search over ADRs
 
 ## Performance Characteristics
 
-| Metric               | Value            | Notes |
-| -------------------- | ---------------- | ----- |
-| TUI Startup          | <50ms            | |
-| Memory (TUI)         | ~15MB            | |
-| Memory (Server)      | ~200MB (idle)    | |
+| Metric               | Value            | Notes                                             |
+| -------------------- | ---------------- | ------------------------------------------------- |
+| TUI Startup          | <50ms            |                                                   |
+| Memory (TUI)         | \~15MB           |                                                   |
+| Memory (Server)      | \~200MB (idle)   |                                                   |
 | Qwen 1.8B Inference  | 5-10 tok/s (CPU) | Candle backend; consider llama.cpp for production |
-| Build Time (release) | ~10s             | |
+| Build Time (release) | \~10s            |                                                   |
 
 **Note**: Local inference at 5-10 tok/s CPU is suitable for development/testing. For production workloads, use the ml-offload API backend (GPU-accelerated) or the SecureLLM cloud fallback. SLO targets (500 RPS, p99 <200ms) have not been validated yet.
 
@@ -421,7 +429,7 @@ cargo check --all-targets
 3. **In-memory Vector Store**: `nlp.rs` uses `Vec<Document>` - data lost on restart. Persistent store (`storage/vector_store.rs`) exists but requires PostgreSQL + pgvector setup
 4. **Path Dependencies**: 5 path dependencies in Cargo.toml require sibling projects to build (see Cargo.toml comments for setup)
 5. **Local inference performance**: 5-10 tok/s CPU via Candle is below production threshold; use ml-offload or SecureLLM fallback
-6. **Lock contention risk**: `Arc<Mutex<>>` on engine/vector store may bottleneck above ~50 req/s
+6. **Lock contention risk**: `Arc<Mutex<>>` on engine/vector store may bottleneck above \~50 req/s
 7. **Warnings**: Unused imports in `securellm-core` (external crate)
 8. **SLO targets unvalidated**: 500 RPS / p99 <200ms targets have never been load-tested
 
@@ -429,10 +437,10 @@ cargo check --all-targets
 
 ## 📚 Documentation
 
-- **[`docs/ADR.md`](file:///home/kernelcore/arch/neoland/docs/ADR.md)**: Architecture Decision Records (NEW)
-- **[`ARCHITECTURE.md`](file:///home/kernelcore/arch/neoland/ARCHITECTURE.md)**: System architecture overview
-- **[`QUICKSTART.md`](file:///home/kernelcore/arch/neoland/QUICKSTART.md)**: Legacy quick reference
-- **[`UX_IMPROVEMENTS.md`](file:///home/kernelcore/arch/neoland/UX_IMPROVEMENTS.md)**: UI/UX design rationale
+- : Architecture Decision Records (NEW)
+- : System architecture overview
+- : Legacy quick reference
+- : UI/UX design rationale
 
 ---
 

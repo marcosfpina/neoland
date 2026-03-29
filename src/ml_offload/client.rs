@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 
 use super::models::*;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 pub struct MLOffloadClient {
     client: Client,
@@ -58,6 +59,54 @@ impl MLOffloadClient {
             .context("Failed to send chat completion request")?;
 
         response.json().await.context("Failed to parse chat completion response")
+    }
+
+    /// Submit a batch processing request
+    pub async fn submit_batch(&self, request: BatchRequest) -> Result<BatchResponse> {
+        let url = format!("{}/v1/batch", self.base_url);
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send batch request")?;
+
+        response.json().await.context("Failed to parse batch response")
+    }
+
+    /// Retrieve Prometheus metrics
+    pub async fn get_metrics(&self) -> Result<String> {
+        let url = format!("{}/metrics", self.base_url);
+        let response = self.client.get(&url).send().await.context("Failed to fetch metrics")?;
+
+        response.text().await.context("Failed to read metrics response")
+    }
+
+    /// Connect to WebSocket telemetry
+    pub async fn connect_telemetry<F>(&self, mut callback: F) -> Result<()>
+    where
+        F: FnMut(TensorForgeWsEvent) + Send + 'static,
+    {
+        let ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://");
+        let ws_endpoint = format!("{}/ws", ws_url);
+
+        let (mut ws_stream, _) = connect_async(&ws_endpoint)
+            .await
+            .context("Failed to connect to WebSocket telemetry")?;
+
+        use futures::StreamExt;
+        tokio::spawn(async move {
+            while let Some(msg) = ws_stream.next().await {
+                if let Ok(Message::Text(text)) = msg {
+                    if let Ok(event) = serde_json::from_str::<TensorForgeWsEvent>(&text) {
+                        callback(event);
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 
     /// Perform streaming chat completion (SSE)

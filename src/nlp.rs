@@ -130,6 +130,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_document_default_fields_are_strings() {
+        let doc = Document { id: String::new(), content: String::new(), metadata: String::new() };
+        assert!(doc.id.is_empty());
+        assert!(doc.content.is_empty());
+        assert!(doc.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_document_empty_metadata() {
+        let doc = Document {
+            id: "abc".to_string(),
+            content: "some content".to_string(),
+            metadata: String::new(),
+        };
+        assert!(doc.metadata.is_empty());
+        assert_eq!(doc.content, "some content");
+    }
+
+    #[test]
+    fn test_document_unicode_content() {
+        let doc = Document {
+            id: "unicode-1".to_string(),
+            content: "こんにちは世界 — Olá mundo — مرحبا بالعالم".to_string(),
+            metadata: "lang:multilingual".to_string(),
+        };
+        assert!(doc.content.contains("こんにちは"));
+        assert!(doc.content.contains("Olá"));
+        assert!(doc.content.contains("مرحبا"));
+    }
+
+    #[test]
+    fn test_document_large_content() {
+        let large = "x".repeat(10_000);
+        let doc = Document {
+            id: "large-1".to_string(),
+            content: large.clone(),
+            metadata: "size:10k".to_string(),
+        };
+        assert_eq!(doc.content.len(), 10_000);
+        let cloned = doc.clone();
+        assert_eq!(cloned.content.len(), 10_000);
+    }
+
+    #[test]
+    fn test_document_special_characters_in_metadata() {
+        let doc = Document {
+            id: "spec-1".to_string(),
+            content: "test".to_string(),
+            metadata: "file:/tmp/test file (copy).pdf:page=3&lang=en".to_string(),
+        };
+        assert!(doc.metadata.contains("/tmp/"));
+        assert!(doc.metadata.contains("page=3"));
+    }
+
+    #[test]
+    fn test_document_source_metadata_convention() {
+        let doc = Document {
+            id: "conv-1".to_string(),
+            content: "architecture overview".to_string(),
+            metadata: "source:adr-0001.md".to_string(),
+        };
+        let parts: Vec<&str> = doc.metadata.split(':').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], "source");
+        assert!(parts[1].ends_with(".md"));
+    }
+
+    #[test]
     fn test_document_creation() {
         let doc = Document {
             id: "test-123".to_string(),
