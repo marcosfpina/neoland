@@ -39,29 +39,40 @@ const SLO_LOCAL_INFERENCE_TOK_PER_SEC: f64 = 5.0;
 
 #[test]
 fn test_slo_constants_are_defined() {
-    assert!(SLO_HEALTH_P99_MS > 0, "Health SLO must be positive");
-    assert!(SLO_CHAT_P99_MS > SLO_HEALTH_P99_MS, "Chat SLO must be larger than health SLO");
-    assert!(SLO_GRPC_TTFT_P99_MS > SLO_CHAT_P99_MS, "TTFT SLO should accommodate streaming");
-    assert!(SLO_MIN_CONCURRENT_USERS > 0, "Concurrent user target must be positive");
-    assert!(SLO_AVAILABILITY_TARGET > 0.0 && SLO_AVAILABILITY_TARGET <= 1.0);
-    assert!(SLO_LOCAL_INFERENCE_TOK_PER_SEC > 0.0);
+    let health = std::hint::black_box(SLO_HEALTH_P99_MS);
+    let chat = std::hint::black_box(SLO_CHAT_P99_MS);
+    let grpc_ttft = std::hint::black_box(SLO_GRPC_TTFT_P99_MS);
+    let concurrent_users = std::hint::black_box(SLO_MIN_CONCURRENT_USERS);
+    let availability = std::hint::black_box(SLO_AVAILABILITY_TARGET);
+    let throughput = std::hint::black_box(SLO_LOCAL_INFERENCE_TOK_PER_SEC);
+
+    assert!(health > 0, "Health SLO must be positive");
+    assert!(chat > health, "Chat SLO must be larger than health SLO");
+    assert!(grpc_ttft > chat, "TTFT SLO should accommodate streaming");
+    assert!(concurrent_users > 0, "Concurrent user target must be positive");
+    assert!(availability > 0.0 && availability <= 1.0);
+    assert!(throughput > 0.0);
 }
 
 #[test]
 fn test_slo_latency_budget_hierarchy() {
+    let health = std::hint::black_box(SLO_HEALTH_P99_MS);
+    let chat = std::hint::black_box(SLO_CHAT_P99_MS);
+    let grpc_ttft = std::hint::black_box(SLO_GRPC_TTFT_P99_MS);
+
     // Health must be faster than chat
     assert!(
-        SLO_HEALTH_P99_MS <= SLO_CHAT_P99_MS,
+        health <= chat,
         "Health endpoint ({} ms) must meet stricter SLO than chat ({} ms)",
-        SLO_HEALTH_P99_MS,
-        SLO_CHAT_P99_MS
+        health,
+        chat
     );
     // Chat must be faster than streaming TTFT (LLM generates, so naturally slower)
     assert!(
-        SLO_CHAT_P99_MS <= SLO_GRPC_TTFT_P99_MS,
+        chat <= grpc_ttft,
         "REST chat ({} ms) must be ≤ gRPC TTFT ({} ms)",
-        SLO_CHAT_P99_MS,
-        SLO_GRPC_TTFT_P99_MS
+        chat,
+        grpc_ttft
     );
 }
 

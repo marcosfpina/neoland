@@ -46,6 +46,10 @@ pub enum Commands {
         /// Endpoint gRPC para testes
         #[arg(long, default_value = "http://[::1]:50051")]
         grpc_endpoint: String,
+
+        /// Renderiza o relatório em JSON para automação
+        #[arg(long)]
+        json: bool,
     },
 
     /// Reinicia o servidor (mata processo antigo e inicia novo)
@@ -68,11 +72,104 @@ pub enum Commands {
         /// URL do endpoint ml-offload para verificar
         #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
+
+        /// Renderiza o relatório em JSON para automação
+        #[arg(long)]
+        json: bool,
     },
 }
 
 impl Cli {
     pub fn parse_args() -> Self {
         Self::parse()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::*;
+
+    #[test]
+    fn clap_configuration_is_valid() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn parses_server_defaults() {
+        let cli = Cli::try_parse_from(["neoland", "server"]).expect("server parses");
+        match cli.command {
+            Commands::Server { grpc_port, rest_port } => {
+                assert_eq!(grpc_port, 50051);
+                assert_eq!(rest_port, 3001);
+            },
+            _ => panic!("expected server command"),
+        }
+        assert_eq!(cli.log_level, "info");
+    }
+
+    #[test]
+    fn parses_test_command_with_json_and_custom_endpoints() {
+        let cli = Cli::try_parse_from([
+            "neoland",
+            "test",
+            "--rest-endpoint",
+            "http://127.0.0.1:3003",
+            "--grpc-endpoint",
+            "http://127.0.0.1:50053",
+            "--json",
+        ])
+        .expect("test parses");
+
+        match cli.command {
+            Commands::Test { rest_endpoint, grpc_endpoint, json } => {
+                assert_eq!(rest_endpoint, "http://127.0.0.1:3003");
+                assert_eq!(grpc_endpoint, "http://127.0.0.1:50053");
+                assert!(json);
+            },
+            _ => panic!("expected test command"),
+        }
+    }
+
+    #[test]
+    fn parses_doctor_with_global_log_level_after_subcommand() {
+        let cli = Cli::try_parse_from([
+            "neoland",
+            "doctor",
+            "--server-url",
+            "http://localhost:4000",
+            "--ml-api-url",
+            "http://localhost:9000",
+            "--json",
+            "--log-level",
+            "debug",
+        ])
+        .expect("doctor parses");
+
+        match cli.command {
+            Commands::Doctor { server_url, ml_api_url, json } => {
+                assert_eq!(server_url, "http://localhost:4000");
+                assert_eq!(ml_api_url, "http://localhost:9000");
+                assert!(json);
+            },
+            _ => panic!("expected doctor command"),
+        }
+        assert_eq!(cli.log_level, "debug");
+    }
+
+    #[test]
+    fn parses_global_log_level_before_subcommand() {
+        let cli = Cli::try_parse_from(["neoland", "--log-level", "trace", "client"])
+            .expect("client parses");
+
+        match cli.command {
+            Commands::Client { server_url, ml_api_url } => {
+                assert_eq!(server_url, "http://[::1]:50051");
+                assert_eq!(ml_api_url, "http://localhost:8080");
+            },
+            _ => panic!("expected client command"),
+        }
+        assert_eq!(cli.log_level, "trace");
     }
 }

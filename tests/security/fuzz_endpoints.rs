@@ -273,7 +273,7 @@ async fn test_path_traversal_attempts() {
     let client = reqwest::Client::new();
     let base_url = "http://localhost:3001";
 
-    let path_attacks = vec![
+    let path_attacks = [
         "/../../../etc/passwd",
         "/v1/chat/../../../etc/shadow",
         "/v1/chat/..%2f..%2f..%2fetc%2fpasswd",

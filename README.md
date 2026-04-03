@@ -153,8 +153,12 @@ Neoland uses Nix for reproducible builds:
 
 ```bash
 # Enter development environment
-cd /home/kernelcore/arch/neoland
+cd /home/kernelcore/master/neoland
 nix develop
+
+# Inside the dev shell
+neoland-server
+neoland-client --ml-api-url http://localhost:9000
 
 # Build release binary
 cargo build --bin neoland --release
@@ -188,6 +192,9 @@ This enables:
 # Start gRPC (50051) + REST (3001) server
 neoland server
 
+# In nix develop, the alias is shorter
+neoland-server
+
 # Custom ports
 neoland server --grpc-port 50052 --rest-port 3002
 ```
@@ -197,6 +204,9 @@ neoland server --grpc-port 50052 --rest-port 3002
 ```bash
 # Connect to local server
 neoland client
+
+# In nix develop, the alias is shorter
+neoland-client
 
 # Custom endpoints
 neoland client \
@@ -216,13 +226,17 @@ neoland client \
 ```bash
 # Run diagnostics
 neoland test
+
+# Machine-readable output for scripts/CI
+neoland test --json
+neoland doctor --json
 ```
 
 ---
 
 ## 🏗️ Architectural Decisions
 
-All major architectural decisions are documented in [**Architecture Decision Records (ADR)**](file:///home/kernelcore/arch/neoland/docs/ADR.md).
+All major architectural decisions are documented in [**Architecture Decision Records (ADR)**](docs/ADR.md).
 
 **Key Decisions**:
 
@@ -371,7 +385,7 @@ src/
 2. `securellm-bridge`: Audit log immutability
 3. `VectorStore`: Document source verification
 
-**See Also**: [`docs/ADR.md#ADR-007`](file:///home/kernelcore/arch/neoland/docs/ADR.md) for architectural decisions
+**See Also**: [`docs/ADR.md#ADR-007`](docs/ADR.md) for architectural decisions
 
 ---
 

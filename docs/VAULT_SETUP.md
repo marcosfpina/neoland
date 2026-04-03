@@ -145,7 +145,7 @@ vault kv list secret/neoland/api-keys
 
 ```bash
 # In your neoland directory
-cd /home/kernelcore/arch/neoland
+cd /home/kernelcore/master/neoland
 
 # Start server with Vault configuration
 export VAULT_ADDR='http://127.0.0.1:8200'

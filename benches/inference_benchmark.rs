@@ -173,7 +173,7 @@ fn benchmark_async_operations(c: &mut Criterion) {
                 });
 
                 let mut count = 0;
-                while let Some(_) = rx.recv().await {
+                while rx.recv().await.is_some() {
                     count += 1;
                     if count == 1000 {
                         break;

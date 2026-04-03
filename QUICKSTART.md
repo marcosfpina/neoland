@@ -1,6 +1,6 @@
 # Neoland Quick Start Guide
 
-**Last Updated**: 2026-01-18
+**Last Updated**: 2026-04-02
 
 Get up and running with Neoland in under 5 minutes.
 
@@ -19,8 +19,12 @@ Get up and running with Neoland in under 5 minutes.
 ### Option 1: Development Mode
 
 ```bash
-cd /home/kernelcore/arch/neoland
+cd /home/kernelcore/master/neoland
 nix develop
+
+# Dev-shell aliases
+neoland-server
+neoland-client --ml-api-url http://localhost:9000
 ```
 
 ### Option 2: Build Release Binary
@@ -40,6 +44,9 @@ nix develop --command cargo build --bin neoland --release
 # Default ports: gRPC=50051, REST=3001
 neoland server
 
+# In nix develop, you can use the alias
+neoland-server
+
 # Custom configuration
 neoland server --grpc-port 50052 --rest-port 3002 --log-level debug
 ```
@@ -57,6 +64,9 @@ The server will:
 ```bash
 # Connect to default local server
 neoland client
+
+# In nix develop, you can use the alias
+neoland-client
 
 # Custom endpoints
 neoland client \
@@ -122,12 +132,15 @@ neoland client \
 
 ```bash
 neoland test
+
+# JSON output for scripts or CI smoke checks
+neoland test --json
 ```
 
 Verifies:
 
 1. REST API (`/health` endpoint)
-2. gRPC connectivity
+2. gRPC connectivity (real connection attempt)
 3. Process status
 
 ### REST API Direct Test
@@ -137,8 +150,9 @@ Verifies:
 curl http://localhost:3001/health
 # Expected: OK
 
-# Chat completion (OpenAI-compatible)
+# Chat completion (OpenAI-compatible, authenticated)
 curl -X POST http://localhost:3001/v1/chat/completions \
+  -H "X-API-Key: neoland_admin_dev_key_change_in_production" \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Hello"}],

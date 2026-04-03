@@ -2,7 +2,7 @@
 # NEOLAND Pre-commit Hook
 # Ensures code quality before commits
 
-set -e
+set -euo pipefail
 
 echo "🔍 Running pre-commit checks..."
 
@@ -32,7 +32,7 @@ fi
 echo -e "${GREEN}✅ Format check passed${NC}"
 
 echo "2️⃣  Running clippy..."
-if ! cargo clippy --all-targets --all-features -- -D warnings 2>&1 | grep -v "^warning: unused"; then
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
     echo -e "${RED}❌ Clippy failed!${NC}"
     echo -e "${YELLOW}💡 Fix clippy warnings before committing${NC}"
     exit 1
