@@ -3,6 +3,7 @@
 pub mod audit;
 pub mod auth;
 pub mod cli;
+pub mod commands;
 pub mod config;
 pub mod engine;
 pub mod health; // Phase 4.3: Health Checks & Readiness Probes

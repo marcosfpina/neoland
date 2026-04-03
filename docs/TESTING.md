@@ -1,6 +1,6 @@
 # NEOLAND: Testing Guide
 
-**Last Updated**: 2026-01-31
+**Last Updated**: 2026-04-02
 
 This document provides comprehensive guidance on running and writing tests for NEOLAND.
 
@@ -10,11 +10,16 @@ This document provides comprehensive guidance on running and writing tests for N
 
 ### Current Test Coverage
 
-**Total Tests**: 73 ✅
-- **Unit Tests**: 55 (library tests)
-- **Integration Tests**: 18 (API/gRPC tests)
+The suite includes:
+- Library unit tests for core modules
+- Integration tests for REST and gRPC paths
+- Command-surface tests for CLI parsing and diagnostics reports
 
-**Coverage**: ~60-65% (Target: 70%+)
+To inspect the exact current inventory in your checkout:
+
+```bash
+nix develop -c cargo test -- --list
+```
 
 **Test Execution Time**:
 - Unit tests: ~5s
@@ -48,6 +53,8 @@ nix develop -c cargo test --lib
 nix develop -c cargo test --lib auth::tests
 nix develop -c cargo test --lib audit::tests
 nix develop -c cargo test --lib validation::tests
+nix develop -c cargo test --lib commands::tests
+nix develop -c cargo test --lib cli::tests
 
 # Run with coverage (requires cargo-tarpaulin)
 nix develop -c cargo tarpaulin --lib --out Html
@@ -92,6 +99,8 @@ Unit tests are located in `#[cfg(test)]` modules within source files:
 src/
 ├── auth.rs              # 11 tests - RBAC, API key management
 ├── audit.rs             # 15 tests - Event logging, sanitization
+├── cli.rs               # CLI parsing + flag coverage
+├── commands.rs          # Command diagnostics + restart logic
 ├── validation.rs        # 14 tests - Input validation
 ├── test_utils.rs        # 8 tests - Test utilities (self-testing)
 ├── secrets.rs           # 4 tests - Secrets management
@@ -182,7 +191,23 @@ cargo test --test rest_api_test test_chat_endpoint_requires_auth -- --nocapture
 - Test server uses ports 50053 (gRPC) and 3003 (REST)
 - Tests run sequentially to avoid port conflicts
 
-### 5. gRPC Integration Tests
+### 5. Command Tests
+
+**Location**: `src/cli.rs`, `src/commands.rs`
+
+**Coverage**:
+- CLI default values and flag parsing
+- `--log-level` global flag handling
+- `neoland doctor` report semantics
+- `neoland test` REST/gRPC/process checks
+- Restart PID detection and command flow
+
+**Example**:
+```bash
+cargo test --lib commands::tests
+```
+
+### 6. gRPC Integration Tests
 
 **Location**: `tests/grpc_integration_test.rs`
 
@@ -243,7 +268,7 @@ const TEST_REST_PORT: u16 = 3005;
 
 async fn start_test_server() -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let _ = llamachat_poc::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await;
+        let _ = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await;
     })
 }
 
@@ -261,7 +286,7 @@ async fn test_my_integration() {
 ### Using Test Utilities
 
 ```rust
-use llamachat_poc::test_utils::{mocks, fixtures, assertions};
+use neoland::test_utils::{assertions, fixtures, mocks};
 
 #[tokio::test]
 async fn test_with_utilities() {

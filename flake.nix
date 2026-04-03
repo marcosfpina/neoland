@@ -25,40 +25,43 @@
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" ];
         };
+
+        neolandPackage = pkgs.rustPlatform.buildRustPackage {
+          pname = "neoland";
+          version = "0.1.0";
+
+          src = ./.;
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            protobuf
+            maturin
+          ];
+
+          buildInputs = with pkgs; [
+            openssl
+          ];
+
+          PROTOC = "${pkgs.protobuf}/bin/protoc";
+
+          # Enable tests (Phase 0: Foundation)
+          doCheck = true;
+
+          meta = with pkgs.lib; {
+            description = "Neoland - Terminal AI Agent with Enterprise Security";
+            license = licenses.mit;
+            maintainers = [ "kernelcore" ];
+          };
+        };
       in
       {
         packages = {
-          default = pkgs.rustPlatform.buildRustPackage {
-            pname = "neoland";
-            version = "0.1.0";
-
-            src = ./.;
-
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-            };
-
-            nativeBuildInputs = with pkgs; [
-              pkg-config
-              protobuf
-              maturin
-            ];
-
-            buildInputs = with pkgs; [
-              openssl
-            ];
-
-            PROTOC = "${pkgs.protobuf}/bin/protoc";
-
-            # Enable tests (Phase 0: Foundation)
-            doCheck = true;
-
-            meta = with pkgs.lib; {
-              description = "Neoland - Terminal AI Agent with Enterprise Security";
-              license = licenses.mit;
-              maintainers = [ "kernelcore" ];
-            };
-          };
+          default = neolandPackage;
+          neoland = neolandPackage;
         };
 
         devShells.default = pkgs.mkShell {
@@ -76,6 +79,11 @@
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
+            alias neoland-server='cargo run --bin neoland -- server'
+            alias neoland-client='cargo run --bin neoland -- client'
+            alias nsrv='cargo run --bin neoland -- server'
+            alias ncli='cargo run --bin neoland -- client'
+
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
             echo "│  🚀 Neoland Development Environment (v0.1.0)                   │"
@@ -88,8 +96,9 @@
             echo "  cargo test               # Run test suite"
             echo ""
             echo "🔧 Development:"
-            echo "  cargo run --bin neoland -- server  # Start gRPC + REST server"
-            echo "  cargo run --bin neoland -- client  # Launch TUI client"
+            echo "  neoland-server           # Start gRPC + REST server"
+            echo "  neoland-client           # Launch TUI client"
+            echo "  nsrv / ncli              # Short aliases for server/client"
             echo ""
             echo "📊 Validation:"
             echo "  nix flake check          # Validate flake"

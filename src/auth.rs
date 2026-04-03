@@ -234,7 +234,14 @@ impl Default for AuthManager {
 
 #[cfg(test)]
 mod tests {
+    use lazy_static::lazy_static;
+    use tokio::sync::Mutex;
+
     use super::*;
+
+    lazy_static! {
+        static ref ENV_LOCK: Mutex<()> = Mutex::new(());
+    }
 
     #[test]
     fn test_role_permissions() {
@@ -382,7 +389,10 @@ mod tests {
 
         use crate::secrets::SecretsManager;
 
+        let _guard = ENV_LOCK.lock().await;
+
         // Set up test environment
+        std::env::remove_var("NEOLAND_REQUIRE_VAULT_KEYS");
         std::env::set_var("NEOLAND_ADMIN_API_KEY", "vault_admin_key");
         std::env::set_var("NEOLAND_USER_API_KEY", "vault_user_key");
         std::env::set_var("NEOLAND_READONLY_API_KEY", "vault_readonly_key");
@@ -459,6 +469,8 @@ mod tests {
     /// allowing cleanup to run in the parent task.
     #[tokio::test]
     async fn test_require_vault_keys_panics_with_dev_keys() {
+        let _guard = ENV_LOCK.lock().await;
+
         // Ensure no real API keys are set (force dev key fallback)
         std::env::remove_var("NEOLAND_ADMIN_API_KEY");
         std::env::remove_var("NEOLAND_USER_API_KEY");
@@ -484,6 +496,8 @@ mod tests {
     /// new_with_secrets() must NOT panic.
     #[tokio::test]
     async fn test_require_vault_keys_passes_with_real_keys() {
+        let _guard = ENV_LOCK.lock().await;
+
         std::env::set_var("NEOLAND_ADMIN_API_KEY", "prod_admin_key_abc123");
         std::env::set_var("NEOLAND_USER_API_KEY", "prod_user_key_xyz789");
         std::env::set_var("NEOLAND_READONLY_API_KEY", "prod_readonly_key_def456");
