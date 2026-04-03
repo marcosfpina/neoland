@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [ -f "$PROJECT_ROOT/flake.nix" ] && [ -z "$IN_NIX_SHELL" ]; then
+if [ -f "$PROJECT_ROOT/flake.nix" ] && [ -z "${IN_NIX_SHELL:-}" ]; then
     echo -e "${YELLOW}⚠️  Running in nix develop environment...${NC}"
     cd "$PROJECT_ROOT"
     exec nix develop -c .githooks/pre-commit "$@"
