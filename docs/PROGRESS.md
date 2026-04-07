@@ -1,37 +1,52 @@
 # NEOLAND: Production Readiness - Progress Report
 
-**Last Updated**: 2026-01-31 14:00 UTC
-**Overall Progress**: **88%** (was 82%, +6%)
-**Status**: Phase 2 (Testing & QA) **COMPLETE** ✅
+**Last Updated**: 2026-04-07
+**Overall Progress**: **90%** (was 88%, +2%)
+**Status**: Ciclo 0 COMPLETE ✅ — Ciclo 1 iniciado (Fase A entregue)
 
 ---
 
-## Executive Summary
+## Recent Major Updates (2026-04-07)
+
+### Ciclo 1 — Fase A: mmap IPC (zero-copy intra-host)
+
+**Arquivos**:
+- `src/agents/flags.rs` — `SharedFlags` repr(C, align(64)), 64 bytes, 1 cache line, todos os campos como atomics
+- `src/agents/mmap.rs` — `MmapRegion` via `memmap2`, cria/abre arquivo shm, reseta na inicialização
+- `agents/neoland_agents/ipc/flags.py` — companion Python com layout binário idêntico
+- `src/config.rs` — `MmapConfig { shm_path }` + env `NEOLAND_SHM_PATH`
+
+**Testes**: 13 novos (8 em flags.rs + 5 em mmap.rs), todos passando. Total: 150+.
+
+**ADR**: [ADR-020](ADR/ADR-020-mmap-ipc.md)
+
+---
+
+## Executive Summary (2026-01-31 — baseline)
 
 **NEOLAND has progressed from 82% to 88% production-ready** after completing comprehensive testing infrastructure (E2E, Security, Load Testing).
 
 **Current State**:
 - ✅ **Phase 0**: Foundation stabilized (100% complete)
 - ✅ **Phase 1**: Security hardening COMPLETE (100% complete)
-- ✅ **Phase 2**: Testing & QA COMPLETE (95% complete - all major work done) **← MAJOR UPDATE**
+- ✅ **Phase 2**: Testing & QA COMPLETE (95% complete - all major work done)
 - ✅ **Phase 3**: CI/CD pipeline COMPLETE (100% complete)
 - 🔄 **Phase 4**: Operational Readiness (85% complete)
 - ⏳ **Phase 5**: Infrastructure pending (10% complete)
 - 🔄 **Phase 6**: Compliance in progress (40% complete)
+- 🔄 **Ciclo 1**: IPC + NATS + adr-ledger + Phantom (Fase A ✅)
 
-**Production Readiness Score**: **88/100** (+6 from last update)
-- Security: 95% ✅ (auth + secrets + audit + rate limiting + validation)
-- **Testing: 95% ✅ (115+ tests, E2E + Security + Load complete)** **← +55%**
-- CI/CD: 100% ✅ (full GitHub Actions pipeline)
-- Operations: 85% 🔄 (metrics + logging + health + alerts + 17 runbooks)
-- Infrastructure: 10% ⏳ (no containerization yet)
-- Compliance: 40% 🔄 (8 ADRs documented)
-
-**Velocity**: 2.3x faster than planned (~75h actual vs 174h planned for Phases 0-2)
+**Production Readiness Score**: **90/100**
+- Security: 95% ✅
+- Testing: 95% ✅ (150+ tests)
+- CI/CD: 100% ✅
+- Operations: 85% 🔄
+- Infrastructure: 15% ⏳ (mmap IPC entregue)
+- Compliance: 40% 🔄
 
 ---
 
-## Recent Major Updates (2026-01-31)
+## Previous Major Updates (2026-01-31)
 
 ### 🎯 Phase 2.3: E2E Testing - COMPLETED
 **Commit**: `ef8a60b`
