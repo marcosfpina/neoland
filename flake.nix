@@ -72,6 +72,7 @@
 
           buildInputs = with pkgs; [
             rustToolchain
+            cargo-audit   # supply-chain CVE scanning — `cargo audit` no CI e local
             openssl
             sops
             age
