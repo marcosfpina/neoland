@@ -15,6 +15,8 @@ pub struct Config {
     pub inference: InferenceConfig,
     pub vault: VaultConfig,
     pub agents: AgentsConfig,
+    pub mmap: MmapConfig,
+    pub nats: NatsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +75,6 @@ impl Default for VaultConfig {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentsConfig {
@@ -95,6 +96,34 @@ impl Default for AgentsConfig {
             checkpoint_dir: "/var/lib/neoland/checkpoints/adr".to_string(),
             rag_top_k: 5,
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MmapConfig {
+    /// Path to the shared-memory file used for zero-copy IPC with the Python pipeline.
+    pub shm_path: String,
+}
+
+impl Default for MmapConfig {
+    fn default() -> Self {
+        Self { shm_path: "/run/neoland/agent-flags.shm".to_string() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NatsConfig {
+    /// NATS server URL. Set to empty string to disable.
+    pub url: String,
+    /// Whether to attempt NATS connection on startup.
+    pub enabled: bool,
+}
+
+impl Default for NatsConfig {
+    fn default() -> Self {
+        Self { url: "nats://localhost:4222".to_string(), enabled: false }
     }
 }
 
@@ -163,6 +192,13 @@ impl Config {
         }
         if let Ok(v) = std::env::var("VAULT_ADDR") {
             self.vault.addr = v;
+        }
+        if let Ok(v) = std::env::var("NEOLAND_SHM_PATH") {
+            self.mmap.shm_path = v;
+        }
+        if let Ok(v) = std::env::var("NEOLAND_NATS_URL") {
+            self.nats.url = v;
+            self.nats.enabled = true;
         }
     }
 }

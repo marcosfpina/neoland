@@ -42,6 +42,15 @@ lazy_static = "1.4"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
 pgvector = { version = "0.4", features = ["sqlx"] }
 
+# IPC (Ciclo 1 — Fase A)
+memmap2 = "0.9"
+
+# NATS event bus (Ciclo 1 — Fase B)
+spectre-events = { path = "../spectre/crates/spectre-events" }
+spectre-core = { path = "../spectre/crates/spectre-core" }
+async-nats = "0.46"
+thiserror = "1.0"
+
 # gRPC & Async
 tonic = "0.12"
 prost = "0.13"
