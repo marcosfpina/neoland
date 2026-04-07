@@ -14,6 +14,7 @@ pub struct Config {
     pub client: ClientConfig,
     pub inference: InferenceConfig,
     pub vault: VaultConfig,
+    pub agents: AgentsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +70,31 @@ impl Default for InferenceConfig {
 impl Default for VaultConfig {
     fn default() -> Self {
         Self { addr: "http://localhost:8200".to_string() }
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentsConfig {
+    pub dspy_url: String,
+    pub pipeline_timeout_secs: u64,
+    pub junior_confidence_warn_threshold: f64,
+    pub tech_leader_defer_ttl_hours: u32,
+    pub checkpoint_dir: String,
+    pub rag_top_k: usize,
+}
+
+impl Default for AgentsConfig {
+    fn default() -> Self {
+        Self {
+            dspy_url: "http://localhost:8001".to_string(),
+            pipeline_timeout_secs: 120,
+            junior_confidence_warn_threshold: 0.4,
+            tech_leader_defer_ttl_hours: 24,
+            checkpoint_dir: "/var/lib/neoland/checkpoints/adr".to_string(),
+            rag_top_k: 5,
+        }
     }
 }
 

@@ -4,3 +4,6 @@ target/
 .env
 .direnv/
 .cargo/
+secrets/*.env
+!secrets/*.sops.env
+secrets/.decrypted/

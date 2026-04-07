@@ -38,6 +38,12 @@ pub enum AuditAction {
     ConfigChange,
     ConfigView,
 
+    // Agent pipeline events
+    AgentTaskStart,
+    AgentDecision,
+    AgentEscalation,
+    AgentCheckpoint,
+
     // Administrative events
     UserCreate,
     UserDelete,
@@ -73,6 +79,12 @@ impl AuditAction {
             AuditAction::DocumentAdd => AuditSeverity::Low,
             AuditAction::DocumentSearch => AuditSeverity::Low,
             AuditAction::ConfigView => AuditSeverity::Low,
+
+            // Agent pipeline events
+            AuditAction::AgentTaskStart => AuditSeverity::Low,
+            AuditAction::AgentDecision => AuditSeverity::Low,
+            AuditAction::AgentEscalation => AuditSeverity::Medium,
+            AuditAction::AgentCheckpoint => AuditSeverity::Low,
         }
     }
 }

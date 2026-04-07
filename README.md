@@ -85,6 +85,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 - ✅ **HashiCorp Vault Integration**: Production-grade secrets storage
 - ✅ **Three-Tier Retrieval**: Cache (30s) → Vault → Environment Variables
 - ✅ **Automatic Fallback**: Graceful degradation on Vault unavailability
+- ✅ **SOPS Dev Workflow**: Encrypted dotenv secrets can be decrypted only at process launch
 - ✅ **Secret Types**: LLM API keys, NEOLAND API keys, DB credentials, TLS certs
 - ✅ **Performance**: <1ms cache hit, 50-100ms Vault read
 
@@ -107,7 +108,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 
 **Security Posture**: Phase 1 Complete (RBAC + Vault + Audit + Rate Limiting)
 
-See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/ADR/`
+See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/SOPS_SETUP.md`, `docs/ADR/`
 
 ---
 
@@ -157,6 +158,7 @@ cd /home/kernelcore/master/neoland
 nix develop
 
 # Inside the dev shell
+neoland-secrets
 neoland-server
 neoland-client --ml-api-url http://localhost:9000
 
@@ -213,6 +215,13 @@ neoland client \
   --server-url http://[::1]:50051 \
   --ml-api-url http://localhost:8080
 ```
+
+### SOPS Workflow
+
+For local development, this repo can keep encrypted dotenv secrets in
+`secrets/neoland.sops.env` and decrypt them only when launching the process.
+
+See: [`docs/SOPS_SETUP.md`](docs/SOPS_SETUP.md)
 
 **Key Features**:
 
