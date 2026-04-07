@@ -1080,6 +1080,22 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
                         let cfg = crate::config::Config::load();
                         match AgentOrchestrator::new(pool, &cfg.agents) {
                             Ok(orch) => {
+                                // Optionally attach NATS publisher (Ciclo 1 — Fase B)
+                                let orch = if cfg.nats.enabled {
+                                    use crate::agents::nats::NatsPublisher;
+                                    match NatsPublisher::connect(&cfg.nats).await {
+                                        Ok(publisher) => {
+                                            info!(url = %cfg.nats.url, "NATS publisher attached");
+                                            orch.with_nats(publisher)
+                                        },
+                                        Err(e) => {
+                                            tracing::warn!(error = %e, "NATS connect failed — events disabled");
+                                            orch
+                                        },
+                                    }
+                                } else {
+                                    orch
+                                };
                                 info!(
                                     dspy_url = %cfg.agents.dspy_url,
                                     "🤖 Agent orchestrator initialized"

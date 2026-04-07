@@ -7,8 +7,11 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::agents::client::{AgentPipelineClient, AgentTaskRequest, PipelineResult};
+use crate::agents::client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult};
 use crate::agents::escalation::EscalationPolicy;
+use crate::agents::nats::{
+    NatsPublisher, PipelineOutputPayload, TaskCompletedPayload, TaskEscalatedPayload,
+};
 use crate::agents::session::SessionManager;
 use crate::config::AgentsConfig;
 
@@ -16,6 +19,7 @@ pub struct AgentOrchestrator {
     client: AgentPipelineClient,
     sessions: SessionManager,
     escalation: EscalationPolicy,
+    nats: Option<NatsPublisher>,
 }
 
 impl AgentOrchestrator {
@@ -31,7 +35,14 @@ impl AgentOrchestrator {
                 junior_confidence_warn_threshold: cfg.junior_confidence_warn_threshold,
                 defer_ttl_hours: cfg.tech_leader_defer_ttl_hours,
             },
+            nats: None,
         })
+    }
+
+    /// Attach a NATS publisher. Called after async NATS connection is established.
+    pub fn with_nats(mut self, publisher: NatsPublisher) -> Self {
+        self.nats = Some(publisher);
+        self
     }
 
     pub async fn execute_task(
@@ -51,6 +62,16 @@ impl AgentOrchestrator {
         let start_from = self.escalation.start_from(last_decision.as_deref());
         let task_id = Uuid::new_v4();
 
+        // Publish escalation event if architect tier is triggered
+        if let (Some(nats), AgentStage::Architect) = (&self.nats, &start_from) {
+            nats.publish_task_escalated(&TaskEscalatedPayload {
+                session_id,
+                task_id,
+                reason: "senior_escalation",
+            })
+            .await;
+        }
+
         let request = AgentTaskRequest {
             task_id,
             session_id,
@@ -63,12 +84,43 @@ impl AgentOrchestrator {
         let result = self.client.run_pipeline(&request).await?;
 
         // Persist session update
+        let decision_str = format!("{:?}", result.tech_leader.decision).to_lowercase();
         let decision_json = json!({
-            "decision": format!("{:?}", result.tech_leader.decision).to_lowercase(),
+            "decision": decision_str,
             "adr_title": result.tech_leader.adr_title,
             "session_summary": result.tech_leader.session_summary,
         });
         self.sessions.update_after_pipeline(session_id, decision_json).await?;
+
+        // Publish completion + full output events
+        if let Some(nats) = &self.nats {
+            let risk = result.senior.risk_assessment.clone();
+            nats.publish_task_completed(&TaskCompletedPayload {
+                session_id,
+                task_id,
+                decision: &decision_str,
+                risk_level: &risk,
+                junior_confidence: result.junior.confidence,
+                adr_title: &result.tech_leader.adr_title,
+            })
+            .await;
+
+            // Fase D — texto completo para scan do Phantom
+            nats.publish_pipeline_output(&PipelineOutputPayload {
+                session_id,
+                task_id,
+                decision: &decision_str,
+                hypothesis: &result.junior.hypothesis,
+                junior_unknowns: &result.junior.unknowns,
+                innovation_vectors: &result.junior.innovation_vectors,
+                risk_assessment: &result.senior.risk_assessment,
+                refined_hypothesis: &result.senior.refined_hypothesis,
+                rationale: &result.tech_leader.rationale,
+                action_items: &result.tech_leader.action_items,
+                adr_title: &result.tech_leader.adr_title,
+            })
+            .await;
+        }
 
         Ok(result)
     }
