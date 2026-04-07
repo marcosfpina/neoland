@@ -23,7 +23,7 @@ nix develop
 
 # Rust
 cargo check --lib                          # validação rápida
-cargo test --lib                           # 137+ testes (sem mocks)
+cargo test --lib                           # 156+ testes (sem mocks)
 cargo test agent_ -- --test-threads=1     # testes do control plane
 cargo build --release
 
@@ -212,6 +212,33 @@ Layout binário `SharedFlags` (64 bytes, 1 cache line, `repr(C, align(64))`):
 
 Arquivo shm criado pelo control plane em `/run/neoland/agent-flags.shm` na inicialização.
 Python lê/escreve via `AgentFlags` em `agents/neoland_agents/ipc/flags.py`.
+
+## Ciclo 2 — Operational Stack (em progresso)
+
+| Fase | Status | Descrição |
+|------|--------|-----------|
+| 4.1 — Metrics | ✅ | Agent pipeline metrics (Prometheus counters/histograms) wired no orchestrator |
+| 4.2 — cargo-audit | ✅ | `cargo-audit` no devShell — supply-chain CVE scanning |
+| 4.3 — Coding partner skill | ✅ | `neoland-agents` package metadata + skill coding partner |
+| 4.4 — NKey + ACL | ✅ | NKey SOPS-encrypted em `~/master/secrets/`, NATS ACL neoland (publish `neoland.>` only) |
+| 4.5 — Cross-stack | ✅ | Neotron: Synapse ↔ Cortex per-agent embeddings + stress tests BASTION/SENTINEL |
+| 4.6 — Owasaka tests | ✅ | Event pipeline tests (12) + API server tests (5) |
+| 4.7 — EDR rules | ✅ | SIGMA (3 rules) + YARA (6 rules) neoland-specific em `sentinel/sigma/` e `sentinel/yara/` |
+
+### EDR Detection Rules (Fase 4.7)
+
+**SIGMA** (`sentinel/sigma/neoland/agent_pipeline_anomalies.yml`):
+- Process anomalies — child processes inesperados do pipeline
+- NATS connection spike — >20 conexões/minuto (reconnect storm ou impersonation)
+- Checkpoint write outside path — escrita fora de `/var/lib/neoland/checkpoints/adr/`
+
+**YARA** (`sentinel/yara/neoland/agent_pipeline.yar`):
+- `ADR_PromptInjection` — payloads de prompt injection em checkpoints
+- `ADR_ShellPayload` — comandos shell em action_items/decision
+- `Checkpoint_PathTraversal` — path traversal em ficheiros de checkpoint
+- `Pipeline_SuspiciousConfidence` — NaN/Infinity/string em confidence
+- `DSPy_ModuleTamper` — monkey-patching ou imports suspeitos em módulos DSPy
+- `RiskLevel_Escalation` — override forçado de risk_level em mensagens inter-agente
 
 ## Problemas Conhecidos
 
