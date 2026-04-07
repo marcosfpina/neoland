@@ -2,7 +2,8 @@
 //!
 //! This module provides secure secret storage and retrieval using HashiCorp
 //! Vault. It supports both Vault integration (production) and environment
-//! variable fallback (development).
+//! variable fallback (development), including environment variables loaded just
+//! in time from a SOPS-encrypted dotenv file.
 //!
 //! See ADR-012 for architecture decisions.
 

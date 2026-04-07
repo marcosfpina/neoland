@@ -8,7 +8,7 @@ use std::{
 // Axum imports for REST
 use axum::{
     body::Body,
-    extract::{Json, State},
+    extract::{Json, Path, State},
     http::{HeaderMap, Request as HttpRequest, Response as HttpResponse, StatusCode},
     middleware::{self, Next},
     response::{
@@ -33,6 +33,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 
 use crate::{
+    agents::orchestrator::AgentOrchestrator,
     audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
     auth::AuthManager,
     engine::{GenerationConfig, LocalEngine},
@@ -155,6 +156,8 @@ pub struct AppState {
     failed_auth_tracker: Arc<FailedAuthTracker>,
     rate_limiter: Arc<RateLimiter>,
     start_time: Instant, // Phase 4.3: Track uptime for health checks
+    /// Multi-agent DSPy pipeline orchestrator (set when DATABASE_URL is configured).
+    agent_orchestrator: Option<Arc<AgentOrchestrator>>,
 }
 
 // gRPC Service Implementation
@@ -877,6 +880,116 @@ async fn auth_middleware(
     }
 }
 
+// ─── Agent Pipeline Handlers ─────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AgentTaskBody {
+    task: String,
+    session_id: Option<uuid::Uuid>,
+}
+
+/// POST /v1/agents/task — submit a task to the multi-agent DSPy pipeline.
+/// Requires User+ auth (enforced by auth_middleware).
+async fn submit_agent_task(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AgentTaskBody>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    let session_id = body.session_id.unwrap_or_else(uuid::Uuid::new_v4);
+
+    let start_event = AuditEvent::new(AuditAction::AgentTaskStart)
+        .with_metadata("session_id", serde_json::json!(session_id.to_string()))
+        .with_metadata("task_preview", serde_json::json!(&body.task[..body.task.len().min(80)]));
+    let _ = state.audit_logger.log(start_event).await;
+
+    match orchestrator.execute_task(&body.task, session_id, "user", String::new()).await {
+        Ok(result) => {
+            let decision_event = AuditEvent::new(AuditAction::AgentDecision)
+                .with_metadata("session_id", serde_json::json!(session_id.to_string()))
+                .with_metadata(
+                    "decision",
+                    serde_json::json!(format!("{:?}", result.tech_leader.decision).to_lowercase()),
+                );
+            let _ = state.audit_logger.log(decision_event).await;
+            (StatusCode::OK, Json(serde_json::to_value(&result).unwrap_or_default()))
+                .into_response()
+        },
+        Err(e) => {
+            tracing::error!(error = %e, session_id = %session_id, "Agent task execution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        },
+    }
+}
+
+/// GET /v1/agents/session/:id — retrieve session state.
+/// Requires ReadOnly+ auth (enforced by auth_middleware).
+async fn get_agent_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    match orchestrator.get_session(id).await {
+        Ok(session) => (StatusCode::OK, Json(serde_json::to_value(&session).unwrap_or_default()))
+            .into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session");
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Session not found"})))
+                .into_response()
+        },
+    }
+}
+
+/// GET /v1/agents/health — DSPy pipeline health check (public).
+async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match &state.agent_orchestrator {
+        Some(orch) => match orch.health_check().await {
+            Ok(true) => {
+                (StatusCode::OK, Json(serde_json::json!({"status": "ok", "pipeline": "up"})))
+                    .into_response()
+            },
+            Ok(false) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"status": "degraded", "pipeline": "down"})),
+            )
+                .into_response(),
+            Err(e) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"status": "error", "error": e.to_string()})),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::OK,
+            Json(serde_json::json!({"status": "ok", "pipeline": "disabled"})),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
     use tracing::info;
 
@@ -954,6 +1067,44 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         }
     };
 
+    // Initialize AgentOrchestrator (multi-agent DSPy pipeline)
+    let agent_orchestrator = {
+        let db_url = std::env::var("NEOLAND_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .ok();
+        match db_url {
+            Some(url) => {
+                use sqlx::postgres::PgPoolOptions;
+                match PgPoolOptions::new().max_connections(5).connect(&url).await {
+                    Ok(pool) => {
+                        let cfg = crate::config::Config::load();
+                        match AgentOrchestrator::new(pool, &cfg.agents) {
+                            Ok(orch) => {
+                                info!(
+                                    dspy_url = %cfg.agents.dspy_url,
+                                    "🤖 Agent orchestrator initialized"
+                                );
+                                Some(Arc::new(orch))
+                            },
+                            Err(e) => {
+                                tracing::warn!(error = %e, "AgentOrchestrator init failed");
+                                None
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Agent pool connection failed — orchestrator disabled");
+                        None
+                    },
+                }
+            },
+            None => {
+                info!("DATABASE_URL not set — agent orchestrator disabled");
+                None
+            },
+        }
+    };
+
     let shared_state = Arc::new(AppState {
         engine: Arc::new(Mutex::new(None)),
         vector_store,
@@ -963,6 +1114,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         failed_auth_tracker,
         rate_limiter,
         start_time: Instant::now(), // Phase 4.3: Track service start time
+        agent_orchestrator,
     });
 
     // 1. Start gRPC Server
@@ -976,6 +1128,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     // Middleware order (applied in reverse): correlation → rate_limit → validation → auth → handler
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
+        .route("/v1/agents/task", post(submit_agent_task))
+        .route("/v1/agents/session/:id", get(get_agent_session))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))
         .layer(middleware::from_fn_with_state(shared_state.clone(), validation_middleware))
         .layer(middleware::from_fn_with_state(shared_state.clone(), rate_limit_middleware))
@@ -986,7 +1140,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
         .route("/health", get(health_handler)) // Phase 4.3: Comprehensive health check
         .route("/ready", get(readiness_handler)) // Phase 4.3: Readiness probe
         .route("/live", get(liveness_handler)) // Phase 4.3: Liveness probe
-        .route("/metrics", get(metrics_handler)); // Phase 4.1: Prometheus metrics
+        .route("/metrics", get(metrics_handler)) // Phase 4.1: Prometheus metrics
+        .route("/v1/agents/health", get(agent_health_handler));
 
     // Combine all routes
     let app = Router::new()
@@ -1029,6 +1184,7 @@ mod tests {
             failed_auth_tracker: Arc::new(FailedAuthTracker::new(5, 1)),
             rate_limiter: Arc::new(RateLimiter::new(100, 60)),
             start_time: Instant::now(),
+            agent_orchestrator: None,
         }
     }
 

@@ -73,16 +73,36 @@
           buildInputs = with pkgs; [
             rustToolchain
             openssl
+            sops
+            age
+            python313
+            python313Packages.pip
           ];
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
-            alias neoland-server='cargo run --bin neoland -- server'
-            alias neoland-client='cargo run --bin neoland -- client'
-            alias nsrv='cargo run --bin neoland -- server'
-            alias ncli='cargo run --bin neoland -- client'
+            export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+            neoland-server() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
+            neoland-client() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
+            nsrv() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
+            ncli() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
+            neoland-secrets() { sops "$NEOLAND_PROJECT_ROOT/secrets/neoland.sops.env"; }
+
+            # Python agents venv — recriar se não existir ou se a versão for diferente de 3.13
+            _venv_py_ver=$("$NEOLAND_PROJECT_ROOT/agents/.venv/bin/python" --version 2>/dev/null | grep -o "3\.[0-9]*" | head -1)
+            if [ ! -d "$NEOLAND_PROJECT_ROOT/agents/.venv" ] || [ "$_venv_py_ver" != "3.13" ]; then
+              echo "→ Criando venv Python 3.13 para agents/..."
+              rm -rf "$NEOLAND_PROJECT_ROOT/agents/.venv"
+              python3.13 -m venv "$NEOLAND_PROJECT_ROOT/agents/.venv"
+              "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pip" install -e "$NEOLAND_PROJECT_ROOT/agents/[dev]" -q
+            fi
+            agents-start() { uvicorn neoland_agents.app:app --reload --port 8001 --app-dir "$NEOLAND_PROJECT_ROOT/agents"; }
+            agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pytest" tests/ -m contract -v "$@"); }
+            agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pytest" tests/ -m integration -v "$@"); }
+            export PATH="$NEOLAND_PROJECT_ROOT/agents/.venv/bin:$PATH"
 
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
@@ -98,7 +118,11 @@
             echo "🔧 Development:"
             echo "  neoland-server           # Start gRPC + REST server"
             echo "  neoland-client           # Launch TUI client"
-            echo "  nsrv / ncli              # Short aliases for server/client"
+            echo "  nsrv / ncli              # Short functions for server/client"
+            echo ""
+            echo "🔐 Secrets:"
+            echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
+            echo "  NEOLAND_SOPS_ENV_FILE    # Override the default encrypted dotenv path"
             echo ""
             echo "📊 Validation:"
             echo "  nix flake check          # Validate flake"
@@ -107,6 +131,11 @@
             echo "📚 Documentation:"
             echo "  docs/ADR.md              # Architecture Decision Records"
             echo "  README.md                # Project overview + roadmap"
+            echo ""
+            echo "🤖 Agents (DSPy pipeline):"
+            echo "  agents-start             # Start DSPy pipeline (:8001)"
+            echo "  agents-test-contract     # Run schema tests (sem LLM)"
+            echo "  agents-test-integration  # Run integration tests (requer LLM_API_KEY)"
             echo ""
             echo "💡 Tip: Set environment variables for SecureLLM:"
             echo "  export SECURELLM_PROVIDER=deepseek"

@@ -1,8 +1,28 @@
 # NEOLAND Production Readiness Progress
 
-**Last Updated**: 2026-01-31
-**Overall Progress**: 68% (4/6 phases complete)
-**Production Readiness Score**: 68/100
+**Last Updated**: 2026-04-07
+**Overall Progress**: 75% — Ciclo 0 completo
+**Production Readiness Score**: 75/100
+
+## Ciclo 0 — Core funcionando ✅ (2026-04-07)
+
+Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
+
+| Componente | Status |
+|-----------|--------|
+| Contratos DSPy (4 signatures) | ✅ |
+| Python pipeline (FastAPI :8001) | ✅ |
+| Rust control plane (`src/agents/`) | ✅ |
+| Rotas HTTP (`/v1/agents/*`) | ✅ |
+| Testes de contrato (9 testes) | ✅ |
+| Testes de sessão (4 testes, requer PG) | ✅ |
+| Testes de integração (4 testes, requer tudo) | ✅ |
+| Python 3.13 no devShell | ✅ |
+| ADR-019 documentado | ✅ |
+
+**Próximo**: Ciclo 1 — mmap IPC + NATS via spectre-events + adr-ledger subscriber
+
+---
 
 ---
 

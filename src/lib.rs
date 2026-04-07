@@ -1,5 +1,6 @@
 // Library crate para Neoland
 // Expõe modules que podem ser usados por binaries
+pub mod agents;
 pub mod audit;
 pub mod auth;
 pub mod cli;

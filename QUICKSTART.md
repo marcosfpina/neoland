@@ -23,6 +23,7 @@ cd /home/kernelcore/master/neoland
 nix develop
 
 # Dev-shell aliases
+neoland-secrets
 neoland-server
 neoland-client --ml-api-url http://localhost:9000
 ```
@@ -73,6 +74,17 @@ neoland client \
   --server-url http://[::1]:50051 \
   --ml-api-url http://localhost:9000
 ```
+
+## Secrets
+
+For local encrypted secrets, edit `secrets/neoland.sops.env` with:
+
+```bash
+neoland-secrets
+```
+
+The `neoland-server`, `neoland-client`, `nsrv`, and `ncli` commands decrypt and
+load that file automatically before launch.
 
 ---
 
