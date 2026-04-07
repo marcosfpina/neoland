@@ -1,6 +1,6 @@
 //! Control plane orchestrator: wires together session, RAG, escalation, and pipeline client.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use serde_json::json;
@@ -14,6 +14,7 @@ use crate::agents::nats::{
 };
 use crate::agents::session::SessionManager;
 use crate::config::AgentsConfig;
+use crate::metrics::utils as metrics;
 
 pub struct AgentOrchestrator {
     client: AgentPipelineClient,
@@ -70,6 +71,7 @@ impl AgentOrchestrator {
                 reason: "senior_escalation",
             })
             .await;
+            metrics::record_escalation("high"); // architect escalation implies high risk
         }
 
         let request = AgentTaskRequest {
@@ -81,7 +83,16 @@ impl AgentOrchestrator {
             start_from,
         };
 
-        let result = self.client.run_pipeline(&request).await?;
+        let t0 = Instant::now();
+        let result = self.client.run_pipeline(&request).await;
+        let duration_secs = t0.elapsed().as_secs_f64();
+
+        // Record per-agent call outcomes
+        metrics::record_agent_call("junior", result.is_ok());
+        metrics::record_agent_call("senior", result.is_ok());
+        metrics::record_agent_call("tech_leader", result.is_ok());
+
+        let result = result?;
 
         // Persist session update
         let decision_str = format!("{:?}", result.tech_leader.decision).to_lowercase();
@@ -91,6 +102,10 @@ impl AgentOrchestrator {
             "session_summary": result.tech_leader.session_summary,
         });
         self.sessions.update_after_pipeline(session_id, decision_json).await?;
+
+        // Record pipeline completion metrics
+        metrics::record_pipeline_completed(&decision_str, duration_secs, result.junior.confidence);
+        metrics::record_escalation(&result.senior.risk_assessment);
 
         // Publish completion + full output events
         if let Some(nats) = &self.nats {
@@ -104,6 +119,7 @@ impl AgentOrchestrator {
                 adr_title: &result.tech_leader.adr_title,
             })
             .await;
+            metrics::record_nats_publish("neoland.task.completed.v1", true);
 
             // Fase D — texto completo para scan do Phantom
             nats.publish_pipeline_output(&PipelineOutputPayload {
@@ -120,6 +136,7 @@ impl AgentOrchestrator {
                 adr_title: &result.tech_leader.adr_title,
             })
             .await;
+            metrics::record_nats_publish("neoland.pipeline.output.v1", true);
         }
 
         Ok(result)
