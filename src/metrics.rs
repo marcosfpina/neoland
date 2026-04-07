@@ -152,6 +152,68 @@ lazy_static! {
         &["backend", "state"] // backend: ml-offload, securellm; state: closed, open, half-open
     )
     .unwrap();
+
+    // ── Ciclo 1: Agent Pipeline Metrics ──────────────────────────────────────
+
+    /// Total pipeline executions, labelled by final decision
+    pub static ref AGENT_PIPELINE_TOTAL: CounterVec = register_counter_vec!(
+        "neoland_agent_pipeline_total",
+        "Total ADR pipeline executions by decision outcome",
+        &["decision"] // accepted | rejected | deferred | escalated
+    )
+    .unwrap();
+
+    /// End-to-end pipeline duration (Junior → Tech-Leader)
+    pub static ref AGENT_PIPELINE_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
+        "neoland_agent_pipeline_duration_seconds",
+        "ADR pipeline end-to-end duration in seconds",
+        &["decision"],
+        vec![0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0, 120.0]
+    )
+    .unwrap();
+
+    /// Per-agent call counter (granular tracing without OTel overhead)
+    pub static ref AGENT_CALLS_TOTAL: CounterVec = register_counter_vec!(
+        "neoland_agent_calls_total",
+        "Total calls per agent in the pipeline",
+        &["agent", "status"] // agent: junior|senior|architect|tech_leader; status: ok|error
+    )
+    .unwrap();
+
+    /// Escalations from Senior → Architect
+    pub static ref AGENT_ESCALATIONS_TOTAL: CounterVec = register_counter_vec!(
+        "neoland_agent_escalations_total",
+        "Total escalations triggered (senior → architect)",
+        &["risk_level"] // low | medium | high | critical
+    )
+    .unwrap();
+
+    /// Junior confidence distribution (f64 → observe directly)
+    pub static ref AGENT_JUNIOR_CONFIDENCE: HistogramVec = register_histogram_vec!(
+        "neoland_agent_junior_confidence",
+        "Distribution of junior agent confidence scores",
+        &["decision"],
+        vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    )
+    .unwrap();
+
+    // ── Ciclo 1: NATS / adr-ledger Metrics ───────────────────────────────────
+
+    /// NATS events published by this instance
+    pub static ref NATS_PUBLISHED_TOTAL: CounterVec = register_counter_vec!(
+        "neoland_nats_published_total",
+        "Total NATS events published",
+        &["subject", "status"] // status: ok | error
+    )
+    .unwrap();
+
+    /// Merkle chain inserts (mirrors adr-ledger telemetry via NATS)
+    pub static ref LEDGER_CHAIN_INSERTS_TOTAL: CounterVec = register_counter_vec!(
+        "neoland_ledger_chain_inserts_total",
+        "Total nodes inserted into the Merkle chain (received via NATS)",
+        &["decision"]
+    )
+    .unwrap();
 }
 
 /// Timer utility for measuring request duration
@@ -317,6 +379,39 @@ pub mod utils {
     pub fn update_active_connections(count: usize) {
         ACTIVE_CONNECTIONS.set(count as f64);
     }
+
+    // ── Ciclo 1: Agent Pipeline ───────────────────────────────────────────────
+
+    /// Record completed pipeline run
+    pub fn record_pipeline_completed(decision: &str, duration_secs: f64, confidence: f64) {
+        AGENT_PIPELINE_TOTAL.with_label_values(&[decision]).inc();
+        AGENT_PIPELINE_DURATION_SECONDS
+            .with_label_values(&[decision])
+            .observe(duration_secs);
+        AGENT_JUNIOR_CONFIDENCE.with_label_values(&[decision]).observe(confidence);
+    }
+
+    /// Record individual agent call
+    pub fn record_agent_call(agent: &str, ok: bool) {
+        let status = if ok { "ok" } else { "error" };
+        AGENT_CALLS_TOTAL.with_label_values(&[agent, status]).inc();
+    }
+
+    /// Record Senior → Architect escalation
+    pub fn record_escalation(risk_level: &str) {
+        AGENT_ESCALATIONS_TOTAL.with_label_values(&[risk_level]).inc();
+    }
+
+    /// Record NATS publish attempt
+    pub fn record_nats_publish(subject: &str, ok: bool) {
+        let status = if ok { "ok" } else { "error" };
+        NATS_PUBLISHED_TOTAL.with_label_values(&[subject, status]).inc();
+    }
+
+    /// Record Merkle chain insert (from NATS echo or direct call)
+    pub fn record_ledger_insert(decision: &str) {
+        LEDGER_CHAIN_INSERTS_TOTAL.with_label_values(&[decision]).inc();
+    }
 }
 
 #[cfg(test)]
@@ -379,5 +474,62 @@ mod tests {
         assert!(result.is_ok());
         let metrics = result.unwrap();
         assert!(metrics.contains("neoland_http_requests_total"));
+    }
+
+    #[test]
+    fn test_pipeline_metrics_registration() {
+        let _ = &*AGENT_PIPELINE_TOTAL;
+        let _ = &*AGENT_PIPELINE_DURATION_SECONDS;
+        let _ = &*AGENT_CALLS_TOTAL;
+        let _ = &*AGENT_ESCALATIONS_TOTAL;
+        let _ = &*AGENT_JUNIOR_CONFIDENCE;
+        let _ = &*NATS_PUBLISHED_TOTAL;
+        let _ = &*LEDGER_CHAIN_INSERTS_TOTAL;
+    }
+
+    #[test]
+    fn test_record_pipeline_completed() {
+        utils::record_pipeline_completed("accepted", 3.5, 0.82);
+        utils::record_pipeline_completed("rejected", 1.2, 0.31);
+        let result = render_metrics().unwrap();
+        assert!(result.contains("neoland_agent_pipeline_total"));
+        assert!(result.contains("neoland_agent_pipeline_duration_seconds"));
+        assert!(result.contains("neoland_agent_junior_confidence"));
+    }
+
+    #[test]
+    fn test_record_agent_calls() {
+        utils::record_agent_call("junior", true);
+        utils::record_agent_call("senior", true);
+        utils::record_agent_call("architect", true);
+        utils::record_agent_call("tech_leader", true);
+        utils::record_agent_call("junior", false);
+        let result = render_metrics().unwrap();
+        assert!(result.contains("neoland_agent_calls_total"));
+    }
+
+    #[test]
+    fn test_record_escalation() {
+        utils::record_escalation("high");
+        utils::record_escalation("critical");
+        let result = render_metrics().unwrap();
+        assert!(result.contains("neoland_agent_escalations_total"));
+    }
+
+    #[test]
+    fn test_record_nats_publish() {
+        utils::record_nats_publish("neoland.task.completed.v1", true);
+        utils::record_nats_publish("neoland.pipeline.output.v1", true);
+        utils::record_nats_publish("neoland.task.escalated.v1", false);
+        let result = render_metrics().unwrap();
+        assert!(result.contains("neoland_nats_published_total"));
+    }
+
+    #[test]
+    fn test_record_ledger_insert() {
+        utils::record_ledger_insert("accepted");
+        utils::record_ledger_insert("rejected");
+        let result = render_metrics().unwrap();
+        assert!(result.contains("neoland_ledger_chain_inserts_total"));
     }
 }
