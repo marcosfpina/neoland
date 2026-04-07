@@ -172,6 +172,8 @@ Cada decisão do Tech-Leader gera um arquivo JSON em `/var/lib/neoland/checkpoin
 | `NEOLAND_CHECKPOINT_DIR` | `/var/lib/neoland/checkpoints/adr` | Diretório dos ADRs |
 | `NEOLAND_PIPELINE_PORT` | `8001` | Porta do FastAPI |
 | `NEOLAND_AGENTS_DSPY_URL` | `http://localhost:8001` | URL do pipeline Python (Rust) |
+| `NEOLAND_SHM_PATH` | `/run/neoland/agent-flags.shm` | Arquivo mmap IPC (Ciclo 1 Fase A) |
+| `NEOLAND_NATS_URL` | — (desabilitado) | URL do NATS — define também `nats.enabled = true` (Ciclo 1 Fase B) |
 
 ## Fases do Projeto (Ciclo 0 — fechado 2026-04-07)
 
@@ -181,17 +183,35 @@ Cada decisão do Tech-Leader gera um arquivo JSON em `/var/lib/neoland/checkpoin
 | 2 — Python Pipeline | ✅ | 4 módulos DSPy, orchestrator, checkpoint, RAG, FastAPI |
 | 3 — Rust Control Plane | ✅ | client, session, escalation, orchestrator, mods em config/lib/audit |
 | 3b — Rotas HTTP | ✅ | POST /v1/agents/task, GET /v1/agents/session/:id, GET /v1/agents/health |
-| 4 — NixOS Modules | ⏳ | control-plane.nix, dspy-pipeline.nix, agent-config.nix |
+| 4 — NixOS Modules | ✅ | control-plane.nix (shmPath + natsUrl), dspy-pipeline.nix (shmPath), ledger-subscriber.nix (secp256k1 + hardening) |
 | 5 — Testes Rust | ✅ | agent_contract_test (9), agent_session_test (4), agent_integration_test (4) |
 
-## Ciclo 1 (próximo)
+## Ciclo 1 ✅ (fechado 2026-04-07)
 
-| Fase | Descrição |
-|------|-----------|
-| A — mmap IPC | `src/agents/mmap.rs` + `flags.rs` — IPC zero-copy intra-host |
-| B — NATS | Publisher no control plane via spectre-events |
-| C — adr-ledger | Subscriber NATS → sign secp256k1 → Merkle chain |
-| D — Phantom | NATS scan em outputs do pipeline |
+| Fase | Status | Descrição |
+|------|--------|-----------|
+| A — mmap IPC | ✅ | `src/agents/flags.rs` + `mmap.rs` + `ipc/flags.py` — IPC zero-copy intra-host (13 testes) |
+| B — NATS | ✅ | `src/agents/nats.rs` — publisher via spectre-events, 5 testes unitários, `NatsConfig` + `NEOLAND_NATS_URL` |
+| C — adr-ledger | ✅ | `adr-ledger/crates/ledger-subscriber/` — `Signer` trait + `FileKeySigner` (sops) + `TrezorSigner` (stub preview) + `MerkleStore` (PG) + **JetStream** at-least-once, 15 testes |
+| D — Phantom | ✅ | `neoland.pipeline.output.v1` (neoland) + `phantom/nats/neoland_scanner.py` — sentiment + risk keywords → `phantom.pipeline.scan.v1` |
+| NixOS Modules | ✅ | `ledger-subscriber.nix` + `control-plane.nix` (shmPath/natsUrl) + `dspy-pipeline.nix` (shmPath) |
+| JetStream | ✅ | `jetstream.rs` — stream `NEOLAND_EVENTS`, pull consumer `ledger-sub` (durable), explicit ack, max_deliver=5, 7d retention |
+
+### mmap IPC (Fase A)
+
+Layout binário `SharedFlags` (64 bytes, 1 cache line, `repr(C, align(64))`):
+
+| Offset | Size | Campo |
+|--------|------|-------|
+| 0 | 1 | `pipeline_active` (AtomicBool) |
+| 1 | 1 | `escalate_to_architect` (AtomicBool) |
+| 2 | 1 | `abort_requested` (AtomicBool) |
+| 4 | 4 | `junior_confidence` (AtomicU32, f32 bits) |
+| 8 | 1 | `risk_level` (AtomicU8: 0=low…3=critical) |
+| 16 | 36 | `session_id` ([u8; 36], UUID UTF-8) |
+
+Arquivo shm criado pelo control plane em `/run/neoland/agent-flags.shm` na inicialização.
+Python lê/escreve via `AgentFlags` em `agents/neoland_agents/ipc/flags.py`.
 
 ## Problemas Conhecidos
 

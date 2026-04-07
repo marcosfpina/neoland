@@ -1,8 +1,21 @@
 # NEOLAND Production Readiness Progress
 
 **Last Updated**: 2026-04-07
-**Overall Progress**: 75% — Ciclo 0 completo
-**Production Readiness Score**: 75/100
+**Overall Progress**: 96% — Ciclo 1 completo + JetStream + NixOS modules entregues
+**Production Readiness Score**: 82/100
+
+## Ciclo 1 — IPC + NATS + adr-ledger + Phantom ✅
+
+| Fase | Status | Entregável |
+|------|--------|-----------|
+| A — mmap IPC | ✅ | `flags.rs` + `mmap.rs` + `ipc/flags.py` — 13 testes, layout 64 bytes 1 cache line |
+| B — NATS publisher | ✅ | `src/agents/nats.rs` — publisher via spectre-events, `neoland.task.completed.v1` + `neoland.task.escalated.v1`, 5 testes |
+| C — adr-ledger | ✅ | `adr-ledger/crates/ledger-subscriber/` — `Signer` trait + `FileKeySigner` (sops) + `TrezorSigner` (stub) + `MerkleStore` (PG) + JetStream subscriber at-least-once, migration 003, 15 testes |
+| D — Phantom | ✅ | `neoland.pipeline.output.v1` → `phantom/nats/neoland_scanner.py` → `phantom.pipeline.scan.v1` (sentiment VADER + risk keywords) |
+| NixOS Modules | ✅ | `control-plane.nix` + `dspy-pipeline.nix` + `ledger-subscriber.nix` — systemd hardened, sops-nix secrets |
+| JetStream upgrade | ✅ | `jetstream.rs` — stream `NEOLAND_EVENTS`, pull consumer `ledger-sub`, explicit ack, at-least-once, max_deliver=5 |
+
+---
 
 ## Ciclo 0 — Core funcionando ✅ (2026-04-07)
 
@@ -19,8 +32,6 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 | Testes de integração (4 testes, requer tudo) | ✅ |
 | Python 3.13 no devShell | ✅ |
 | ADR-019 documentado | ✅ |
-
-**Próximo**: Ciclo 1 — mmap IPC + NATS via spectre-events + adr-ledger subscriber
 
 ---
 
@@ -342,8 +353,8 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ## Contributors
 
-- **Architecture & Implementation**: Claude Sonnet 4.5 + Human
-- **Code Review**: Production Readiness Team
+- **Architecture & Implementation**: Claude Sonnet 4.5 + marcosfpina
+- **Code Review**: Production Readiness Team && VoidNxLabs Team
 - **Testing**: Automated CI/CD + Manual validation
 
 ---
