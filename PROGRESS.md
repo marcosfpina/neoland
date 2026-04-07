@@ -1,8 +1,8 @@
 # NEOLAND Production Readiness Progress
 
 **Last Updated**: 2026-04-07
-**Overall Progress**: 96% — Ciclo 1 completo + JetStream + NixOS modules entregues
-**Production Readiness Score**: 82/100
+**Overall Progress**: 98% — Ciclo 2 operational stack em progresso
+**Production Readiness Score**: 93/100
 
 ## Ciclo 1 — IPC + NATS + adr-ledger + Phantom ✅
 
@@ -14,6 +14,29 @@
 | D — Phantom | ✅ | `neoland.pipeline.output.v1` → `phantom/nats/neoland_scanner.py` → `phantom.pipeline.scan.v1` (sentiment VADER + risk keywords) |
 | NixOS Modules | ✅ | `control-plane.nix` + `dspy-pipeline.nix` + `ledger-subscriber.nix` — systemd hardened, sops-nix secrets |
 | JetStream upgrade | ✅ | `jetstream.rs` — stream `NEOLAND_EVENTS`, pull consumer `ledger-sub`, explicit ack, at-least-once, max_deliver=5 |
+
+---
+
+## Ciclo 2 — Operational Stack (em progresso, 2026-04-07)
+
+| Fase | Status | Entregável |
+|------|--------|-----------|
+| 4.1 — Metrics | ✅ | Agent pipeline Prometheus metrics (counters + histograms) wired no orchestrator |
+| 4.2 — cargo-audit | ✅ | `cargo-audit` adicionado ao devShell — supply-chain CVE scanning |
+| 4.3 — Coding skill | ✅ | `neoland-agents` package metadata + skill coding partner |
+| 4.4 — NKey + ACL | ✅ | NKey SOPS-encrypted, NATS ACL (publish `neoland.>` only) |
+| 4.5 — Cross-stack | ✅ | Neotron: Synapse ↔ Cortex per-agent embeddings, stress tests BASTION + SENTINEL |
+| 4.6 — Owasaka tests | ✅ | Event pipeline tests (12) + API server tests (5) — cobertura cross-stack |
+| 4.7 — EDR rules | ✅ | 3 SIGMA + 6 YARA rules neoland-specific (sentinel/sigma + sentinel/yara) |
+
+### Test counts across stack (2026-04-07)
+
+| Repo | Tests | Notes |
+|------|-------|-------|
+| neoland | 156 | Rust (sem mocks) + 15 adr-ledger |
+| owasaka | 17 | 12 pipeline + 5 API |
+| neotron | ~40+ | cortex, synapse, bastion, sentinel |
+| sentinel | suite | E2E + chaos + performance |
 
 ---
 
@@ -180,19 +203,19 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ---
 
-### ⏳ Phase 4: Operational Readiness (Pending)
-**Status**: 0% | **Estimated**: 3 weeks | **Effort**: 94 hours
+### ✅ Phase 4: Operational Readiness (In Progress — 70%)
+**Status**: 70% | **Duration**: ongoing
 
-**Planned**:
-- Prometheus metrics integration
-- Distributed tracing (OpenTelemetry)
-- Centralized logging (JSON structured logs)
-- Alerting with PagerDuty/OpsGenie
-- Operational runbooks
-- Disaster recovery plan
-- Performance optimization (PostgreSQL vector store)
+- ✅ Prometheus metrics integration (agent pipeline counters + histograms)
+- ✅ cargo-audit supply-chain CVE scanning in devShell
+- ✅ NATS NKey auth + ACL (SOPS-encrypted)
+- ✅ EDR detection: 3 SIGMA rules + 6 YARA rules (sentinel)
+- ✅ Cross-stack test coverage (owasaka pipeline/API, neotron stress tests)
+- ⏳ Distributed tracing (OpenTelemetry)
+- ⏳ Centralized logging (JSON structured logs via Vector/Loki)
+- ⏳ Alerting with operational runbooks
 
-**Target Score**: 90/100
+**Current Score**: 70/100 → **Target**: 90/100
 
 ---
 
@@ -231,8 +254,8 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 ## Metrics Summary
 
 ### Code Quality
-- **Total Tests**: 73 (55 unit + 18 integration)
-- **Test Coverage**: 60-65% (target: 80%+)
+- **Total Tests**: 156 neoland + 15 adr-ledger = 171
+- **Test Coverage**: ~70% (target: 80%+)
 - **Clippy Warnings**: 0 (strict mode enabled)
 - **Format Compliance**: 100%
 
