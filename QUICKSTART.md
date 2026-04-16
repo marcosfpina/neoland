@@ -215,33 +215,30 @@ Rebuild: `cargo build --release`
 
 ### System Service
 
-Add to `configuration.nix`:
+Import the bundled module into your NixOS config:
 
 ```nix
-imports = [ ./modules/applications/neoland.nix ];
+imports = [ /home/kernelcore/master/neoland/modules/applications/neoland.nix ];
 
 services.neoland = {
   enable = true;
   grpcPort = 50051;
   restPort = 3001;
+  openFirewall = true;
+  environmentFile = "/run/secrets/neoland.env";
 };
 ```
 
 Rebuild: `sudo nixos-rebuild switch`
 
-### Hyprland Scratchpad
+Use the environment file for deployment secrets such as:
 
-Included in module config:
-
-- **Keybind**: `Super+N` toggles scratchpad
-- **Window Rules**: Float, center, 1400x900, 95% opacity
-
-### Agent Hub Launcher
-
-Access via Wofi menu (configured in `agent-hub.nix`):
-
-- Select "󰜈 Neoland - AI Agent"
-- Client launches in Alacritty terminal
+- `DATABASE_URL`
+- `NEOLAND_ADMIN_API_KEY`
+- `NEOLAND_USER_API_KEY`
+- `NEOLAND_READONLY_API_KEY`
+- `VAULT_ADDR`
+- `VAULT_TOKEN`
 
 ---
 
@@ -299,7 +296,7 @@ neoland restart
 
 - Read `ARCHITECTURE.md` for technical details
 - Explore integration points (`ml-offload-api`, `securellm-bridge`)
-- Check NixOS module: `/etc/nixos/modules/applications/neoland.nix`
+- Check the bundled NixOS module: `modules/applications/neoland.nix`
 
 ---
 

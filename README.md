@@ -176,18 +176,25 @@ cargo build --bin neoland --release
 
 ### NixOS Integration
 
-```javascript
-# /etc/nixos/configuration.nix
-imports = [ ./modules/applications/neoland.nix ];
+```nix
+# configuration.nix
+imports = [ /home/kernelcore/master/neoland/modules/applications/neoland.nix ];
 
-services.neoland.enable = true;
+services.neoland = {
+  enable = true;
+  openFirewall = true;
+  environmentFile = "/run/secrets/neoland.env";
+};
 ```
 
-This enables:
+The module configures:
 
-- Hyprland scratchpad (Super+N toggle)
-- Agent Hub launcher integration
-- Declarative window rules
+- `systemd.services.neoland` with `mkIf cfg.enable`
+- system-managed state, cache, runtime, and log directories
+- `AUDIT_LOG_PATH`, DSPy URL, and server port wiring via Nix config
+- `environmentFile` for secrets like `DATABASE_URL` and API keys
+
+If you vendor the module into your own system config repo, switch the import to a relative path.
 
 ---
 

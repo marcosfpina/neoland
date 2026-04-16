@@ -171,34 +171,74 @@ impl Config {
 
     /// Apply env var overrides (NEOLAND_* prefix)
     fn apply_env_overrides(&mut self) {
-        if let Ok(v) = std::env::var("NEOLAND_GRPC_PORT") {
+        self.apply_env_overrides_from(|key| std::env::var(key).ok());
+    }
+
+    fn apply_env_overrides_from<F>(&mut self, get_env: F)
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        if let Some(v) = get_env("NEOLAND_GRPC_PORT") {
             if let Ok(p) = v.parse() {
                 self.server.grpc_port = p;
             }
         }
-        if let Ok(v) = std::env::var("NEOLAND_REST_PORT") {
+        if let Some(v) = get_env("NEOLAND_REST_PORT") {
             if let Ok(p) = v.parse() {
                 self.server.rest_port = p;
             }
         }
-        if let Ok(v) = std::env::var("NEOLAND_SERVER_URL") {
+        if let Some(v) = get_env("NEOLAND_SERVER_URL") {
             self.client.server_url = v;
         }
-        if let Ok(v) = std::env::var("NEOLAND_ML_API_URL") {
+        if let Some(v) = get_env("NEOLAND_ML_API_URL") {
             self.client.ml_api_url = v;
         }
-        if let Ok(v) = std::env::var("NEOLAND_INFERENCE_PROVIDER") {
+        if let Some(v) = get_env("NEOLAND_INFERENCE_PROVIDER") {
             self.inference.provider = v;
         }
-        if let Ok(v) = std::env::var("VAULT_ADDR") {
+        if let Some(v) = get_env("VAULT_ADDR") {
             self.vault.addr = v;
         }
-        if let Ok(v) = std::env::var("NEOLAND_SHM_PATH") {
+        if let Some(v) = get_env("NEOLAND_DSPY_URL") {
+            self.agents.dspy_url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_PIPELINE_TIMEOUT_SECS") {
+            if let Ok(timeout) = v.parse() {
+                self.agents.pipeline_timeout_secs = timeout;
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_JUNIOR_CONFIDENCE_WARN_THRESHOLD") {
+            if let Ok(threshold) = v.parse() {
+                self.agents.junior_confidence_warn_threshold = threshold;
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_TECH_LEADER_DEFER_TTL_HOURS") {
+            if let Ok(ttl) = v.parse() {
+                self.agents.tech_leader_defer_ttl_hours = ttl;
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_CHECKPOINT_DIR") {
+            self.agents.checkpoint_dir = v;
+        }
+        if let Some(v) = get_env("NEOLAND_RAG_TOP_K") {
+            if let Ok(top_k) = v.parse() {
+                self.agents.rag_top_k = top_k;
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_SHM_PATH") {
             self.mmap.shm_path = v;
         }
-        if let Ok(v) = std::env::var("NEOLAND_NATS_URL") {
+        if let Some(v) = get_env("NEOLAND_NATS_URL") {
             self.nats.url = v;
             self.nats.enabled = true;
+        }
+        if let Some(v) = get_env("NEOLAND_NATS_ENABLED") {
+            match v.to_ascii_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" => self.nats.enabled = true,
+                "0" | "false" | "no" | "off" => self.nats.enabled = false,
+                _ => {},
+            }
         }
     }
 }
@@ -249,5 +289,27 @@ grpc_port = 9999
         assert_eq!(parsed.server.grpc_port, 9999);
         assert_eq!(parsed.server.rest_port, 3001); // default
         assert_eq!(parsed.client.server_url, "http://[::1]:50051"); // default
+    }
+
+    #[test]
+    fn test_apply_env_overrides_from_updates_agent_and_nats_settings() {
+        use std::collections::HashMap;
+
+        let env = HashMap::from([
+            ("NEOLAND_DSPY_URL", "http://127.0.0.1:8100".to_string()),
+            ("NEOLAND_PIPELINE_TIMEOUT_SECS", "240".to_string()),
+            ("NEOLAND_CHECKPOINT_DIR", "/srv/neoland/checkpoints".to_string()),
+            ("NEOLAND_RAG_TOP_K", "11".to_string()),
+            ("NEOLAND_NATS_ENABLED", "true".to_string()),
+        ]);
+
+        let mut cfg = Config::default();
+        cfg.apply_env_overrides_from(|key| env.get(key).cloned());
+
+        assert_eq!(cfg.agents.dspy_url, "http://127.0.0.1:8100");
+        assert_eq!(cfg.agents.pipeline_timeout_secs, 240);
+        assert_eq!(cfg.agents.checkpoint_dir, "/srv/neoland/checkpoints");
+        assert_eq!(cfg.agents.rag_top_k, 11);
+        assert!(cfg.nats.enabled);
     }
 }
