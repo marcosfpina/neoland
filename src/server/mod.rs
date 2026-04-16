@@ -48,6 +48,8 @@ pub mod llamachat {
     tonic::include_proto!("llamachat");
 }
 
+const DEFAULT_AUDIT_LOG_PATH: &str = "/var/log/neoland/audit.log";
+
 // REST Data Models (OpenAI compatible subset)
 #[derive(Deserialize)]
 struct RestChatRequest {
@@ -990,7 +992,80 @@ async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
     }
 }
 
-pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn std::error::Error>> {
+fn user_audit_log_path_from_env(xdg_state_home: Option<&str>, home: Option<&str>) -> String {
+    if let Some(xdg_state_home) = xdg_state_home {
+        let base = xdg_state_home.trim_end_matches('/');
+        return format!("{base}/neoland/audit.log");
+    }
+
+    if let Some(home) = home {
+        let base = home.trim_end_matches('/');
+        return format!("{base}/.local/state/neoland/audit.log");
+    }
+
+    "/tmp/neoland/audit.log".to_string()
+}
+
+fn user_audit_log_path() -> String {
+    let xdg_state_home = std::env::var("XDG_STATE_HOME").ok();
+    let home = std::env::var("HOME").ok();
+    user_audit_log_path_from_env(xdg_state_home.as_deref(), home.as_deref())
+}
+
+fn fallback_audit_log_paths() -> Vec<String> {
+    let user_path = user_audit_log_path();
+    if user_path == "/tmp/neoland/audit.log" {
+        vec![user_path]
+    } else {
+        vec![user_path, "/tmp/neoland/audit.log".to_string()]
+    }
+}
+
+fn init_audit_logger() -> anyhow::Result<(AuditLogger, String)> {
+    if let Ok(audit_log_path) = std::env::var("AUDIT_LOG_PATH") {
+        let audit_logger = AuditLogger::new(&audit_log_path)?;
+        return Ok((audit_logger, audit_log_path));
+    }
+
+    match AuditLogger::new(DEFAULT_AUDIT_LOG_PATH) {
+        Ok(audit_logger) => Ok((audit_logger, DEFAULT_AUDIT_LOG_PATH.to_string())),
+        Err(err)
+            if err
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied) =>
+        {
+            let mut last_fallback_error = None;
+
+            for fallback_path in fallback_audit_log_paths() {
+                match AuditLogger::new(&fallback_path) {
+                    Ok(audit_logger) => {
+                        tracing::warn!(
+                            default_path = DEFAULT_AUDIT_LOG_PATH,
+                            fallback_path = %fallback_path,
+                            "Default audit log path is not writable; using a writable fallback"
+                        );
+                        return Ok((audit_logger, fallback_path));
+                    },
+                    Err(fallback_err) => {
+                        tracing::warn!(
+                            fallback_path = %fallback_path,
+                            error = %fallback_err,
+                            "Audit log fallback path unavailable"
+                        );
+                        last_fallback_error = Some(fallback_err);
+                    },
+                }
+            }
+
+            Err(last_fallback_error.unwrap_or_else(|| {
+                anyhow::anyhow!("No writable audit log path available after fallback attempts")
+            }))
+        },
+        Err(err) => Err(err),
+    }
+}
+
+pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
     use tracing::info;
 
     let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
@@ -1004,7 +1079,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     {
         let mut vs = vector_store
             .lock()
-            .map_err(|e| format!("VectorStore mutex poisoned during init: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("VectorStore mutex poisoned during init: {}", e))?;
         let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
     }
 
@@ -1024,9 +1099,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> Result<(), Box<dyn st
     info!("🔐 Authentication manager initialized");
 
     // Initialize audit logger (Phase 1.3)
-    let audit_log_path = std::env::var("AUDIT_LOG_PATH")
-        .unwrap_or_else(|_| "/var/log/neoland/audit.log".to_string());
-    let audit_logger = Arc::new(AuditLogger::new(&audit_log_path)?);
+    let (audit_logger, audit_log_path) = init_audit_logger()?;
+    let audit_logger = Arc::new(audit_logger);
 
     // Set up alert handler
     audit_logger.set_alert_handler(Box::new(ConsoleAlertHandler)).await;
@@ -1183,6 +1257,24 @@ mod tests {
     use super::*;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_user_audit_log_path_prefers_xdg_state_home() {
+        let path = user_audit_log_path_from_env(Some("/tmp/xdg-state"), Some("/tmp/home"));
+        assert_eq!(path, "/tmp/xdg-state/neoland/audit.log");
+    }
+
+    #[test]
+    fn test_user_audit_log_path_uses_home_when_xdg_missing() {
+        let path = user_audit_log_path_from_env(None, Some("/tmp/home"));
+        assert_eq!(path, "/tmp/home/.local/state/neoland/audit.log");
+    }
+
+    #[test]
+    fn test_user_audit_log_path_falls_back_to_tmp_without_env() {
+        let path = user_audit_log_path_from_env(None, None);
+        assert_eq!(path, "/tmp/neoland/audit.log");
+    }
 
     /// Build a minimal AppState for testing (no embedding model, no persistent store).
     ///
