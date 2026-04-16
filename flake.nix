@@ -26,6 +26,106 @@
           extensions = [ "rust-src" ];
         };
 
+        mkNeolandCommand =
+          {
+            name,
+            subcommand ? null,
+          }:
+          pkgs.writeShellApplication {
+            inherit name;
+            runtimeInputs = with pkgs; [
+              coreutils
+              gitMinimal
+              sops
+              rustToolchain
+            ];
+            text =
+              ''
+                project_root="''${NEOLAND_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+                script="$project_root/scripts/neoland-run.sh"
+
+                if [ ! -f "$script" ]; then
+                  echo "neoland wrapper could not find $script" >&2
+                  exit 1
+                fi
+              ''
+              + (
+                if subcommand == null then
+                  ''
+                    exec ${pkgs.bash}/bin/bash "$script" "$@"
+                  ''
+                else
+                  ''
+                    exec ${pkgs.bash}/bin/bash "$script" ${pkgs.lib.escapeShellArg subcommand} "$@"
+                  ''
+              );
+          };
+
+        neolandCmd = mkNeolandCommand {
+          name = "neoland";
+        };
+
+        neolandServerCmd = mkNeolandCommand {
+          name = "neoland-server";
+          subcommand = "server";
+        };
+
+        neolandClientCmd = mkNeolandCommand {
+          name = "neoland-client";
+          subcommand = "client";
+        };
+
+        neolandTestCmd = mkNeolandCommand {
+          name = "neoland-test";
+          subcommand = "test";
+        };
+
+        neolandDoctorCmd = mkNeolandCommand {
+          name = "neoland-doctor";
+          subcommand = "doctor";
+        };
+
+        neolandRestartCmd = mkNeolandCommand {
+          name = "neoland-restart";
+          subcommand = "restart";
+        };
+
+        nsrvCmd = mkNeolandCommand {
+          name = "nsrv";
+          subcommand = "server";
+        };
+
+        ncliCmd = mkNeolandCommand {
+          name = "ncli";
+          subcommand = "client";
+        };
+
+        neolandSecretsCmd = pkgs.writeShellApplication {
+          name = "neoland-secrets";
+          runtimeInputs = with pkgs; [
+            coreutils
+            gitMinimal
+            sops
+          ];
+          text = ''
+            project_root="''${NEOLAND_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+            sops_env_file="''${NEOLAND_SOPS_ENV_FILE:-$project_root/secrets/neoland.sops.env}"
+            exec sops "$sops_env_file" "$@"
+          '';
+        };
+
+        neolandCommandPackages = [
+          neolandCmd
+          neolandServerCmd
+          neolandClientCmd
+          neolandTestCmd
+          neolandDoctorCmd
+          neolandRestartCmd
+          nsrvCmd
+          ncliCmd
+          neolandSecretsCmd
+        ];
+
         frontendInstallCmd = pkgs.writeShellApplication {
           name = "frontend-install";
           runtimeInputs = with pkgs; [ nodejs_24 ];
@@ -222,7 +322,7 @@
             nodejs_24
             python313
             poetry
-          ] ++ frontendCommandPackages;
+          ] ++ frontendCommandPackages ++ neolandCommandPackages;
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
@@ -237,11 +337,6 @@
             export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
             export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$NEOLAND_CONTROL_PLANE_URL}"
 
-            neoland-server() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
-            neoland-client() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
-            nsrv() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
-            ncli() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
-            neoland-secrets() { sops "$NEOLAND_PROJECT_ROOT/secrets/neoland.sops.env"; }
             frontend-install() { command frontend-install "$@"; }
             frontend-dev() { command frontend-dev "$@"; }
             frontend-build() { command frontend-build "$@"; }
@@ -257,7 +352,7 @@
             nfclean() { frontend-clean "$@"; }
 
             # Python agents via Poetry (padrão Cerebro)
-            if [ ! -f "$NEOLAND_PROJECT_ROOT/agents/.nix-installed-agents" ]; then
+            if [[ $- == *i* ]] && [ ! -f "$NEOLAND_PROJECT_ROOT/agents/.nix-installed-agents" ]; then
               echo "→ Syncing Neoland agents dependencies via Poetry..."
               (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry install --no-interaction 2>/dev/null || true)
               touch "$NEOLAND_PROJECT_ROOT/agents/.nix-installed-agents"
@@ -267,54 +362,58 @@
             agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m contract -v "$@"); }
             agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m integration -v "$@"); }
 
-            echo ""
-            echo "┌─────────────────────────────────────────────────────────────────┐"
-            echo "│  🚀 Neoland Development Environment (v0.1.0)                   │"
-            echo "│  AI Agent Platform | Security-First Architecture             │"
-            echo "└─────────────────────────────────────────────────────────────────┘"
-            echo ""
-            echo "📦 Quick Commands:"
-            echo "  cargo check              # Validate compilation"
-            echo "  cargo build --release    # Build optimized binary"
-            echo "  cargo test               # Run test suite"
-            echo ""
-            echo "🔧 Development:"
-            echo "  neoland-server           # Start gRPC + REST server"
-            echo "  neoland-client           # Launch TUI client"
-            echo "  nsrv / ncli              # Short functions for server/client"
-            echo ""
-            echo "🌐 Frontend:"
-            echo "  frontend-install         # Install matrix/apps/frontend dependencies"
-            echo "  frontend-dev             # Run Next.js on $NEOLAND_FRONTEND_URL"
-            echo "  frontend-build           # Production build for the Neoland web surface"
-            echo "  frontend-start           # Start production Next.js server"
-            echo "  frontend-lint            # Lint current frontend scope"
-            echo "  frontend-clean           # Remove .next when Next dev cache gets stuck"
-            echo "  frontend-health          # Query /api/health for the frontend"
-            echo "  frontend-stack           # Check frontend + control plane + DSPy reachability"
-            echo "  nfdev / nfbuild / nflint / nfhealth / nfclean"
-            echo ""
-            echo "🔐 Secrets:"
-            echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
-            echo "  NEOLAND_SOPS_ENV_FILE    # Override the default encrypted dotenv path"
-            echo ""
-            echo "📊 Validation:"
-            echo "  nix flake check          # Validate flake"
-            echo "  cargo clippy             # Linter checks"
-            echo ""
-            echo "📚 Documentation:"
-            echo "  docs/ADR.md              # Architecture Decision Records"
-            echo "  README.md                # Project overview + roadmap"
-            echo ""
-            echo "🤖 Agents (DSPy pipeline):"
-            echo "  agents-start             # Start DSPy pipeline (:8001)"
-            echo "  agents-test-contract     # Run schema tests (sem LLM)"
-            echo "  agents-test-integration  # Run integration tests (requer LLM_API_KEY)"
-            echo ""
-            echo "💡 Tip: Set environment variables for SecureLLM:"
-            echo "  export SECURELLM_PROVIDER=deepseek"
-            echo "  export DEEPSEEK_API_KEY=sk-xxx"
-            echo ""
+            if [[ $- == *i* ]]; then
+              echo ""
+              echo "┌─────────────────────────────────────────────────────────────────┐"
+              echo "│  🚀 Neoland Development Environment (v0.1.0)                   │"
+              echo "│  AI Agent Platform | Security-First Architecture             │"
+              echo "└─────────────────────────────────────────────────────────────────┘"
+              echo ""
+              echo "📦 Quick Commands:"
+              echo "  cargo check              # Validate compilation"
+              echo "  cargo build --release    # Build optimized binary"
+              echo "  cargo test               # Run test suite"
+              echo ""
+              echo "🔧 Development:"
+              echo "  neoland server           # Unified CLI wrapper in the dev shell"
+              echo "  neoland-server           # Start gRPC + REST server"
+              echo "  neoland-client           # Launch TUI client"
+              echo "  neoland-test / doctor / restart"
+              echo "  nsrv / ncli              # Short server/client shortcuts"
+              echo ""
+              echo "🌐 Frontend:"
+              echo "  frontend-install         # Install matrix/apps/frontend dependencies"
+              echo "  frontend-dev             # Run Next.js on $NEOLAND_FRONTEND_URL"
+              echo "  frontend-build           # Production build for the Neoland web surface"
+              echo "  frontend-start           # Start production Next.js server"
+              echo "  frontend-lint            # Lint current frontend scope"
+              echo "  frontend-clean           # Remove .next when Next dev cache gets stuck"
+              echo "  frontend-health          # Query /api/health for the frontend"
+              echo "  frontend-stack           # Check frontend + control plane + DSPy reachability"
+              echo "  nfdev / nfbuild / nflint / nfhealth / nfclean"
+              echo ""
+              echo "🔐 Secrets:"
+              echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
+              echo "  NEOLAND_SOPS_ENV_FILE    # Override the default encrypted dotenv path"
+              echo ""
+              echo "📊 Validation:"
+              echo "  nix flake check          # Validate flake"
+              echo "  cargo clippy             # Linter checks"
+              echo ""
+              echo "📚 Documentation:"
+              echo "  docs/ADR.md              # Architecture Decision Records"
+              echo "  README.md                # Project overview + roadmap"
+              echo ""
+              echo "🤖 Agents (DSPy pipeline):"
+              echo "  agents-start             # Start DSPy pipeline (:8001)"
+              echo "  agents-test-contract     # Run schema tests (sem LLM)"
+              echo "  agents-test-integration  # Run integration tests (requer LLM_API_KEY)"
+              echo ""
+              echo "💡 Tip: Set environment variables for SecureLLM:"
+              echo "  export SECURELLM_PROVIDER=deepseek"
+              echo "  export DEEPSEEK_API_KEY=sk-xxx"
+              echo ""
+            fi
           '';
         };
       }
