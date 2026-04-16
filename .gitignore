@@ -7,3 +7,6 @@ target/
 secrets/*.env
 !secrets/*.sops.env
 secrets/.decrypted/
+agents/.venv/
+agents/.nix-installed-agents
+agents/*.egg-info/

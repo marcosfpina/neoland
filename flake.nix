@@ -26,6 +26,146 @@
           extensions = [ "rust-src" ];
         };
 
+        frontendInstallCmd = pkgs.writeShellApplication {
+          name = "frontend-install";
+          runtimeInputs = with pkgs; [ nodejs_24 ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            cd "$frontend_dir"
+            npm install "$@"
+          '';
+        };
+
+        frontendDevCmd = pkgs.writeShellApplication {
+          name = "frontend-dev";
+          runtimeInputs = with pkgs; [ nodejs_24 ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_host="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
+            frontend_port="''${NEOLAND_FRONTEND_PORT:-3006}"
+            control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            dspy_url="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+            export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$control_plane_url}"
+            export NEOLAND_CONTROL_PLANE_URL="$control_plane_url"
+            export NEOLAND_DSPY_URL="$dspy_url"
+            cd "$frontend_dir"
+            npm run dev -- --hostname "$frontend_host" --port "$frontend_port" "$@"
+          '';
+        };
+
+        frontendBuildCmd = pkgs.writeShellApplication {
+          name = "frontend-build";
+          runtimeInputs = with pkgs; [ nodejs_24 ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            dspy_url="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+            export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$control_plane_url}"
+            export NEOLAND_CONTROL_PLANE_URL="$control_plane_url"
+            export NEOLAND_DSPY_URL="$dspy_url"
+            cd "$frontend_dir"
+            npm run build "$@"
+          '';
+        };
+
+        frontendStartCmd = pkgs.writeShellApplication {
+          name = "frontend-start";
+          runtimeInputs = with pkgs; [ nodejs_24 ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_host="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
+            frontend_port="''${NEOLAND_FRONTEND_PORT:-3006}"
+            control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            dspy_url="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+            export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$control_plane_url}"
+            export NEOLAND_CONTROL_PLANE_URL="$control_plane_url"
+            export NEOLAND_DSPY_URL="$dspy_url"
+            cd "$frontend_dir"
+            npm run start -- --hostname "$frontend_host" --port "$frontend_port" "$@"
+          '';
+        };
+
+        frontendLintCmd = pkgs.writeShellApplication {
+          name = "frontend-lint";
+          runtimeInputs = with pkgs; [ nodejs_24 ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            cd "$frontend_dir"
+            npm run lint "$@"
+          '';
+        };
+
+        frontendCleanCmd = pkgs.writeShellApplication {
+          name = "frontend-clean";
+          runtimeInputs = with pkgs; [ coreutils ];
+          text = ''
+            project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            cd "$frontend_dir"
+            rm -rf .next
+            echo "cleared $frontend_dir/.next"
+          '';
+        };
+
+        frontendHealthCmd = pkgs.writeShellApplication {
+          name = "frontend-health";
+          runtimeInputs = with pkgs; [ curl jq ];
+          text = ''
+            frontend_url="''${NEOLAND_FRONTEND_URL:-http://''${NEOLAND_FRONTEND_HOST:-127.0.0.1}:''${NEOLAND_FRONTEND_PORT:-3006}}"
+            curl -fsS "$frontend_url/api/health" | jq . || {
+              echo "frontend not reachable at $frontend_url"
+              exit 1
+            }
+          '';
+        };
+
+        frontendStackCmd = pkgs.writeShellApplication {
+          name = "frontend-stack";
+          runtimeInputs = with pkgs; [ curl ];
+          text = ''
+            frontend_url="''${NEOLAND_FRONTEND_URL:-http://''${NEOLAND_FRONTEND_HOST:-127.0.0.1}:''${NEOLAND_FRONTEND_PORT:-3006}}"
+            control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            dspy_url="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+
+            echo "frontend:"
+            if curl -fsS "$frontend_url/api/health" >/dev/null 2>&1; then
+              echo "  up at $frontend_url"
+            else
+              echo "  down"
+            fi
+
+            echo "control-plane:"
+            if curl -fsS "$control_plane_url/health" >/dev/null 2>&1; then
+              echo "  up at $control_plane_url"
+            else
+              echo "  down"
+            fi
+
+            echo "dspy-pipeline:"
+            if curl -fsS "$dspy_url/health" >/dev/null 2>&1; then
+              echo "  up at $dspy_url"
+            else
+              echo "  down"
+            fi
+          '';
+        };
+
+        frontendCommandPackages = [
+          frontendInstallCmd
+          frontendDevCmd
+          frontendBuildCmd
+          frontendStartCmd
+          frontendLintCmd
+          frontendCleanCmd
+          frontendHealthCmd
+          frontendStackCmd
+        ];
+
         neolandPackage = pkgs.rustPlatform.buildRustPackage {
           pname = "neoland";
           version = "0.1.0";
@@ -76,34 +216,56 @@
             openssl
             sops
             age
+            bun
+            curl
+            jq
+            nodejs_24
             python313
-            python313Packages.pip
-          ];
+            poetry
+          ] ++ frontendCommandPackages;
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            export NEOLAND_FRONTEND_DIR="$NEOLAND_PROJECT_ROOT/matrix/apps/frontend"
+            export NEOLAND_FRONTEND_HOST="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
+            export NEOLAND_FRONTEND_PORT="''${NEOLAND_FRONTEND_PORT:-3006}"
+            export NEOLAND_FRONTEND_URL="''${NEOLAND_FRONTEND_URL:-http://$NEOLAND_FRONTEND_HOST:$NEOLAND_FRONTEND_PORT}"
+            export NEOLAND_CONTROL_PLANE_URL="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+            export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$NEOLAND_CONTROL_PLANE_URL}"
 
             neoland-server() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
             neoland-client() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
             nsrv() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" server "$@"; }
             ncli() { "$NEOLAND_PROJECT_ROOT/scripts/neoland-run.sh" client "$@"; }
             neoland-secrets() { sops "$NEOLAND_PROJECT_ROOT/secrets/neoland.sops.env"; }
+            frontend-install() { command frontend-install "$@"; }
+            frontend-dev() { command frontend-dev "$@"; }
+            frontend-build() { command frontend-build "$@"; }
+            frontend-start() { command frontend-start "$@"; }
+            frontend-lint() { command frontend-lint "$@"; }
+            frontend-health() { command frontend-health "$@"; }
+            frontend-clean() { command frontend-clean "$@"; }
+            frontend-stack() { command frontend-stack "$@"; }
+            nfdev() { frontend-dev "$@"; }
+            nfbuild() { frontend-build "$@"; }
+            nflint() { frontend-lint "$@"; }
+            nfhealth() { frontend-health "$@"; }
+            nfclean() { frontend-clean "$@"; }
 
-            # Python agents venv — recriar se não existir ou se a versão for diferente de 3.13
-            _venv_py_ver=$("$NEOLAND_PROJECT_ROOT/agents/.venv/bin/python" --version 2>/dev/null | grep -o "3\.[0-9]*" | head -1)
-            if [ ! -d "$NEOLAND_PROJECT_ROOT/agents/.venv" ] || [ "$_venv_py_ver" != "3.13" ]; then
-              echo "→ Criando venv Python 3.13 para agents/..."
-              rm -rf "$NEOLAND_PROJECT_ROOT/agents/.venv"
-              python3.13 -m venv "$NEOLAND_PROJECT_ROOT/agents/.venv"
-              "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pip" install -e "$NEOLAND_PROJECT_ROOT/agents/[dev]" -q
+            # Python agents via Poetry (padrão Cerebro)
+            if [ ! -f "$NEOLAND_PROJECT_ROOT/agents/.nix-installed-agents" ]; then
+              echo "→ Syncing Neoland agents dependencies via Poetry..."
+              (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry install --no-interaction 2>/dev/null || true)
+              touch "$NEOLAND_PROJECT_ROOT/agents/.nix-installed-agents"
+              echo "✅ Neoland agents ready!"
             fi
-            agents-start() { uvicorn neoland_agents.app:app --reload --port 8001 --app-dir "$NEOLAND_PROJECT_ROOT/agents"; }
-            agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pytest" tests/ -m contract -v "$@"); }
-            agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && "$NEOLAND_PROJECT_ROOT/agents/.venv/bin/pytest" tests/ -m integration -v "$@"); }
-            export PATH="$NEOLAND_PROJECT_ROOT/agents/.venv/bin:$PATH"
+            agents-start() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run uvicorn neoland_agents.app:app --reload --port 8001); }
+            agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m contract -v "$@"); }
+            agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m integration -v "$@"); }
 
             echo ""
             echo "┌─────────────────────────────────────────────────────────────────┐"
@@ -120,6 +282,17 @@
             echo "  neoland-server           # Start gRPC + REST server"
             echo "  neoland-client           # Launch TUI client"
             echo "  nsrv / ncli              # Short functions for server/client"
+            echo ""
+            echo "🌐 Frontend:"
+            echo "  frontend-install         # Install matrix/apps/frontend dependencies"
+            echo "  frontend-dev             # Run Next.js on $NEOLAND_FRONTEND_URL"
+            echo "  frontend-build           # Production build for the Neoland web surface"
+            echo "  frontend-start           # Start production Next.js server"
+            echo "  frontend-lint            # Lint current frontend scope"
+            echo "  frontend-clean           # Remove .next when Next dev cache gets stuck"
+            echo "  frontend-health          # Query /api/health for the frontend"
+            echo "  frontend-stack           # Check frontend + control plane + DSPy reachability"
+            echo "  nfdev / nfbuild / nflint / nfhealth / nfclean"
             echo ""
             echo "🔐 Secrets:"
             echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
