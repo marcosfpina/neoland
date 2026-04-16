@@ -161,6 +161,11 @@ nix develop
 neoland-secrets
 neoland-server
 neoland-client --ml-api-url http://localhost:9000
+neoland-doctor --json
+
+# Or run one-shot commands without opening a shell
+nix develop --command neoland-server
+nix develop --command neoland-test --json
 
 # Build release binary
 cargo build --bin neoland --release
@@ -194,8 +199,9 @@ This enables:
 # Start gRPC (50051) + REST (3001) server
 neoland server
 
-# In nix develop, the alias is shorter
+# In nix develop, the shortcut is a real executable too
 neoland-server
+nix develop --command neoland-server
 
 # Custom ports
 neoland server --grpc-port 50052 --rest-port 3002
@@ -207,8 +213,9 @@ neoland server --grpc-port 50052 --rest-port 3002
 # Connect to local server
 neoland client
 
-# In nix develop, the alias is shorter
+# In nix develop, the shortcut is a real executable too
 neoland-client
+nix develop --command neoland-client --ml-api-url http://localhost:8080
 
 # Custom endpoints
 neoland client \
@@ -239,6 +246,8 @@ neoland test
 # Machine-readable output for scripts/CI
 neoland test --json
 neoland doctor --json
+nix develop --command neoland-test --json
+nix develop --command neoland-doctor --json
 ```
 
 ---

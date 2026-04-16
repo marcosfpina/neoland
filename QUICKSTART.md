@@ -22,10 +22,15 @@ Get up and running with Neoland in under 5 minutes.
 cd /home/kernelcore/master/neoland
 nix develop
 
-# Dev-shell aliases
+# Dev-shell commands
 neoland-secrets
 neoland-server
 neoland-client --ml-api-url http://localhost:9000
+neoland-doctor --json
+
+# One-shot commands also work
+nix develop --command neoland-server
+nix develop --command neoland-test --json
 ```
 
 ### Option 2: Build Release Binary
@@ -45,8 +50,9 @@ nix develop --command cargo build --bin neoland --release
 # Default ports: gRPC=50051, REST=3001
 neoland server
 
-# In nix develop, you can use the alias
+# In nix develop, you can use the shortcut command
 neoland-server
+nix develop --command neoland-server
 
 # Custom configuration
 neoland server --grpc-port 50052 --rest-port 3002 --log-level debug
@@ -66,8 +72,9 @@ The server will:
 # Connect to default local server
 neoland client
 
-# In nix develop, you can use the alias
+# In nix develop, you can use the shortcut command
 neoland-client
+nix develop --command neoland-client --ml-api-url http://localhost:9000
 
 # Custom endpoints
 neoland client \
@@ -83,7 +90,8 @@ For local encrypted secrets, edit `secrets/neoland.sops.env` with:
 neoland-secrets
 ```
 
-The `neoland-server`, `neoland-client`, `nsrv`, and `ncli` commands decrypt and
+The `neoland`, `neoland-server`, `neoland-client`, `neoland-test`,
+`neoland-doctor`, `neoland-restart`, `nsrv`, and `ncli` commands decrypt and
 load that file automatically before launch.
 
 ---

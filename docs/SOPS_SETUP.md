@@ -41,10 +41,21 @@ neoland-secrets
 Inside `nix develop`, the standard shortcuts load SOPS secrets automatically:
 
 ```bash
+neoland
 nsrv
 ncli
 neoland-server
 neoland-client
+neoland-test
+neoland-doctor
+neoland-restart
+```
+
+They are also available as one-shot commands, for example:
+
+```bash
+nix develop --command neoland-server
+nix develop --command neoland-doctor --json
 ```
 
 They call `scripts/neoland-run.sh`, which:
