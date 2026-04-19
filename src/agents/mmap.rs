@@ -1,5 +1,6 @@
 /// File-backed mmap region that exposes a [`SharedFlags`] to the Rust control
-/// plane and, concurrently, to the Python DSPy pipeline process on the same host.
+/// plane and, concurrently, to the Python DSPy pipeline process on the same
+/// host.
 ///
 /// # Lifecycle
 ///
@@ -27,7 +28,8 @@ use tracing::info;
 
 use super::flags::SharedFlags;
 
-/// A memory-mapped region backed by a file, providing access to [`SharedFlags`].
+/// A memory-mapped region backed by a file, providing access to
+/// [`SharedFlags`].
 pub struct MmapRegion {
     /// Keeps the mapping alive.
     _mmap: MmapMut,

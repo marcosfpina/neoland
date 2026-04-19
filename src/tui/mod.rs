@@ -184,7 +184,8 @@ async fn send_message_to_server(app: &mut AppState) -> Result<()> {
                 Err(grpc_err) => {
                     app.connection_status = ConnectionStatus::Offline;
                     app.add_system_message(&format!(
-                        "⚠ gRPC local [{}]: {}\n❌ Todos os backends falharam. Execute `neoland doctor` para diagnóstico.",
+                        "⚠ gRPC local [{}]: {}\n❌ Todos os backends falharam. Execute `neoland \
+                         doctor` para diagnóstico.",
                         app.server_url, grpc_err
                     ));
                 },

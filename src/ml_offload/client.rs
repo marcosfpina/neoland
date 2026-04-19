@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use reqwest::Client;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 use super::models::*;
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 pub struct MLOffloadClient {
     client: Client,

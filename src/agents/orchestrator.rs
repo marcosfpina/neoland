@@ -1,4 +1,5 @@
-//! Control plane orchestrator: wires together session, RAG, escalation, and pipeline client.
+//! Control plane orchestrator: wires together session, RAG, escalation, and
+//! pipeline client.
 
 use std::time::{Duration, Instant};
 
@@ -7,14 +8,16 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::agents::client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult};
-use crate::agents::escalation::EscalationPolicy;
-use crate::agents::nats::{
-    NatsPublisher, PipelineOutputPayload, TaskCompletedPayload, TaskEscalatedPayload,
+use crate::{
+    agents::{
+        client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult},
+        escalation::EscalationPolicy,
+        nats::{NatsPublisher, PipelineOutputPayload, TaskCompletedPayload, TaskEscalatedPayload},
+        session::SessionManager,
+    },
+    config::AgentsConfig,
+    metrics::utils as metrics,
 };
-use crate::agents::session::SessionManager;
-use crate::config::AgentsConfig;
-use crate::metrics::utils as metrics;
 
 pub struct AgentOrchestrator {
     client: AgentPipelineClient,
@@ -40,7 +43,8 @@ impl AgentOrchestrator {
         })
     }
 
-    /// Attach a NATS publisher. Called after async NATS connection is established.
+    /// Attach a NATS publisher. Called after async NATS connection is
+    /// established.
     pub fn with_nats(mut self, publisher: NatsPublisher) -> Self {
         self.nats = Some(publisher);
         self
@@ -71,7 +75,8 @@ impl AgentOrchestrator {
                 reason: "senior_escalation",
             })
             .await;
-            metrics::record_escalation("high"); // architect escalation implies high risk
+            metrics::record_escalation("high"); // architect escalation implies
+                                                // high risk
         }
 
         let request = AgentTaskRequest {

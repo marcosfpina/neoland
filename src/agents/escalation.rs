@@ -4,7 +4,8 @@ use crate::agents::client::AgentStage;
 
 #[derive(Debug, Clone)]
 pub struct EscalationPolicy {
-    /// Below this confidence, Junior output is flagged but pipeline continues normally.
+    /// Below this confidence, Junior output is flagged but pipeline continues
+    /// normally.
     pub junior_confidence_warn_threshold: f64,
     /// Hours a 'defer' decision is valid before re-escalating.
     pub defer_ttl_hours: u32,

@@ -54,7 +54,8 @@ impl SecureLLMProxy {
             },
             "llamacpp" => {
                 // LlamaCPP runs locally, no API key needed
-                // Default port: 8081, can be configured via api_key param (e.g., "8081:model-name")
+                // Default port: 8081, can be configured via api_key param (e.g.,
+                // "8081:model-name")
                 let (port, model) = if api_key.contains(':') {
                     let parts: Vec<&str> = api_key.split(':').collect();
                     let port = parts[0].parse().unwrap_or(8081);

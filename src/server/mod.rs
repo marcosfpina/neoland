@@ -18,9 +18,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tracing::Instrument; // Phase 4.2: For span instrumentation
-                         // Integration dependencies (currently used for demonstration)
-                         // use securellm_core;
+// Integration dependencies (currently used for demonstration)
+// use securellm_core;
 use intelagent_core::TaskId;
 use llamachat::{
     llama_service_server::{LlamaService, LlamaServiceServer},
@@ -31,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
+use tracing::Instrument; // Phase 4.2: For span instrumentation
 
 use crate::{
     agents::orchestrator::AgentOrchestrator,
@@ -150,15 +150,17 @@ impl RateLimiter {
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,
-    /// Optional pgvector-backed persistent store (set when DATABASE_URL is configured).
-    /// When present, gRPC search uses it as primary and add_document mirrors to it.
+    /// Optional pgvector-backed persistent store (set when DATABASE_URL is
+    /// configured). When present, gRPC search uses it as primary and
+    /// add_document mirrors to it.
     persistent_store: Option<Arc<PersistentVectorStore>>,
     auth_manager: Arc<AuthManager>,
     audit_logger: Arc<AuditLogger>,
     failed_auth_tracker: Arc<FailedAuthTracker>,
     rate_limiter: Arc<RateLimiter>,
     start_time: Instant, // Phase 4.3: Track uptime for health checks
-    /// Multi-agent DSPy pipeline orchestrator (set when DATABASE_URL is configured).
+    /// Multi-agent DSPy pipeline orchestrator (set when DATABASE_URL is
+    /// configured).
     agent_orchestrator: Option<Arc<AgentOrchestrator>>,
 }
 
@@ -412,7 +414,8 @@ impl LlamaService for MyLlamaService {
         let grpc_start = Instant::now();
         let req = request.into_inner();
 
-        // Prefer PersistentVectorStore (pgvector) when configured; fall back to in-memory.
+        // Prefer PersistentVectorStore (pgvector) when configured; fall back to
+        // in-memory.
         if let Some(ps) = &self.state.persistent_store {
             match ps.search(&req.query, req.top_k as usize, None).await {
                 Ok(results) => {
@@ -1215,7 +1218,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
 
     // 2. Start REST Server (Axum)
     // Protected routes with full security stack (Phase 1.4 + 4.2)
-    // Middleware order (applied in reverse): correlation → rate_limit → validation → auth → handler
+    // Middleware order (applied in reverse): correlation → rate_limit → validation
+    // → auth → handler
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
         .route("/v1/agents/task", post(submit_agent_task))
@@ -1276,7 +1280,8 @@ mod tests {
         assert_eq!(path, "/tmp/neoland/audit.log");
     }
 
-    /// Build a minimal AppState for testing (no embedding model, no persistent store).
+    /// Build a minimal AppState for testing (no embedding model, no persistent
+    /// store).
     ///
     /// VectorStore::new() loads an ML model — call only from `#[ignore]` tests.
     #[allow(dead_code)]
@@ -1349,7 +1354,8 @@ mod tests {
 
     // ── Lock ordering ─────────────────────────────────────────────────────────
 
-    /// Demonstrate the documented lock ordering (engine → vector_store) is safe.
+    /// Demonstrate the documented lock ordering (engine → vector_store) is
+    /// safe.
     ///
     /// We acquire both locks in the required order and release them correctly.
     /// The purpose is to document and exercise the ordering, not to prove
@@ -1393,7 +1399,8 @@ mod tests {
         );
     }
 
-    // ── gRPC handlers (require embedding model — run with cargo test -- --ignored) ──
+    // ── gRPC handlers (require embedding model — run with cargo test -- --ignored)
+    // ──
 
     #[tokio::test]
     #[ignore = "requires embedding model (slow, network)"]

@@ -1,8 +1,9 @@
 // NEOLAND Performance Benchmarks
 // Criterion-based benchmarks for critical paths
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
+
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 // Note: These benchmarks require the actual NEOLAND code to be available
 // They are placeholders showing the structure
@@ -194,20 +195,18 @@ fn benchmark_http_client(c: &mut Criterion) {
 
     // Note: This requires a running server
     // Commented out to avoid failing when server isn't running
-    /*
-    group.bench_function("health_check", |b| {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let client = reqwest::Client::new();
-
-        b.to_async(&runtime).iter(|| async {
-            let response = client
-                .get("http://localhost:3001/health")
-                .send()
-                .await;
-            black_box(response)
-        });
-    });
-    */
+    // group.bench_function("health_check", |b| {
+    // let runtime = tokio::runtime::Runtime::new().unwrap();
+    // let client = reqwest::Client::new();
+    //
+    // b.to_async(&runtime).iter(|| async {
+    // let response = client
+    // .get("http://localhost:3001/health")
+    // .send()
+    // .await;
+    // black_box(response)
+    // });
+    // });
 
     group.finish();
 }

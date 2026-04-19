@@ -1,8 +1,11 @@
+use std::num::NonZeroUsize;
+
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use lru::LruCache;
 use tokenizers::Tokenizer;
 
 pub struct EmbeddingModel {
@@ -19,8 +22,7 @@ pub struct Document {
 }
 
 pub struct VectorStore {
-    documents: Vec<Document>,
-    embeddings: Vec<Tensor>,
+    cache: LruCache<String, (Document, Tensor)>,
     model: EmbeddingModel,
 }
 
@@ -71,55 +73,60 @@ impl EmbeddingModel {
 
 impl VectorStore {
     pub fn new() -> Result<Self> {
+        Self::with_capacity(1000)
+    }
+
+    pub fn with_capacity(capacity: usize) -> Result<Self> {
         let model = EmbeddingModel::new()?;
-        Ok(Self { documents: Vec::new(), embeddings: Vec::new(), model })
+        let cache = LruCache::new(
+            NonZeroUsize::new(capacity).ok_or_else(|| anyhow::anyhow!("Capacity must be > 0"))?,
+        );
+        Ok(Self { cache, model })
     }
 
     pub fn len(&self) -> usize {
-        self.documents.len()
+        self.cache.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.documents.is_empty()
+        self.cache.is_empty()
     }
 
     pub fn add_document(&mut self, content: &str, metadata: &str) -> Result<()> {
         let embedding = self.model.embed(content)?;
+        let doc_id = uuid::Uuid::new_v4().to_string();
         let doc = Document {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: doc_id.clone(),
             content: content.to_string(),
             metadata: metadata.to_string(),
         };
 
-        self.documents.push(doc);
-        self.embeddings.push(embedding);
+        self.cache.put(doc_id, (doc, embedding));
         Ok(())
     }
 
     pub fn search(&self, query: &str, top_k: usize) -> Result<Vec<(Document, f32)>> {
         let query_emb = self.model.embed(query)?;
 
-        let mut scores: Vec<(usize, f32)> = self
-            .embeddings
+        // Note: LruCache::iter() returns items from most-recently-used to
+        // least-recently-used. For search, we iterate over all current items in
+        // the cache.
+        let mut scores: Vec<(Document, f32)> = self
+            .cache
             .iter()
-            .enumerate()
-            .map(|(idx, doc_emb)| {
+            .map(|(_id, (doc, doc_emb))| {
                 // Compute cosine similarity via dot product (embeddings are normalized)
                 let score = (query_emb.clone() * doc_emb.clone())
                     .and_then(|t| t.sum_all())
                     .and_then(|t| t.to_scalar::<f32>())
                     .unwrap_or(0.0); // Fallback to 0.0 similarity on tensor operation failure
-                (idx, score)
+                (doc.clone(), score)
             })
             .collect();
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let results = scores
-            .into_iter()
-            .take(top_k)
-            .map(|(idx, score)| (self.documents[idx].clone(), score))
-            .collect();
+        let results = scores.into_iter().take(top_k).collect();
 
         Ok(results)
     }
@@ -287,5 +294,28 @@ mod tests {
             .and_then(|t| t.to_scalar::<f32>())
             .unwrap_or(f32::MAX);
         assert!(diff < 1e-6, "Same input should produce identical embeddings");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_vector_store_lru_eviction() {
+        let mut store = VectorStore::with_capacity(2).expect("Failed to create store");
+
+        store.add_document("Doc 1", "m1").unwrap();
+        store.add_document("Doc 2", "m2").unwrap();
+        assert_eq!(store.len(), 2);
+
+        // This should evict Doc 1
+        store.add_document("Doc 3", "m3").unwrap();
+        assert_eq!(store.len(), 2);
+
+        let results = store.search("Doc 1", 10).unwrap();
+        // Doc 1 should not be in results
+        for (doc, _) in results {
+            assert_ne!(doc.content, "Doc 1");
+        }
+
+        let results = store.search("Doc 3", 10).unwrap();
+        assert!(results.iter().any(|(d, _)| d.content == "Doc 3"));
     }
 }

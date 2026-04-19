@@ -16,7 +16,8 @@
 /// | 52     | 12   | _pad2                  |
 /// | Total  | 64   |                        |
 ///
-/// Python companion: `agents/neoland_agents/ipc/flags.py` uses the same offsets.
+/// Python companion: `agents/neoland_agents/ipc/flags.py` uses the same
+/// offsets.
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 
 /// Risk level values stored in `risk_level`.
@@ -130,8 +131,9 @@ impl SharedFlags {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::mem;
+
+    use super::*;
 
     #[test]
     fn size_is_64_bytes() {

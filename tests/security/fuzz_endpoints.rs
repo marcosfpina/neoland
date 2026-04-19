@@ -1,8 +1,9 @@
 // NEOLAND Security Testing: Fuzzing Endpoints
 // Tests: REST API and gRPC fuzzing with invalid/malicious inputs
 
-use serde_json::json;
 use std::time::Duration;
+
+use serde_json::json;
 use tokio::time::timeout;
 
 /// Fuzz REST API with invalid JSON payloads
@@ -43,7 +44,8 @@ async fn fuzz_rest_api_invalid_json() {
         // Null bytes
         "{\"messages\": [{\"role\": \"user\", \"content\": \"test\\u0000\"}]}",
         // Unicode edge cases
-        "{\"messages\": [{\"role\": \"user\", \"content\": \"\\uD800\"}]}", // Invalid UTF-16 surrogate
+        "{\"messages\": [{\"role\": \"user\", \"content\": \"\\uD800\"}]}", /* Invalid UTF-16
+                                                                             * surrogate */
         // Excessive nesting
         "{\"messages\": [{\"role\": \"user\", \"content\": {}}]}",
     ];
@@ -64,7 +66,8 @@ async fn fuzz_rest_api_invalid_json() {
         match result {
             Ok(Ok(response)) => {
                 let status = response.status();
-                // Valid responses: 400 (Bad Request), 401 (Unauthorized), 413 (Payload Too Large)
+                // Valid responses: 400 (Bad Request), 401 (Unauthorized), 413 (Payload Too
+                // Large)
                 assert!(
                     status.is_client_error(),
                     "Expected 4xx error for invalid payload, got: {}",

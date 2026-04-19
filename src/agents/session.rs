@@ -1,5 +1,6 @@
 //! Session state management via PostgreSQL.
-//! Uses query_as! with explicit types to avoid DATABASE_URL requirement at compile time.
+//! Uses query_as! with explicit types to avoid DATABASE_URL requirement at
+//! compile time.
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};

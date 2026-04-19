@@ -14,6 +14,7 @@ pub struct Config {
     pub client: ClientConfig,
     pub inference: InferenceConfig,
     pub vault: VaultConfig,
+    pub database: DatabaseConfig,
     pub agents: AgentsConfig,
     pub mmap: MmapConfig,
     pub nats: NatsConfig,
@@ -46,6 +47,12 @@ pub struct InferenceConfig {
 #[serde(default)]
 pub struct VaultConfig {
     pub addr: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DatabaseConfig {
+    pub url: String,
 }
 
 impl Default for ServerConfig {
@@ -102,7 +109,8 @@ impl Default for AgentsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MmapConfig {
-    /// Path to the shared-memory file used for zero-copy IPC with the Python pipeline.
+    /// Path to the shared-memory file used for zero-copy IPC with the Python
+    /// pipeline.
     pub shm_path: String,
 }
 
@@ -199,6 +207,11 @@ impl Config {
         }
         if let Some(v) = get_env("VAULT_ADDR") {
             self.vault.addr = v;
+        }
+        if let Some(v) = get_env("NEOLAND_DATABASE_URL") {
+            self.database.url = v;
+        } else if let Some(v) = get_env("DATABASE_URL") {
+            self.database.url = v;
         }
         if let Some(v) = get_env("NEOLAND_DSPY_URL") {
             self.agents.dspy_url = v;

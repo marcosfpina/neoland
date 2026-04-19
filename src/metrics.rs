@@ -1,12 +1,13 @@
 // Phase 4.1: Prometheus Metrics Integration
 // Provides comprehensive observability for production monitoring
 
+use std::time::Instant;
+
 use lazy_static::lazy_static;
 use prometheus::{
     register_counter_vec, register_gauge, register_gauge_vec, register_histogram_vec, CounterVec,
     Encoder, Gauge, GaugeVec, HistogramVec, TextEncoder,
 };
-use std::time::Instant;
 
 lazy_static! {
     // HTTP Request Metrics
@@ -429,7 +430,8 @@ mod tests {
     #[test]
     fn test_http_metrics() {
         utils::record_http_request("GET", "/health", 200, 0.001);
-        // Metrics should be incremented (can't assert exact value in parallel tests)
+        // Metrics should be incremented (can't assert exact value in parallel
+        // tests)
     }
 
     #[test]

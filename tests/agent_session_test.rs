@@ -20,7 +20,8 @@ async fn pool() -> Option<sqlx::PgPool> {
     sqlx::postgres::PgPoolOptions::new().max_connections(2).connect(&url).await.ok()
 }
 
-// ── get_or_create ─────────────────────────────────────────────────────────────
+// ── get_or_create
+// ─────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_session_get_or_create_initializes_new_session() {
@@ -57,7 +58,8 @@ async fn test_session_get_or_create_is_idempotent() {
     assert_eq!(s1.task_count, s2.task_count);
 }
 
-// ── update_after_pipeline ─────────────────────────────────────────────────────
+// ── update_after_pipeline
+// ─────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_session_update_increments_task_count() {
@@ -109,7 +111,8 @@ async fn test_session_update_accumulates_task_count() {
     assert_eq!(state.task_count, 3);
 }
 
-// ── isolation ─────────────────────────────────────────────────────────────────
+// ── isolation
+// ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_sessions_are_isolated_by_session_id() {

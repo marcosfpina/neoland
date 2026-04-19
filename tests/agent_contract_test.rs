@@ -14,7 +14,8 @@ use neoland::agents::client::{
 };
 use uuid::Uuid;
 
-// ── AgentStage ────────────────────────────────────────────────────────────────
+// ── AgentStage
+// ────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_agent_stage_serializes_snake_case() {
@@ -44,7 +45,8 @@ fn test_agent_stage_deserializes_snake_case() {
     }
 }
 
-// ── RiskLevel ─────────────────────────────────────────────────────────────────
+// ── RiskLevel
+// ─────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_risk_level_roundtrip() {
@@ -55,7 +57,8 @@ fn test_risk_level_roundtrip() {
     }
 }
 
-// ── AgentDecision ─────────────────────────────────────────────────────────────
+// ── AgentDecision
+// ─────────────────────────────────────────────────────────────
 
 #[test]
 fn test_agent_decision_all_variants_roundtrip() {

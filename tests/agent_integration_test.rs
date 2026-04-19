@@ -7,7 +7,8 @@
 //!     Start with: agents-start (inside nix develop)
 //!
 //! Run with:
-//!   DATABASE_URL=postgres://... LLM_API_KEY=sk-... cargo test agent_integration -- --test-threads=1
+//!   DATABASE_URL=postgres://... LLM_API_KEY=sk-... cargo test
+//! agent_integration -- --test-threads=1
 
 use neoland::{
     agents::{client::AgentDecision, orchestrator::AgentOrchestrator},
@@ -38,7 +39,8 @@ async fn build_orchestrator() -> Option<AgentOrchestrator> {
     AgentOrchestrator::new(pool, &cfg.agents).ok()
 }
 
-// ── health_check ──────────────────────────────────────────────────────────────
+// ── health_check
+// ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_agent_pipeline_health_check() {
@@ -55,7 +57,8 @@ async fn test_agent_pipeline_health_check() {
     assert!(healthy, "DSPy pipeline should report healthy");
 }
 
-// ── execute_task ──────────────────────────────────────────────────────────────
+// ── execute_task
+// ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_execute_task_returns_valid_decision() {
