@@ -1,8 +1,33 @@
 // Phase 4.2: Structured Logging
-// Production-ready logging with JSON output, correlation IDs, and performance tracking
+// Production-ready logging with JSON output, correlation IDs, and performance
+// tracking
 
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{runtime, trace as sdktrace, Resource};
 use tracing::Level;
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+/// Initialize the OpenTelemetry tracer with OTLP exporter
+fn init_tracer() -> anyhow::Result<sdktrace::Tracer> {
+    let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .unwrap_or_else(|_| "http://localhost:4317".to_string());
+
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(otlp_endpoint)
+        .build()?;
+
+    let provider = sdktrace::TracerProvider::builder()
+        .with_batch_exporter(exporter, runtime::Tokio)
+        .with_resource(Resource::new(vec![KeyValue::new("service.name", "neoland")]))
+        .build();
+
+    opentelemetry::global::set_tracer_provider(provider.clone());
+    Ok(provider.tracer("neoland"))
+}
 
 /// Logging configuration for different environments
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +61,8 @@ pub struct LogConfig {
     pub enable_performance: bool,
     /// Enable correlation IDs for request tracing
     pub enable_correlation_ids: bool,
+    /// Enable OpenTelemetry tracing
+    pub enable_tracing: bool,
 }
 
 impl Default for LogConfig {
@@ -49,6 +76,7 @@ impl Default for LogConfig {
             },
             enable_performance: true,
             enable_correlation_ids: true,
+            enable_tracing: !cfg!(debug_assertions), // Only trace in prod by default
         }
     }
 }
@@ -61,6 +89,7 @@ impl LogConfig {
             level: Level::INFO,
             enable_performance: true,
             enable_correlation_ids: true,
+            enable_tracing: true,
         }
     }
 
@@ -71,6 +100,7 @@ impl LogConfig {
             level: Level::DEBUG,
             enable_performance: true,
             enable_correlation_ids: true,
+            enable_tracing: false,
         }
     }
 
@@ -81,6 +111,7 @@ impl LogConfig {
             level: Level::WARN,
             enable_performance: false,
             enable_correlation_ids: false,
+            enable_tracing: false,
         }
     }
 }
@@ -105,6 +136,20 @@ pub fn init_logging(config: LogConfig) -> anyhow::Result<()> {
         .add_directive("securellm_bridge=warn".parse().unwrap())
     });
 
+    let tracer = if config.enable_tracing {
+        match init_tracer() {
+            Ok(tracer) => Some(tracer),
+            Err(e) => {
+                eprintln!("⚠️  Failed to initialize OpenTelemetry tracer: {}", e);
+                None
+            },
+        }
+    } else {
+        None
+    };
+
+    let registry = tracing_subscriber::registry().with(env_filter);
+
     // Build subscriber based on format
     match config.format {
         LogFormat::Pretty => {
@@ -118,7 +163,11 @@ pub fn init_logging(config: LogConfig) -> anyhow::Result<()> {
                 .with_level(true)
                 .pretty();
 
-            tracing_subscriber::registry().with(env_filter).with(fmt_layer).try_init()?;
+            if let Some(t) = tracer {
+                registry.with(fmt_layer).with(OpenTelemetryLayer::new(t)).try_init()?;
+            } else {
+                registry.with(fmt_layer).try_init()?;
+            }
         },
         LogFormat::Json => {
             // JSON format for production log aggregation (Loki, ELK, etc.)
@@ -133,13 +182,21 @@ pub fn init_logging(config: LogConfig) -> anyhow::Result<()> {
                 .with_line_number(true)
                 .flatten_event(true);
 
-            tracing_subscriber::registry().with(env_filter).with(fmt_layer).try_init()?;
+            if let Some(t) = tracer {
+                registry.with(fmt_layer).with(OpenTelemetryLayer::new(t)).try_init()?;
+            } else {
+                registry.with(fmt_layer).try_init()?;
+            }
         },
         LogFormat::Compact => {
             // Compact format for CI/CD
             let fmt_layer = fmt::layer().compact().with_target(false).with_thread_ids(false);
 
-            tracing_subscriber::registry().with(env_filter).with(fmt_layer).try_init()?;
+            if let Some(t) = tracer {
+                registry.with(fmt_layer).with(OpenTelemetryLayer::new(t)).try_init()?;
+            } else {
+                registry.with(fmt_layer).try_init()?;
+            }
         },
     }
 

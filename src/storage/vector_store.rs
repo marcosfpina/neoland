@@ -36,7 +36,8 @@ impl PersistentVectorStore {
     /// # Arguments
     ///
     /// * `database_url` - PostgreSQL connection string
-    /// * `max_connections` - Maximum number of database connections (default: 20)
+    /// * `max_connections` - Maximum number of database connections (default:
+    ///   20)
     ///
     /// # Example
     ///
@@ -44,10 +45,8 @@ impl PersistentVectorStore {
     /// use neoland::storage::PersistentVectorStore;
     ///
     /// # async fn example() -> anyhow::Result<()> {
-    /// let store = PersistentVectorStore::new(
-    ///     "postgresql://user:pass@localhost/neoland",
-    ///     Some(20)
-    /// ).await?;
+    /// let store =
+    ///     PersistentVectorStore::new("postgresql://user:pass@localhost/neoland", Some(20)).await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -105,8 +104,9 @@ impl PersistentVectorStore {
 
         tracing::debug!("Documents table created");
 
-        // Create index for similarity search using HNSW (Hierarchical Navigable Small World)
-        // This provides O(log n) search complexity vs O(n) for brute force
+        // Create index for similarity search using HNSW (Hierarchical Navigable Small
+        // World) This provides O(log n) search complexity vs O(n) for brute
+        // force
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS documents_embedding_idx
@@ -154,10 +154,12 @@ impl PersistentVectorStore {
     /// ```no_run
     /// # use neoland::storage::PersistentVectorStore;
     /// # async fn example(store: &PersistentVectorStore) -> anyhow::Result<()> {
-    /// let doc_id = store.add_document(
-    ///     "How to move a window in Hyprland?",
-    ///     "source:manual,category:window-management"
-    /// ).await?;
+    /// let doc_id = store
+    ///     .add_document(
+    ///         "How to move a window in Hyprland?",
+    ///         "source:manual,category:window-management",
+    ///     )
+    ///     .await?;
     /// println!("Document added with ID: {}", doc_id);
     /// # Ok(())
     /// # }
@@ -213,11 +215,9 @@ impl PersistentVectorStore {
     /// ```no_run
     /// # use neoland::storage::PersistentVectorStore;
     /// # async fn example(store: &PersistentVectorStore) -> anyhow::Result<()> {
-    /// let results = store.search(
-    ///     "window movement shortcuts",
-    ///     5,
-    ///     Some("category:window-management")
-    /// ).await?;
+    /// let results = store
+    ///     .search("window movement shortcuts", 5, Some("category:window-management"))
+    ///     .await?;
     ///
     /// for (doc, score) in results {
     ///     println!("Score: {:.3} - {}", score, doc.content);

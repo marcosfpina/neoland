@@ -20,7 +20,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 if [ -f "$PROJECT_ROOT/flake.nix" ] && [ -z "${IN_NIX_SHELL:-}" ]; then
     echo -e "${YELLOW}⚠️  Running in nix develop environment...${NC}"
     cd "$PROJECT_ROOT"
-    exec nix develop -c .githooks/pre-commit "$@"
+    exec nix develop --command .githooks/pre-commit "$@"
 fi
 
 echo "1️⃣  Checking formatting..."

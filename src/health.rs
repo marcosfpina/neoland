@@ -1,8 +1,9 @@
 // Phase 4.3: Health Checks & Readiness Probes
 // Production-ready health monitoring for Kubernetes liveness/readiness probes
 
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 /// Overall health status
@@ -75,7 +76,8 @@ pub async fn check_vector_store_health() -> ComponentHealth {
     check_vector_store_health_with_url(db_url).await
 }
 
-/// Inner implementation — accepts URL directly for testability without env-var side effects.
+/// Inner implementation — accepts URL directly for testability without env-var
+/// side effects.
 async fn check_vector_store_health_with_url(db_url: Option<String>) -> ComponentHealth {
     let start = std::time::Instant::now();
 
@@ -113,8 +115,8 @@ async fn check_vector_store_health_with_url(db_url: Option<String>) -> Component
                 Ok(false) => ComponentHealth {
                     name: "vector_store".to_string(),
                     status: HealthStatus::Degraded,
-                    message: "PostgreSQL reachable but pgvector not installed \
-                              (run: CREATE EXTENSION vector)"
+                    message: "PostgreSQL reachable but pgvector not installed (run: CREATE \
+                              EXTENSION vector)"
                         .to_string(),
                     response_time_ms: Some(start.elapsed().as_millis() as u64),
                 },
@@ -422,7 +424,8 @@ mod tests {
     fn test_shutdown_handler_uptime() {
         let handler = ShutdownHandler::new();
         std::thread::sleep(Duration::from_millis(100));
-        // uptime_seconds() should be at least 0 (always true for u64, but good for documentation)
+        // uptime_seconds() should be at least 0 (always true for u64, but good for
+        // documentation)
         let uptime = handler.uptime_seconds();
         assert!(uptime < 10); // Should be less than 10 seconds for this test
     }

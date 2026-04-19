@@ -63,9 +63,10 @@ pub struct AuthManager {
 impl AuthManager {
     /// Create a new AuthManager with default development keys.
     ///
-    /// **Development only.** In production use `new_with_secrets()` (Phase 1.2, completed)
-    /// which loads keys from Vault/environment. Set `NEOLAND_REQUIRE_VAULT_KEYS=1` to enforce
-    /// this at startup and reject dev keys.
+    /// **Development only.** In production use `new_with_secrets()` (Phase 1.2,
+    /// completed) which loads keys from Vault/environment. Set
+    /// `NEOLAND_REQUIRE_VAULT_KEYS=1` to enforce this at startup and reject
+    /// dev keys.
     pub fn new() -> Self {
         let mut keys = HashMap::new();
 
@@ -167,8 +168,9 @@ impl AuthManager {
 
         let manager = Self { api_keys: Arc::new(RwLock::new(keys)) };
 
-        // Production safety check: refuse to start with dev keys when explicitly required.
-        // Set NEOLAND_REQUIRE_VAULT_KEYS=1 in production to enforce this.
+        // Production safety check: refuse to start with dev keys when explicitly
+        // required. Set NEOLAND_REQUIRE_VAULT_KEYS=1 in production to enforce
+        // this.
         if std::env::var("NEOLAND_REQUIRE_VAULT_KEYS").as_deref() == Ok("1") {
             let has_dev_keys = manager
                 .api_keys
@@ -492,8 +494,8 @@ mod tests {
         );
     }
 
-    /// When NEOLAND_REQUIRE_VAULT_KEYS=1 and real API keys are provided via env,
-    /// new_with_secrets() must NOT panic.
+    /// When NEOLAND_REQUIRE_VAULT_KEYS=1 and real API keys are provided via
+    /// env, new_with_secrets() must NOT panic.
     #[tokio::test]
     async fn test_require_vault_keys_passes_with_real_keys() {
         let _guard = ENV_LOCK.lock().await;

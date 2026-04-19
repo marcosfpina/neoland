@@ -11,11 +11,13 @@
 //! | Memory growth under load       | < 10% per 1000 req  | #[ignore]   |
 //!
 //! Non-ignored tests run in CI and validate SLO constants and threshold logic.
-//! Ignored tests require a running neoland server (`neoland server --rest-port 3004`).
+//! Ignored tests require a running neoland server (`neoland server --rest-port
+//! 3004`).
 
 use std::time::{Duration, Instant};
 
-// ── SLO Constants ─────────────────────────────────────────────────────────────
+// ── SLO Constants
+// ─────────────────────────────────────────────────────────────
 
 /// REST health endpoint p99 latency target
 const SLO_HEALTH_P99_MS: u64 = 100;
@@ -35,7 +37,8 @@ const SLO_AVAILABILITY_TARGET: f64 = 0.995;
 /// Token throughput target for local inference (Qwen 1.8B on CPU)
 const SLO_LOCAL_INFERENCE_TOK_PER_SEC: f64 = 5.0;
 
-// ── Pure unit tests (no server required) ──────────────────────────────────────
+// ── Pure unit tests (no server required)
+// ──────────────────────────────────────
 
 #[test]
 fn test_slo_constants_are_defined() {
@@ -171,7 +174,8 @@ fn test_concurrent_request_model() {
     );
 }
 
-// ── Server-dependent tests (require `neoland server --rest-port 3004`) ────────
+// ── Server-dependent tests (require `neoland server --rest-port 3004`)
+// ────────
 
 const SLO_TEST_BASE_URL: &str = "http://127.0.0.1:3004";
 const SLO_SAMPLE_COUNT: usize = 50;
@@ -332,7 +336,8 @@ async fn test_concurrent_requests_do_not_degrade_p99() {
     );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers
+// ───────────────────────────────────────────────────────────────────
 
 /// Compute the Nth percentile from a sorted slice (1-100).
 fn percentile(sorted: &[u64], p: usize) -> u64 {

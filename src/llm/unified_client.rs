@@ -1,8 +1,10 @@
 // Unified LLM Client - Local First Strategy with Circuit Breaker
 // Abstração unificada para ml-offload-api + securellm-bridge
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use tokio::sync::Mutex;
@@ -375,7 +377,8 @@ impl UnifiedLLMClient {
         anyhow::bail!("All LLM backends failed (circuit breakers may be open)")
     }
 
-    /// ExternalFirst: Tenta SecureLLM (with circuit breaker) → fallback ml-offload
+    /// ExternalFirst: Tenta SecureLLM (with circuit breaker) → fallback
+    /// ml-offload
     async fn chat_external_first(
         &self,
         prompt: &str,
@@ -447,9 +450,10 @@ impl UnifiedLLMClient {
     /// LoadBalanced: picks the backend with the lower latency EMA.
     ///
     /// Both backends are checked against their circuit breakers.
-    /// The backend with the lower average response time (or the only available one)
-    /// is tried first; on failure the other backend is used as fallback.
-    /// After each successful call the measured latency is folded into the EMA.
+    /// The backend with the lower average response time (or the only available
+    /// one) is tried first; on failure the other backend is used as
+    /// fallback. After each successful call the measured latency is folded
+    /// into the EMA.
     async fn chat_load_balanced(
         &self,
         prompt: &str,
@@ -459,7 +463,8 @@ impl UnifiedLLMClient {
         let ml_avg = self.ml_latency.lock().await.avg_ms();
         let sec_avg = self.sec_latency.lock().await.avg_ms();
 
-        // prefer ml-offload when its EMA is ≤ securellm (or when no data yet — both MAX)
+        // prefer ml-offload when its EMA is ≤ securellm (or when no data yet — both
+        // MAX)
         let try_ml_first = ml_avg <= sec_avg;
 
         info!(
@@ -846,7 +851,8 @@ mod tests {
 
     #[test]
     fn test_latency_tracker_no_data_prefers_ml_first() {
-        // With no data both return MAX → ml_avg <= sec_avg is true → ml first (same as LocalFirst)
+        // With no data both return MAX → ml_avg <= sec_avg is true → ml first (same as
+        // LocalFirst)
         let ml = LatencyTracker::new();
         let sec = LatencyTracker::new();
         let prefer_ml = ml.avg_ms() <= sec.avg_ms();

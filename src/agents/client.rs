@@ -1,7 +1,8 @@
 //! HTTP client for the DSPy FastAPI pipeline.
 //!
-//! Types here mirror the Pydantic schemas in agents/neoland_agents/schemas/api.py.
-//! Any change to the Python schemas must be reflected here.
+//! Types here mirror the Pydantic schemas in
+//! agents/neoland_agents/schemas/api.py. Any change to the Python schemas must
+//! be reflected here.
 
 use std::time::Duration;
 

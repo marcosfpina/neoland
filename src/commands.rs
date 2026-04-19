@@ -107,6 +107,7 @@ pub trait CommandRuntime {
     async fn http_get_status(&self, url: &str) -> Result<u16, String>;
     async fn grpc_connect(&self, endpoint: &str) -> Result<(), String>;
     async fn run_server(&self, grpc_port: u16, rest_port: u16) -> Result<(), String>;
+    async fn check_db(&self, url: &str) -> Result<(), String>;
     fn env_var(&self, key: &str) -> Option<String>;
     fn config_paths(&self) -> Vec<PathBuf>;
     fn process_list(&self) -> Result<String, String>;
@@ -141,6 +142,22 @@ impl CommandRuntime for SystemCommandRuntime {
 
     async fn run_server(&self, grpc_port: u16, rest_port: u16) -> Result<(), String> {
         server::run_server(grpc_port, rest_port).await.map_err(|err| err.to_string())
+    }
+
+    async fn check_db(&self, url: &str) -> Result<(), String> {
+        use sqlx::postgres::PgPoolOptions;
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(Duration::from_secs(3))
+            .connect(url)
+            .await
+            .map_err(|err| err.to_string())?;
+
+        sqlx::query("SELECT 1")
+            .execute(&pool)
+            .await
+            .map(|_| ())
+            .map_err(|err| err.to_string())
     }
 
     fn env_var(&self, key: &str) -> Option<String> {
@@ -253,6 +270,7 @@ pub async fn collect_doctor_report(
 ) -> DoctorReport {
     let mut checks = Vec::new();
 
+    // 1. Nix Environment
     let in_nix = runtime.env_var("IN_NIX_SHELL").is_some()
         || runtime.env_var("FLAKE_ROOT").is_some()
         || runtime.env_var("NIX_BUILD_TOP").is_some();
@@ -267,30 +285,51 @@ pub async fn collect_doctor_report(
         ));
     }
 
+    // 2. Server Connectivity (REST)
     let server_health_url = format!("{}/health", server_url.trim_end_matches('/'));
     match runtime.http_get_status(&server_health_url).await {
         Ok(status) if (200..300).contains(&status) => {
             checks.push(CheckResult::ok(
-                "Server",
+                "Server (REST)",
                 format!("Server reachable at {} (status {})", server_url, status),
             ));
         },
         Ok(status) => {
             checks.push(CheckResult::warning(
-                "Server",
+                "Server (REST)",
                 format!("Server returned status {}", status),
                 "Check `neoland server` logs if this is unexpected.",
             ));
         },
         Err(err) => {
             checks.push(CheckResult::error(
-                "Server",
+                "Server (REST)",
                 format!("Server not reachable at {}", server_url),
                 format!("Start the server with `neoland server` ({err})"),
             ));
         },
     }
 
+    // 3. gRPC Connectivity
+    // Note: The CLI arg for server_url is usually the REST port.
+    // We try to infer gRPC port from default or config if needed, but for
+    // simplicity we use a hardcoded fallback or look for it in the config.
+    let grpc_url = "http://[::1]:50051"; // Default gRPC endpoint
+    match runtime.grpc_connect(grpc_url).await {
+        Ok(()) => {
+            checks
+                .push(CheckResult::ok("Server (gRPC)", format!("gRPC reachable at {}", grpc_url)));
+        },
+        Err(err) => {
+            checks.push(CheckResult::warning(
+                "Server (gRPC)",
+                format!("gRPC not reachable at {}", grpc_url),
+                format!("Check if server is running with gRPC enabled ({err})"),
+            ));
+        },
+    }
+
+    // 4. ml-offload Connectivity
     let ml_health_url = format!("{}/health", ml_api_url.trim_end_matches('/'));
     match runtime.http_get_status(&ml_health_url).await {
         Ok(status) if (200..300).contains(&status) => {
@@ -315,17 +354,62 @@ pub async fn collect_doctor_report(
         },
     }
 
+    // 5. Vault Connectivity
     let vault_addr = runtime.env_var("VAULT_ADDR").unwrap_or_else(|| config.vault.addr.clone());
-    if runtime.env_var("VAULT_ADDR").is_some() {
-        checks.push(CheckResult::ok("VAULT_ADDR", format!("Using {}", vault_addr)));
+    let vault_health_url = format!("{}/v1/sys/health", vault_addr.trim_end_matches('/'));
+    match runtime.http_get_status(&vault_health_url).await {
+        Ok(status) if (200..300).contains(&status) || status == 429 => {
+            // Vault health returns 200 (initialized, unsealed), 429 (unsealed, standby),
+            // 472 (disaster recovery), 501 (not initialized), 503 (sealed)
+            checks.push(CheckResult::ok("Vault", format!("Vault reachable at {}", vault_addr)));
+        },
+        Ok(status) => {
+            checks.push(CheckResult::warning(
+                "Vault",
+                format!("Vault at {} returned status {}", vault_addr, status),
+                "Vault may be sealed or not initialized.",
+            ));
+        },
+        Err(err) => {
+            checks.push(CheckResult::warning(
+                "Vault",
+                format!("Vault not reachable at {}", vault_addr),
+                format!("Check if Vault is running ({err})"),
+            ));
+        },
+    }
+
+    // 6. PostgreSQL / pgvector Connectivity
+    let db_url = runtime.env_var("DATABASE_URL").or_else(|| {
+        if config.database.url.is_empty() {
+            None
+        } else {
+            Some(config.database.url.clone())
+        }
+    });
+
+    if let Some(url) = db_url {
+        match runtime.check_db(&url).await {
+            Ok(()) => {
+                checks.push(CheckResult::ok("Database", "PostgreSQL connected successfully"));
+            },
+            Err(err) => {
+                checks.push(CheckResult::error(
+                    "Database",
+                    "Failed to connect to PostgreSQL",
+                    format!("Check DATABASE_URL and server status ({err})"),
+                ));
+            },
+        }
     } else {
         checks.push(CheckResult::warning(
-            "VAULT_ADDR",
-            format!("Not set; defaulting to {}", vault_addr),
-            "Export `VAULT_ADDR=http://localhost:8200` to override it.",
+            "Database",
+            "DATABASE_URL not set",
+            "PostgreSQL/pgvector will be disabled. Fallback to in-memory store.",
         ));
     }
 
+    // 7. Environment & Config
     if let Some(value) = runtime.env_var("RUST_LOG") {
         checks.push(CheckResult::ok("RUST_LOG", format!("Using {}", value)));
     } else {
@@ -537,6 +621,10 @@ mod tests {
             self.server_error.clone().map_or(Ok(()), Err)
         }
 
+        async fn check_db(&self, _url: &str) -> Result<(), String> {
+            Ok(())
+        }
+
         fn env_var(&self, key: &str) -> Option<String> {
             self.env.get(key).cloned()
         }
@@ -579,9 +667,9 @@ mod tests {
     #[test]
     fn find_neoland_pid_prefers_server_processes() {
         let processes = "\
-user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\n\
-user 4242 0.0 0.1 123 456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland server\n\
-user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
+user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 pts/2 Sl+ 00:00 \
+                         /tmp/target/debug/neoland server\nuser 5252 0.0 0.1 123 456 pts/3 Sl+ \
+                         00:00 /tmp/target/debug/neoland client\n";
 
         assert_eq!(find_neoland_pid(processes).as_deref(), Some("4242"));
     }
@@ -598,7 +686,15 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
                     "http://localhost:8080/health".to_string(),
                     Err("connection refused".to_string()),
                 ),
+                (
+                    "http://localhost:8200/v1/sys/health".to_string(),
+                    Err("connection refused".to_string()),
+                ),
             ]),
+            grpc_statuses: HashMap::from([(
+                "http://[::1]:50051".to_string(),
+                Err("connection refused".to_string()),
+            )]),
             config_paths: vec![PathBuf::from("missing-project"), PathBuf::from("missing-home")],
             ..Default::default()
         };
@@ -612,8 +708,10 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
         .await;
 
         assert!(report.has_errors());
-        assert_eq!(find_check(&report.checks, "Server").state, CheckState::Error);
+        assert_eq!(find_check(&report.checks, "Server (REST)").state, CheckState::Error);
+        assert_eq!(find_check(&report.checks, "Server (gRPC)").state, CheckState::Warning);
         assert_eq!(find_check(&report.checks, "ml-offload").state, CheckState::Warning);
+        assert_eq!(find_check(&report.checks, "Vault").state, CheckState::Warning);
     }
 
     #[tokio::test]
@@ -626,10 +724,12 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
             http_statuses: HashMap::from([
                 ("http://localhost:3001/health".to_string(), Ok(200)),
                 ("http://localhost:8080/health".to_string(), Ok(200)),
+                ("http://localhost:8200/v1/sys/health".to_string(), Ok(200)),
             ]),
+            grpc_statuses: HashMap::from([("http://[::1]:50051".to_string(), Ok(()))]),
             env: HashMap::from([
                 ("IN_NIX_SHELL".to_string(), "1".to_string()),
-                ("VAULT_ADDR".to_string(), "http://vault:8200".to_string()),
+                ("VAULT_ADDR".to_string(), "http://localhost:8200".to_string()),
                 ("RUST_LOG".to_string(), "debug".to_string()),
             ]),
             config_paths: vec![config_path.clone()],
@@ -646,6 +746,9 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
 
         assert!(report.ok);
         assert_eq!(find_check(&report.checks, "Nix shell").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "Server (REST)").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "Server (gRPC)").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "Vault").state, CheckState::Ok);
         assert_eq!(
             find_check(&report.checks, "Config file").detail,
             format!("Found {}", config_path.display())
@@ -657,10 +760,9 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
         let runtime = MockRuntime {
             http_statuses: HashMap::from([("http://localhost:3001/health".to_string(), Ok(200))]),
             grpc_statuses: HashMap::from([("http://[::1]:50051".to_string(), Ok(()))]),
-            processes: Ok(
-                "user 4242 0.0 0.1 123 456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland server\n"
-                    .to_string(),
-            ),
+            processes: Ok("user 4242 0.0 0.1 123 456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland \
+                           server\n"
+                .to_string()),
             ..Default::default()
         };
 
@@ -677,10 +779,9 @@ user 5252 0.0 0.1 123 456 pts/3 Sl+ 00:00 /tmp/target/debug/neoland client\n";
     #[tokio::test]
     async fn restart_server_kills_existing_process_before_starting() {
         let runtime = MockRuntime {
-            processes: Ok(
-                "user 31337 0.0 0.1 123 456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland server\n"
-                    .to_string(),
-            ),
+            processes: Ok("user 31337 0.0 0.1 123 456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland \
+                           server\n"
+                .to_string()),
             ..Default::default()
         };
 

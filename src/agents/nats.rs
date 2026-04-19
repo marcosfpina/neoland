@@ -1,7 +1,8 @@
 //! NATS publisher for neoland agent pipeline events.
 //!
-//! Publishes structured events to NATS via spectre-events after each pipeline run.
-//! Connection is optional — if NATS is unavailable, events are dropped with a warn log.
+//! Publishes structured events to NATS via spectre-events after each pipeline
+//! run. Connection is optional — if NATS is unavailable, events are dropped
+//! with a warn log.
 //!
 //! ## Subjects
 //!
@@ -32,7 +33,8 @@ pub struct TaskCompletedPayload<'a> {
     pub adr_title: &'a str,
 }
 
-/// Payload for `neoland.pipeline.output.v1` — texto completo para scan do Phantom.
+/// Payload for `neoland.pipeline.output.v1` — texto completo para scan do
+/// Phantom.
 #[derive(Debug)]
 pub struct PipelineOutputPayload<'a> {
     pub session_id: Uuid,
@@ -68,7 +70,8 @@ pub struct NatsPublisher {
 }
 
 impl NatsPublisher {
-    /// Connect to NATS. Returns `Err` if connection fails — caller decides whether to abort.
+    /// Connect to NATS. Returns `Err` if connection fails — caller decides
+    /// whether to abort.
     pub async fn connect(cfg: &NatsConfig) -> Result<Self> {
         let bus = EventBus::connect(&cfg.url)
             .await
@@ -96,7 +99,8 @@ impl NatsPublisher {
         }
     }
 
-    /// Publish `neoland.pipeline.output.v1` — texto completo para scan do Phantom.
+    /// Publish `neoland.pipeline.output.v1` — texto completo para scan do
+    /// Phantom.
     pub async fn publish_pipeline_output(&self, p: &PipelineOutputPayload<'_>) {
         let event = Event::new(
             EventType::Custom("neoland.pipeline.output.v1".to_string()),
@@ -139,8 +143,9 @@ impl NatsPublisher {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::Value;
+
+    use super::*;
 
     fn completed_payload() -> TaskCompletedPayload<'static> {
         TaskCompletedPayload {
