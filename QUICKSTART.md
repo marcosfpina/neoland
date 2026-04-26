@@ -1,6 +1,6 @@
 # Neoland Quick Start Guide
 
-**Last Updated**: 2026-04-02
+**Last Updated**: 2026-04-26
 
 Get up and running with Neoland in under 5 minutes.
 
@@ -101,48 +101,52 @@ load that file automatically before launch.
 ### Layout
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ 🚀 Neoland TUI | http://[::1]:50051 | ✅ Ready | Preset: ... │
-├─────────────────────────────────────────┬───────────────────┤
-│ 💬 Chat                                 │ ℹ️  Info           │
-│                                         │                   │
-│ [12:34:56] 👤 VOCÊ                      │ 📊 Config Atual   │
-│ Hello, how are you?                     │                   │
-│                                         │  Temperature: 0.70│
-│ [12:34:58] 🤖 AI                        │  Top P: 0.90      │
-│ I'm doing well! How can I help?         │  Max Tokens: 600  │
-│                                         │                   │
-│                                         │ ⌨️  Atalhos       │
-│                                         │                   │
-│                                         │  Ctrl+1-5: Presets│
-│                                         │  Ctrl+L: Limpar   │
-│                                         │  Tab: Sidebar     │
-│                                         │  Esc: Sair        │
-├─────────────────────────────────────────┴───────────────────┤
-│ ✏️  Input (Ctrl+Enter para enviar)                          │
-│ _                                                           │
-└─────────────────────────────────────────────────────────────┘
+╭─ Neoland ── ● Connected  gpt-4o-mini  1.2k tok  42ms ──────╮
+│                                                              │
+│  12:34:56  you                                               │
+│  Hello, how are you?                                         │
+│                                                              │
+│  12:34:58  assistant                                         │
+│  I'm doing well! How can I help you today?                   │
+│                                                              │
+│  12:35:02  assistant                          ⠹ thinking... │
+│                                                              │
+│                                         ↑↓ scroll  g bottom │
+╰─────────────────────────────────────────────────────────────╯
+╭─ Message ───────────────────────── Enter send  Ctrl+C quit ─╮
+│ type here█                                                   │
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ### Keyboard Shortcuts
 
-| Key            | Action                      |
-| -------------- | --------------------------- |
-| **Ctrl+Enter** | Send message                |
-| **Ctrl+L**     | Clear chat                  |
-| **Ctrl+1**     | Balanced preset (temp: 0.7) |
-| **Ctrl+2**     | Creative preset (temp: 1.5) |
-| **Ctrl+3**     | Precise preset (temp: 0.3)  |
-| **Ctrl+4**     | Research preset (RAG: max)  |
-| **Ctrl+5**     | Safe preset (commands: off) |
-| **Tab**        | Toggle sidebar              |
-| **j** / **k**  | Scroll down/up              |
-| **Esc**        | Quit                        |
+| Key | Action |
+|-----|--------|
+| **Enter** | Send message |
+| **Ctrl+C** / **Esc** | Quit |
+| **Ctrl+L** | Clear chat |
+| **↑ / ↓** | Scroll chat |
+| **PgUp / PgDn** | Scroll fast |
+| **g** (buffer empty) | Jump to bottom |
+| **Ctrl+← / →** | Word left/right |
+| **Alt+B / Alt+F** | Word left/right (alt) |
+| **Ctrl+A / Ctrl+E** | Line start/end |
+| **Ctrl+W** | Delete word back |
+| **Ctrl+U** | Kill to start |
+| **Ctrl+K** | Kill to end |
+| **Ctrl+1** | Balanced preset (temp 0.7) |
+| **Ctrl+2** | Creative preset (temp 1.5) |
+| **Ctrl+3** | Precise preset (temp 0.3) |
+| **Ctrl+4** | Research preset |
+| **Ctrl+5** | Safe preset (no commands) |
+| **Tab** | Toggle sidebar |
 
 ### Visual Feedback
 
-- **✅ Ready**: System idle
-- **⏳ Thinking...**: Processing inference
+- **● Connected** (green): pipeline reachable
+- **● Degraded** (yellow): partial connectivity
+- **● Offline** (red): no connection
+- **⠹ thinking...**: braille spinner while waiting for response
 
 ---
 
@@ -166,19 +170,30 @@ Verifies:
 ### REST API Direct Test
 
 ```bash
-# Health check
+# Health check (no auth)
 curl http://localhost:3001/health
-# Expected: OK
 
-# Chat completion (OpenAI-compatible, authenticated)
+# OpenAPI spec (no auth)
+curl http://localhost:3001/openapi.json | jq .info
+# Swagger UI: http://localhost:3001/swagger-ui/
+
+# Chat completion (requires API key)
 curl -X POST http://localhost:3001/v1/chat/completions \
-  -H "X-API-Key: neoland_admin_dev_key_change_in_production" \
+  -H "X-API-Key: $NEOLAND_ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Hello"}],
-    "stream": false
-  }'
+  -d '{"messages": [{"role": "user", "content": "Hello"}], "stream": false}'
 ```
+
+> **IMPORTANTE — Dev keys**: Por padrão, se `NEOLAND_ADMIN_API_KEY` não estiver
+> definida no ambiente, o servidor sobe com uma chave de desenvolvimento
+> (`neoland_admin_dev_key_change_in_production`). **Nunca use essa chave em
+> produção.** Defina sempre as variáveis de ambiente antes de subir o servidor:
+>
+> ```bash
+> export NEOLAND_ADMIN_API_KEY="$(openssl rand -hex 32)"
+> export NEOLAND_USER_API_KEY="$(openssl rand -hex 32)"
+> export NEOLAND_READONLY_API_KEY="$(openssl rand -hex 32)"
+> ```
 
 ---
 
