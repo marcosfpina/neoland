@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
+use tracing::instrument;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
@@ -26,6 +27,7 @@ impl SessionManager {
         Self { pool }
     }
 
+    #[instrument(skip(self), fields(session_id = %session_id))]
     pub async fn get_or_create(&self, session_id: Uuid) -> Result<SessionState> {
         // Upsert session metadata
         sqlx::query(
@@ -62,6 +64,7 @@ impl SessionManager {
         })
     }
 
+    #[instrument(skip(self, decision_json), fields(session_id = %session_id))]
     pub async fn update_after_pipeline(
         &self,
         session_id: Uuid,

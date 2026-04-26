@@ -8,6 +8,8 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use tracing::instrument;
+
 use crate::{
     agents::{
         client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult},
@@ -50,6 +52,7 @@ impl AgentOrchestrator {
         self
     }
 
+    #[instrument(skip(self, rag_context), fields(session_id = %session_id, requester_role))]
     pub async fn execute_task(
         &self,
         task: &str,
@@ -147,6 +150,7 @@ impl AgentOrchestrator {
         Ok(result)
     }
 
+    #[instrument(skip(self), fields(session_id = %session_id))]
     pub async fn get_session(
         &self,
         session_id: Uuid,
@@ -154,6 +158,7 @@ impl AgentOrchestrator {
         self.sessions.get_or_create(session_id).await
     }
 
+    #[instrument(skip(self))]
     pub async fn health_check(&self) -> Result<bool> {
         self.client.health_check().await
     }

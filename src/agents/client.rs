@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 use uuid::Uuid;
 
 // ─── Request / Response types (mirrors Python schemas/api.py) ───────────────
@@ -114,6 +115,7 @@ impl AgentPipelineClient {
         Ok(Self { base_url: base_url.into(), client })
     }
 
+    #[instrument(skip(self, request), fields(task_id = %request.task_id, session_id = %request.session_id, start_from = ?request.start_from))]
     pub async fn run_pipeline(&self, request: &AgentTaskRequest) -> Result<PipelineResult> {
         let resp = self
             .client
@@ -134,6 +136,7 @@ impl AgentPipelineClient {
             .context("Failed to deserialize pipeline result")
     }
 
+    #[instrument(skip(self))]
     pub async fn health_check(&self) -> Result<bool> {
         let resp = self
             .client
