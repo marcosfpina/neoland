@@ -1,0 +1,74 @@
+{{- if .Values.nats.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "neoland.fullname" . }}-nats
+  labels:
+    {{- include "neoland.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  serviceName: {{ include "neoland.fullname" . }}-nats
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "neoland.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "neoland.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      containers:
+        - name: nats
+          image: "{{ .Values.image.nats.repository }}:{{ .Values.image.nats.tag }}"
+          imagePullPolicy: {{ .Values.image.nats.pullPolicy }}
+          args:
+            - "-js"
+            - "-sd"
+            - "/data"
+            - "-m"
+            - "{{ .Values.nats.monitorPort }}"
+          ports:
+            - name: client
+              containerPort: {{ .Values.nats.clientPort }}
+              protocol: TCP
+            - name: monitor
+              containerPort: {{ .Values.nats.monitorPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: nats-data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: nats-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.nats.storageClass }}
+        storageClassName: {{ .Values.nats.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.nats.storage }}
+{{- end }}
