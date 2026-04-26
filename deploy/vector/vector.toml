@@ -1,0 +1,133 @@
+# Vector configuration for Neoland log shipping.
+#
+# Pipeline:
+#   journald (systemd) ──► parse JSON ──► enrich ──► Loki
+#   file (stdout fallback) ──► parse JSON ──► enrich ──► Loki
+#
+# Environment variables required:
+#   LOKI_ENDPOINT   e.g. http://loki:3100
+#   LOKI_USERNAME   (optional, for Grafana Cloud)
+#   LOKI_PASSWORD   (optional, for Grafana Cloud)
+
+[api]
+enabled = true
+address = "127.0.0.1:8686"
+
+# ─── Sources ─────────────────────────────────────────────────────────────────
+
+[sources.neoland_journal]
+type = "journald"
+units = ["neoland-control-plane.service", "neoland-dspy-pipeline.service"]
+current_boot_only = true
+
+[sources.neoland_file]
+type = "file"
+# fallback for non-systemd / dev environments
+include = [
+  "/var/log/neoland/*.log",
+  "/tmp/neoland/*.log",
+]
+read_from = "beginning"
+multiline.mode = "halt_before"
+multiline.start_pattern = '^\{'
+multiline.condition_pattern = '^\{'
+multiline.timeout_ms = 1000
+
+# ─── Transforms ──────────────────────────────────────────────────────────────
+
+# Parse JSON logs from control plane (tracing-subscriber JSON format)
+[transforms.parse_json_journal]
+type = "remap"
+inputs = ["neoland_journal"]
+source = '''
+  structured, err = parse_json(.message)
+  if err == null {
+    . = merge(., structured)
+  }
+  # Normalise level field: tracing-subscriber emits "level", Loki wants "level"
+  .level = downcase(string!(.level ?? "info"))
+  # Attach service label for Loki stream selector
+  .service = "neoland-control-plane"
+  .environment = get_env_var!("NEOLAND_ENV") ?? "production"
+'''
+
+[transforms.parse_json_file]
+type = "remap"
+inputs = ["neoland_file"]
+source = '''
+  structured, err = parse_json(.message)
+  if err == null {
+    . = merge(., structured)
+  }
+  .level = downcase(string!(.level ?? "info"))
+  .service = "neoland-file"
+  .environment = get_env_var!("NEOLAND_ENV") ?? "production"
+'''
+
+# Enrich all logs with common fields
+[transforms.enrich]
+type = "remap"
+inputs = ["parse_json_journal", "parse_json_file"]
+source = '''
+  # Keep only relevant top-level fields for Loki labels (low cardinality)
+  .labels.service     = string!(.service)
+  .labels.level       = string!(.level ?? "info")
+  .labels.environment = string!(.environment ?? "production")
+
+  # Extract agent pipeline fields if present (high-value for Loki queries)
+  if exists(.fields.session_id) {
+    .labels.session_id = string!(.fields.session_id)
+  }
+  if exists(.span.decision) {
+    .labels.decision = string!(.span.decision)
+  }
+
+  # Drop noisy fields that inflate log size
+  del(.hostname)
+  del(._SYSTEMD_UNIT)
+  del(.__CURSOR)
+'''
+
+# Filter out trace-level logs in production (too verbose for Loki ingest)
+[transforms.filter_trace]
+type = "filter"
+inputs = ["enrich"]
+condition = '.labels.level != "trace"'
+
+# ─── Sinks ───────────────────────────────────────────────────────────────────
+
+[sinks.loki]
+type = "loki"
+inputs = ["filter_trace"]
+endpoint = "${LOKI_ENDPOINT}"
+encoding.codec = "json"
+
+# Labels become Loki stream selectors — keep cardinality low
+labels.service     = "{{ labels.service }}"
+labels.level       = "{{ labels.level }}"
+labels.environment = "{{ labels.environment }}"
+
+# Optional: Grafana Cloud basic auth
+# auth.strategy = "basic"
+# auth.user     = "${LOKI_USERNAME}"
+# auth.password = "${LOKI_PASSWORD}"
+
+[sinks.loki.buffer]
+type = "disk"
+max_size = 268435456   # 256 MiB — absorbs Loki outages up to ~hours
+when_full = "block"
+
+[sinks.loki.batch]
+max_bytes    = 1048576   # 1 MiB
+timeout_secs = 10
+
+[sinks.loki.request]
+retry_attempts        = 10
+retry_initial_backoff_secs = 1
+retry_max_duration_secs    = 60
+
+# ── Debug sink (stdout) — enable during local development ────────────────────
+# [sinks.console]
+# type   = "console"
+# inputs = ["filter_trace"]
+# encoding.codec = "json"

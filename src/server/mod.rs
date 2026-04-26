@@ -1241,6 +1241,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
     let app = Router::new()
         .merge(protected_routes)
         .merge(public_routes)
+        .merge(crate::openapi::router())
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;

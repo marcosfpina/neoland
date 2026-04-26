@@ -1,7 +1,146 @@
-# Phase 4.4: Prometheus Alerting Rules
+# Phase 4.4 + Ciclo 3: Prometheus Alerting Rules
 # Production-ready alerts for NEOLAND operational monitoring
 
 groups:
+  # ==========================================
+  # Agent Pipeline Alerts (Ciclo 3)
+  # Metrics: neoland_agent_pipeline_*, neoland_agent_calls_*,
+  #          neoland_agent_escalations_total, neoland_agent_junior_confidence
+  # ==========================================
+  - name: neoland_agent_pipeline
+    interval: 30s
+    rules:
+      - alert: NeolandPipelineHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(neoland_agent_pipeline_duration_seconds_bucket[5m])
+          ) > 30.0
+        for: 5m
+        labels:
+          severity: warning
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "ADR pipeline p95 latency above 30s"
+          description: "p95 pipeline duration is {{ $value | humanizeDuration }} (decision={{ $labels.decision }})."
+          runbook: "https://docs.neoland/runbooks/pipeline-latency"
+          action: "Check DSPy pipeline at :8001 — slow LLM provider or RAG retrieval."
+
+      - alert: NeolandPipelineCriticalLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(neoland_agent_pipeline_duration_seconds_bucket[5m])
+          ) > 90.0
+        for: 2m
+        labels:
+          severity: critical
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "ADR pipeline p95 latency above 90s"
+          description: "p95 pipeline duration is {{ $value | humanizeDuration }}. Timeout risk."
+          runbook: "https://docs.neoland/runbooks/pipeline-critical-latency"
+          action: "Verify NEOLAND_AGENTS_DSPY_URL reachable. Check LLM provider quota."
+
+      - alert: NeolandPipelineHighErrorRate
+        expr: |
+          (
+            rate(neoland_agent_calls_total{status="error"}[5m])
+            /
+            rate(neoland_agent_calls_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "Agent {{ $labels.agent }} error rate above 10%"
+          description: "Agent {{ $labels.agent }} error rate is {{ $value | humanizePercentage }}."
+          runbook: "https://docs.neoland/runbooks/agent-errors"
+          action: "Check agents/logs for DSPy assertion failures or LLM errors."
+
+      - alert: NeolandPipelineSilent
+        expr: |
+          rate(neoland_agent_pipeline_total[15m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "No ADR pipeline executions for 30 minutes"
+          description: "Pipeline throughput is zero — possible ingestion blockage or idle state."
+          runbook: "https://docs.neoland/runbooks/pipeline-silent"
+          action: "Check /v1/agents/health and DSPy FastAPI process on :8001."
+
+      - alert: NeolandHighEscalationRate
+        expr: |
+          (
+            rate(neoland_agent_escalations_total{risk_level=~"high|critical"}[10m])
+            /
+            rate(neoland_agent_pipeline_total[10m])
+          ) > 0.30
+        for: 10m
+        labels:
+          severity: warning
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "High senior→architect escalation rate (>30%)"
+          description: "{{ $value | humanizePercentage }} of pipelines are escalating to Architect tier."
+          runbook: "https://docs.neoland/runbooks/high-escalation"
+          action: "Review recent tasks — high complexity or prompt injection pattern?"
+
+      - alert: NeolandLowJuniorConfidence
+        expr: |
+          histogram_quantile(0.50,
+            rate(neoland_agent_junior_confidence_bucket[15m])
+          ) < 0.40
+        for: 15m
+        labels:
+          severity: warning
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "Junior agent median confidence below 0.40"
+          description: "Junior p50 confidence is {{ $value | humanize }}. Tasks may be underspecified."
+          runbook: "https://docs.neoland/runbooks/low-confidence"
+          action: "Review incoming task quality. Check RAG context retrieval."
+
+      - alert: NeolandNatsPublishErrors
+        expr: |
+          rate(neoland_nats_published_total{status="error"}[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: nats
+          team: voidnx
+        annotations:
+          summary: "NATS publish errors above 0.5/s"
+          description: "Subject {{ $labels.subject }} failing at {{ $value }} errors/s."
+          runbook: "https://docs.neoland/runbooks/nats-publish-errors"
+          action: "Check NATS JetStream connectivity and stream NEOLAND_EVENTS health."
+
+      - alert: NeolandAllPipelinesRejected
+        expr: |
+          (
+            rate(neoland_agent_pipeline_total{decision="reject"}[10m])
+            /
+            rate(neoland_agent_pipeline_total[10m])
+          ) > 0.60
+        for: 10m
+        labels:
+          severity: critical
+          component: agent_pipeline
+          team: voidnx
+        annotations:
+          summary: "Over 60% of ADR decisions are rejections"
+          description: "Rejection rate is {{ $value | humanizePercentage }}. Possible adversarial input or model drift."
+          runbook: "https://docs.neoland/runbooks/high-rejection"
+          action: "Inspect recent ADR checkpoints. Check YARA/SIGMA EDR alerts."
+
+
   # ==========================================
   # Service Availability Alerts
   # ==========================================
