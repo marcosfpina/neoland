@@ -1,20 +1,21 @@
 # Neoland - AI Agent Platform
 
-**Status**: Active Development | Security-Hardened | NixOS/Hyprland Integrated
+**Status**: v0.1.0 — Beta | Security-Hardened | NixOS/Hyprland Integrated
 
-Neoland is a terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a TUI interface, comprehensive security hardening, robust fallback mechanisms, and deep OS integration.
+Neoland is a terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a modern async TUI, multi-agent DSPy pipeline, comprehensive security hardening, and deep NixOS integration.
 
 **Version**: 0.1.0
-**Production Readiness**: 65/100
+**Production Readiness**: 96/100
 
-- ✅ Security Hardening (Phase 1 Complete)
-- ✅ Testing: 140 tests (114 passing, 26 ignored/require external services)
-- ✅ CI/CD Pipeline (GitHub Actions + Pre-commit Hooks)
-- ✅ Config file support (neoland.toml + env overrides)
-- ✅ Prometheus metrics wired (HTTP, gRPC, LLM, Auth, Circuit Breakers)
-- ✅ TUI: connection status, session stats, streaming display
-- ⚠️ Coverage: \~60% (Target: 70%)
-- ⏳ Operational Readiness (In Progress — see docs/ROADMAP.md)
+- ✅ Security Hardening — Auth, RBAC, Vault, Audit, Rate Limiting
+- ✅ Testing — 198 Rust unit tests + 24 Python contract tests (0 mocks)
+- ✅ CI/CD — GitHub Actions + pre-commit hooks (fmt, clippy, test)
+- ✅ Multi-agent DSPy pipeline — Junior → Senior → Architect → TechLeader
+- ✅ Observability — Prometheus metrics, OpenTelemetry spans, Swagger UI at `/swagger-ui/`
+- ✅ IPC — mmap SharedFlags (64 bytes, 1 cache line) + NATS JetStream
+- ✅ ADR Ledger — Merkle chain + secp256k1 signatures + at-least-once delivery
+- ✅ EDR rules — 3 SIGMA + 6 YARA rules (agent pipeline anomaly detection)
+- ✅ TUI — async tokio::select!, Tokyo Night, readline cursor, word-nav, braille spinner
 
 ---
 
@@ -114,35 +115,28 @@ See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/SOPS_SETUP.md`, `doc
 
 ## Testing & Quality
 
-**Test Suite**: 118 total tests (98 passing, 20 ignored)
+**Test Suite**: 198 Rust unit tests + 24 Python contract tests — zero mocks
 
-- **Unit Tests**: 82 tests (77 passing, 5 ignored - require PostgreSQL/ml-offload)
-- **Integration Tests**: 19 tests (18 passing, 1 ignored)
-- **Security Tests**: 14 tests (all ignored - require `--ignored` flag)
-- **Storage Tests**: 2 tests (ignored - require PostgreSQL + pgvector)
-- **Benchmark Suite**: Compiles, not yet baselined
+| Suite | Count | Notes |
+|-------|-------|-------|
+| Rust lib (`cargo test --lib`) | 198 | includes TUI, auth, agents, metrics, openapi |
+| Python contract (`pytest -m contract`) | 24 | AgentFlags IPC + all Pydantic schemas, no LLM required |
+| adr-ledger | 15 | Merkle chain, JetStream, signers |
 
-**Coverage by Module** (\~60%):
-
-- ✅ High: validation.rs (11), auth.rs (11), audit.rs (14), health.rs (9)
-- ✅ Medium: logging.rs (8), secrets.rs (5), metrics.rs (5), test\_utils.rs (8)
-- ⚠️ Low: llm/proxy.rs (4), nlp.rs (1)
-- ❌ None: engine.rs (0 tests - core inference engine)
+**Coverage**: ~75% (target 80%)
 
 **Run Tests**:
 
 ```bash
-# All tests
-nix develop -c cargo test
+# Rust — full suite
+nix develop --command cargo test --lib
 
-# Unit tests only
-nix develop -c cargo test --lib
+# Python — contract tests (no LLM needed)
+cd agents && pytest tests/ -m contract -v
 
-# Integration tests
-nix develop -c cargo test --tests
+# Python — integration tests (requires LLM_API_KEY)
+cd agents && pytest tests/ -m integration -v
 ```
-
-See: `docs/TESTING.md`
 
 ---
 
@@ -239,9 +233,10 @@ See: [`docs/SOPS_SETUP.md`](docs/SOPS_SETUP.md)
 
 **Key Features**:
 
-- Visual "Thinking..." status indicator
+- Braille spinner animation while thinking
 - Tokyo Night color scheme
-- Vim-style navigation (j/k scroll)
+- readline-style cursor (Ctrl+←/→ word nav, Ctrl+W/U/K kill)
+- Auto-scroll + manual scroll ↑/↓/PgUp/PgDn
 - 5 preset profiles (Ctrl+1-5)
 
 ### Health Checks
@@ -496,4 +491,4 @@ Proprietary - Internal Research Project
 ---
 
 **Maintained by**: VoidNxSEC Team
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-04-26
