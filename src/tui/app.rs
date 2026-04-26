@@ -158,3 +158,255 @@ impl AppState {
         self.cursor_pos = new_pos;
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app_with(buf: &str, cursor: usize) -> AppState {
+        let mut a = AppState::new("http://localhost:3000".into(), "http://localhost:8001".into());
+        a.input_buffer = buf.to_owned();
+        a.cursor_pos = cursor;
+        a
+    }
+
+    // ── cursor_left ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn cursor_left_from_end() {
+        let mut a = app_with("hello", 5);
+        a.cursor_left();
+        assert_eq!(a.cursor_pos, 4);
+    }
+
+    #[test]
+    fn cursor_left_clamps_at_zero() {
+        let mut a = app_with("hi", 0);
+        a.cursor_left();
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    #[test]
+    fn cursor_left_multibyte() {
+        // "é" = 2 bytes (U+00E9)
+        let mut a = app_with("aé", 3); // cursor after "é"
+        a.cursor_left();
+        assert_eq!(a.cursor_pos, 1); // now after "a", before "é"
+    }
+
+    // ── cursor_right ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn cursor_right_from_start() {
+        let mut a = app_with("hello", 0);
+        a.cursor_right();
+        assert_eq!(a.cursor_pos, 1);
+    }
+
+    #[test]
+    fn cursor_right_clamps_at_end() {
+        let mut a = app_with("hi", 2);
+        a.cursor_right();
+        assert_eq!(a.cursor_pos, 2);
+    }
+
+    #[test]
+    fn cursor_right_multibyte() {
+        // "中" = 3 bytes (U+4E2D)
+        let mut a = app_with("中x", 0);
+        a.cursor_right();
+        assert_eq!(a.cursor_pos, 3);
+        a.cursor_right();
+        assert_eq!(a.cursor_pos, 4);
+    }
+
+    // ── cursor_word_left / right ──────────────────────────────────────────────
+
+    #[test]
+    fn cursor_word_left_simple() {
+        let mut a = app_with("foo bar", 7); // end
+        a.cursor_word_left();
+        assert_eq!(a.cursor_pos, 4); // start of "bar"
+    }
+
+    #[test]
+    fn cursor_word_left_trailing_spaces() {
+        let mut a = app_with("foo   ", 6);
+        a.cursor_word_left();
+        assert_eq!(a.cursor_pos, 0); // skips spaces, then "foo" → 0
+    }
+
+    #[test]
+    fn cursor_word_left_at_start() {
+        let mut a = app_with("word", 4);
+        a.cursor_word_left();
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    #[test]
+    fn cursor_word_right_simple() {
+        let mut a = app_with("foo bar", 0);
+        a.cursor_word_right();
+        assert_eq!(a.cursor_pos, 4); // after "foo " → start of "bar"
+    }
+
+    #[test]
+    fn cursor_word_right_at_end() {
+        let mut a = app_with("foo", 3);
+        a.cursor_word_right();
+        assert_eq!(a.cursor_pos, 3);
+    }
+
+    // ── insert_char ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn insert_at_end() {
+        let mut a = app_with("hi", 2);
+        a.insert_char('!');
+        assert_eq!(a.input_buffer, "hi!");
+        assert_eq!(a.cursor_pos, 3);
+    }
+
+    #[test]
+    fn insert_at_middle() {
+        let mut a = app_with("hllo", 1);
+        a.insert_char('e');
+        assert_eq!(a.input_buffer, "hello");
+        assert_eq!(a.cursor_pos, 2);
+    }
+
+    #[test]
+    fn insert_multibyte() {
+        let mut a = app_with("ac", 1);
+        a.insert_char('é');
+        assert_eq!(a.input_buffer, "aéc");
+        assert_eq!(a.cursor_pos, 3); // 1 + 2 bytes for é
+    }
+
+    // ── backspace ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn backspace_deletes_previous_char() {
+        let mut a = app_with("hello", 5);
+        a.backspace();
+        assert_eq!(a.input_buffer, "hell");
+        assert_eq!(a.cursor_pos, 4);
+    }
+
+    #[test]
+    fn backspace_at_zero_is_noop() {
+        let mut a = app_with("hi", 0);
+        a.backspace();
+        assert_eq!(a.input_buffer, "hi");
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    #[test]
+    fn backspace_multibyte() {
+        let mut a = app_with("aé", 3); // cursor after "é" (byte 3)
+        a.backspace();
+        assert_eq!(a.input_buffer, "a");
+        assert_eq!(a.cursor_pos, 1);
+    }
+
+    #[test]
+    fn backspace_at_middle() {
+        let mut a = app_with("hello", 3); // cursor after 'l' (index 3)
+        a.backspace();
+        assert_eq!(a.input_buffer, "helo");
+        assert_eq!(a.cursor_pos, 2);
+    }
+
+    // ── delete_word_back ─────────────────────────────────────────────────────
+
+    #[test]
+    fn delete_word_back_single_word() {
+        let mut a = app_with("hello", 5);
+        a.delete_word_back();
+        assert_eq!(a.input_buffer, "");
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    #[test]
+    fn delete_word_back_last_word() {
+        let mut a = app_with("foo bar", 7);
+        a.delete_word_back();
+        assert_eq!(a.input_buffer, "foo ");
+        assert_eq!(a.cursor_pos, 4);
+    }
+
+    #[test]
+    fn delete_word_back_trailing_spaces() {
+        let mut a = app_with("foo   ", 6);
+        a.delete_word_back();
+        assert_eq!(a.input_buffer, "");
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    #[test]
+    fn delete_word_back_at_zero_is_noop() {
+        let mut a = app_with("hi", 0);
+        a.delete_word_back();
+        assert_eq!(a.input_buffer, "hi");
+        assert_eq!(a.cursor_pos, 0);
+    }
+
+    // ── auto_scroll behaviour ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_system_message_sets_auto_scroll() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.auto_scroll = false;
+        a.add_system_message("info");
+        assert!(a.auto_scroll);
+        assert_eq!(a.messages.len(), 1);
+    }
+
+    #[test]
+    fn add_assistant_message_sets_auto_scroll() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.auto_scroll = false;
+        a.add_assistant_message("response");
+        assert!(a.auto_scroll);
+    }
+
+    #[test]
+    fn add_user_message_does_not_change_auto_scroll() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.auto_scroll = false;
+        a.add_user_message("prompt");
+        assert!(!a.auto_scroll);
+    }
+
+    // ── apply_preset ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn apply_preset_balanced() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.apply_preset("balanced");
+        assert!((a.config.temperature - 0.7).abs() < f32::EPSILON);
+        assert_eq!(a.config.max_tokens, 600);
+    }
+
+    #[test]
+    fn apply_preset_creative_sets_high_temp() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.apply_preset("creative");
+        assert!(a.config.temperature > 1.0);
+    }
+
+    #[test]
+    fn apply_preset_safe_disables_commands() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.apply_preset("safe");
+        assert!(!a.config.enable_commands);
+    }
+
+    #[test]
+    fn apply_preset_unknown_falls_back_to_default() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.apply_preset("unknown_preset");
+        assert!((a.config.temperature - 0.7).abs() < f32::EPSILON);
+    }
+}
