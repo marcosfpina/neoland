@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.7
+# Build context: neoland/  (repo root — only needs agents/)
+
+FROM python:3.13-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -u 1001 -s /bin/false neoland
+
+RUN pip install --no-cache-dir poetry==1.8.3
+
+WORKDIR /app
+
+# Layer cache: install deps before copying source
+COPY agents/pyproject.toml agents/poetry.lock ./
+
+RUN poetry config virtualenvs.create false && \
+    poetry install --only main --no-interaction --no-ansi
+
+COPY agents/neoland_agents/ neoland_agents/
+
+USER neoland
+EXPOSE 8001
+
+CMD ["uvicorn", "neoland_agents.app:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

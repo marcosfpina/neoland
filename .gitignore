@@ -10,3 +10,5 @@ secrets/.decrypted/
 agents/.venv/
 agents/.nix-installed-agents
 agents/*.egg-info/
+**/__pycache__/
+**/*.pyc

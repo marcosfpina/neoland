@@ -1,0 +1,107 @@
+# NEOLAND — Docker Compose (Phase 5)
+#
+# First-time setup:
+#   eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
+#   DOCKER_BUILDKIT=1 docker compose build --ssh default
+#   docker compose up -d
+#
+# Required (copy deploy/docker/.env.example → deploy/docker/.env and fill in):
+#   POSTGRES_PASSWORD, NEOLAND_ADMIN_API_KEY, NEOLAND_USER_API_KEY,
+#   NEOLAND_READONLY_API_KEY, LLM_API_KEY
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: neoland
+      POSTGRES_USER: neoland
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neoland -d neoland"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dspy-pipeline:
+    build:
+      context: ../..    # neoland/ — only needs agents/
+      dockerfile: deploy/docker/Dockerfile.pipeline
+    image: neoland-dspy-pipeline:0.1.0
+    restart: unless-stopped
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY:?LLM_API_KEY required}
+      NEOLAND_LLM_PROVIDER: ${NEOLAND_LLM_PROVIDER:-openai}
+      NEOLAND_LLM_MODEL: ${NEOLAND_LLM_MODEL:-gpt-4o-mini}
+      DATABASE_URL: postgresql://neoland:${POSTGRES_PASSWORD}@postgres:5432/neoland
+      NEOLAND_SHM_PATH: /run/neoland/agent-flags.shm
+    volumes:
+      - shm_ipc:/run/neoland
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  control-plane:
+    build:
+      context: ../../..   # master/ — includes spectre/ path dep
+      dockerfile: neoland/deploy/docker/Dockerfile.control-plane
+      ssh:
+        - default
+    image: neoland-control-plane:0.1.0
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://neoland:${POSTGRES_PASSWORD}@postgres:5432/neoland
+      NEOLAND_ADMIN_API_KEY: ${NEOLAND_ADMIN_API_KEY:?NEOLAND_ADMIN_API_KEY required}
+      NEOLAND_USER_API_KEY: ${NEOLAND_USER_API_KEY:?NEOLAND_USER_API_KEY required}
+      NEOLAND_READONLY_API_KEY: ${NEOLAND_READONLY_API_KEY:?NEOLAND_READONLY_API_KEY required}
+      LLM_API_KEY: ${LLM_API_KEY}
+      NEOLAND_LLM_PROVIDER: ${NEOLAND_LLM_PROVIDER:-openai}
+      NEOLAND_LLM_MODEL: ${NEOLAND_LLM_MODEL:-gpt-4o-mini}
+      NEOLAND_NATS_URL: nats://nats:4222
+      NEOLAND_AGENTS_DSPY_URL: http://dspy-pipeline:8001
+      NEOLAND_SHM_PATH: /run/neoland/agent-flags.shm
+      NEOLAND_CHECKPOINT_DIR: /var/lib/neoland/checkpoints/adr
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - shm_ipc:/run/neoland
+      - adr_checkpoints:/var/lib/neoland
+    ports:
+      - "3001:3001"
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      dspy-pipeline:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  adr_checkpoints:
+  shm_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      # 64 bytes needed for SharedFlags; 64m is the minimum tmpfs allows
+      o: "size=64m,uid=1001"
