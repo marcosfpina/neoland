@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "neoland.fullname" . }}
+  labels:
+    {{- include "neoland.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.restPort }}
+      targetPort: rest
+      protocol: TCP
+      name: rest
+    - port: {{ .Values.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "neoland.selectorLabels" . | nindent 4 }}

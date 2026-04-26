@@ -1,0 +1,92 @@
+image:
+  controlPlane:
+    repository: neoland-control-plane
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  pipeline:
+    repository: neoland-dspy-pipeline
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  postgres:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  nats:
+    repository: nats
+    tag: 2.10-alpine
+    pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Secrets — pass via --set or pre-create a Secret named <release>-neoland-secrets
+# and set secrets.existingSecret to its name.
+secrets:
+  existingSecret: ""
+  postgresPassword: ""
+  adminApiKey: ""
+  userApiKey: ""
+  readonlyApiKey: ""
+  llmApiKey: ""
+
+env:
+  llmProvider: openai
+  llmModel: gpt-4o-mini
+  rustLog: info
+  checkpointDir: /var/lib/neoland/checkpoints/adr
+  pipelinePort: "8001"
+
+service:
+  type: ClusterIP
+  restPort: 3001
+  grpcPort: 50051
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: neoland.example.com
+  tls: []
+
+resources:
+  controlPlane:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  pipeline:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+postgres:
+  enabled: true
+  storageClass: ""
+  storage: 10Gi
+  database: neoland
+  user: neoland
+
+nats:
+  enabled: true
+  storageClass: ""
+  storage: 1Gi
+  clientPort: 4222
+  monitorPort: 8222
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: neoland
+description: Neoland AI Agent Platform — control plane + DSPy pipeline
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - agents
+  - llm
+  - dspy
+maintainers:
+  - name: voidnxlabs
+    email: dev@voidnxlabs.io

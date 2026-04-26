@@ -1,0 +1,20 @@
+Neoland {{ .Chart.AppVersion }} deployed.
+
+  Release: {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+
+REST API:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  export SVC=$(kubectl get svc {{ include "neoland.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  curl http://$SVC:{{ .Values.service.restPort }}/health
+{{- else }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "neoland.fullname" . }} {{ .Values.service.restPort }}:{{ .Values.service.restPort }}
+  curl http://localhost:{{ .Values.service.restPort }}/health
+  # Swagger UI: http://localhost:{{ .Values.service.restPort }}/swagger-ui/
+{{- end }}
+
+Run DB migrations (first install only):
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "neoland.fullname" . }} -c control-plane -- \
+    sqlx migrate run --database-url "$DATABASE_URL" --source /app/migrations
