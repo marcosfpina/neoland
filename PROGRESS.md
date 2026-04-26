@@ -1,8 +1,8 @@
 # NEOLAND Production Readiness Progress
 
-**Last Updated**: 2026-04-07
-**Overall Progress**: 98% — Ciclo 2 operational stack em progresso
-**Production Readiness Score**: 93/100
+**Last Updated**: 2026-04-26
+**Overall Progress**: 99% — Ciclo 2 fechado, TUI reescrita, tracing + contract tests ativos
+**Production Readiness Score**: 96/100
 
 ## Ciclo 1 — IPC + NATS + adr-ledger + Phantom ✅
 
@@ -17,7 +17,7 @@
 
 ---
 
-## Ciclo 2 — Operational Stack (em progresso, 2026-04-07)
+## Ciclo 2 — Operational Stack ✅ (fechado 2026-04-26)
 
 | Fase | Status | Entregável |
 |------|--------|-----------|
@@ -29,11 +29,22 @@
 | 4.6 — Owasaka tests | ✅ | Event pipeline tests (12) + API server tests (5) — cobertura cross-stack |
 | 4.7 — EDR rules | ✅ | 3 SIGMA + 6 YARA rules neoland-specific (sentinel/sigma + sentinel/yara) |
 
-### Test counts across stack (2026-04-07)
+## Ciclo 3 — Quality & Observability ✅ (2026-04-26)
+
+| Fase | Status | Entregável |
+|------|--------|-----------|
+| TUI rewrite | ✅ | `src/tui/{mod,ui,app,events}.rs` — async `tokio::select!`, Tokyo Night, cursor UTF-8-safe, word-nav, braille spinner, auto-scroll |
+| TUI unit tests | ✅ | 29 testes em `src/tui/app.rs` — cursor (ASCII + multibyte), word-nav, insert/delete, auto_scroll por role, presets |
+| Agent tracing | ✅ | `#[instrument]` com `skip()` + `fields()` em `orchestrator.rs`, `client.rs`, `session.rs` — spans OpenTelemetry |
+| Python contract tests | ✅ | 24 testes `@pytest.mark.contract` em `agents/tests/test_contracts.py` — AgentFlags IPC + todos schemas Pydantic |
+
+### Test counts across stack (2026-04-26)
 
 | Repo | Tests | Notes |
 |------|-------|-------|
-| neoland | 156 | Rust (sem mocks) + 15 adr-ledger |
+| neoland (Rust) | 195 | lib unit tests (212 total com ignored) |
+| neoland (Python) | 24 | contract tests sem LLM (`pytest -m contract`) |
+| adr-ledger | 15 | ledger-subscriber, MerkleStore, JetStream |
 | owasaka | 17 | 12 pipeline + 5 API |
 | neotron | ~40+ | cortex, synapse, bastion, sentinel |
 | sentinel | suite | E2E + chaos + performance |
@@ -203,19 +214,21 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ---
 
-### ✅ Phase 4: Operational Readiness (In Progress — 70%)
-**Status**: 70% | **Duration**: ongoing
+### ✅ Phase 4: Operational Readiness (Complete — 95%)
+**Status**: 95% | **Duration**: complete
 
 - ✅ Prometheus metrics integration (agent pipeline counters + histograms)
 - ✅ cargo-audit supply-chain CVE scanning in devShell
 - ✅ NATS NKey auth + ACL (SOPS-encrypted)
 - ✅ EDR detection: 3 SIGMA rules + 6 YARA rules (sentinel)
 - ✅ Cross-stack test coverage (owasaka pipeline/API, neotron stress tests)
-- ⏳ Distributed tracing (OpenTelemetry)
-- ⏳ Centralized logging (JSON structured logs via Vector/Loki)
+- ✅ OpenTelemetry tracing (`#[instrument]` em orchestrator, client, session)
+- ✅ TUI async rewrite (tokio::select!, Tokyo Night, UTF-8-safe cursor)
+- ✅ Python contract tests (24, sem LLM, CI-ready)
+- ⏳ Centralized logging (JSON via Vector/Loki)
 - ⏳ Alerting with operational runbooks
 
-**Current Score**: 70/100 → **Target**: 90/100
+**Current Score**: 95/100
 
 ---
 
@@ -254,8 +267,8 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 ## Metrics Summary
 
 ### Code Quality
-- **Total Tests**: 156 neoland + 15 adr-ledger = 171
-- **Test Coverage**: ~70% (target: 80%+)
+- **Total Tests**: 195 Rust + 24 Python contract + 15 adr-ledger = 234+
+- **Test Coverage**: ~75% (target: 80%+)
 - **Clippy Warnings**: 0 (strict mode enabled)
 - **Format Compliance**: 100%
 
@@ -299,25 +312,26 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 - [x] Code formatting enforced
 - [x] Clippy strict mode
 
-### ⏳ In Progress (22%)
-- [ ] 80%+ test coverage (currently 60-65%)
-- [ ] E2E tests for TUI
-- [ ] Security penetration testing
-- [ ] Load testing (500 RPS)
+### ✅ Completed additions (2026-04-26)
+- [x] TUI rewrite — async tokio::select!, Tokyo Night palette, UTF-8-safe cursor
+- [x] 29 TUI unit tests (cursor, word-nav, insert/delete, auto-scroll, presets)
+- [x] OpenTelemetry `#[instrument]` spans on orchestrator, client, session
+- [x] 24 Python contract tests (AgentFlags IPC + all Pydantic schemas, no LLM)
+- [x] Prometheus metrics wired
+- [x] cargo-audit in devShell
+- [x] EDR: 3 SIGMA + 6 YARA rules
 
-### ⏳ Pending (10%)
-- [ ] Prometheus metrics
-- [ ] Distributed tracing
-- [ ] Centralized logging
-- [ ] Alerting + on-call
-- [ ] Operational runbooks
-- [ ] DR plan tested
-- [ ] Containerized (Docker)
-- [ ] Kubernetes deployment
-- [ ] HA configuration
-- [ ] SOC 2 documentation
-- [ ] GDPR compliance
-- [ ] API documentation complete
+### ⏳ In Progress (3%)
+- [ ] 80%+ Rust test coverage (currently ~75%)
+- [ ] Centralized logging (Vector/Loki)
+- [ ] Alerting + operational runbooks
+
+### ⏳ Pending (Phase 5-6)
+- [ ] Load testing (500 RPS target)
+- [ ] Docker containerization
+- [ ] Kubernetes deployment + HA
+- [ ] OpenAPI spec for axum endpoints
+- [ ] SOC 2 / GDPR documentation
 
 ---
 
@@ -340,25 +354,19 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ## Next Steps
 
-### Immediate (This Week)
-1. **Phase 2.3**: E2E & Security Testing
-   - TUI automation tests (12h)
-   - Security fuzzing (8h)
-   - Cargo audit integration (2h)
+### Immediate
+1. **Logging centralizado** — Vector → Loki, JSON structured logs (4h)
+2. **Alerting** — Prometheus alertrules + runbooks básicos (4h)
+3. **OpenAPI spec** — `utoipa` ou `aide` para axum REST endpoints (6h)
 
-2. **Phase 2.4**: Load Testing
-   - gRPC load tests with ghz (4h)
-   - Performance benchmarks (4h)
+### Short-term
+4. **Load testing** — ghz gRPC + wrk REST, target 500 RPS p99 <200ms
+5. **TUI multi-line input** — textarea + history navigation (↑/↓)
 
-### Short-term (Next 2 Weeks)
-3. **Phase 4 Start**: Operational Readiness
-   - Prometheus metrics integration
-   - OpenTelemetry tracing
-   - Structured JSON logging
-
-### Medium-term (4-8 Weeks)
-4. **Phase 5**: Infrastructure & Scalability
-5. **Phase 6**: Compliance & Documentation
+### Medium-term (Phase 5-6)
+6. **Docker** — multi-stage build Rust + Python pipeline
+7. **Kubernetes** — Helm chart, HA 3 replicas
+8. **Compliance docs** — OpenAPI completo, SOC 2 gap analysis
 
 ---
 
