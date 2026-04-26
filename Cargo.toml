@@ -64,6 +64,8 @@ tokio-stream = "0.1"
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
+utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
 
 # Local Inference Engine (Candle)
 candle-core = "0.8"
