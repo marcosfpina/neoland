@@ -40,6 +40,7 @@ use crate::{
     auth::AuthManager,
     engine::{GenerationConfig, LocalEngine},
     health, // Phase 4.3: Health Checks
+    matrix::MatrixClient,
     nlp::VectorStore,
     secrets::SecretsManager,
     storage::PersistentVectorStore,
@@ -1234,6 +1235,14 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                             orch
                                         },
                                     }
+                                } else {
+                                    orch
+                                };
+                                // Optionally attach Matrix client (Phase 4)
+                                let orch = if cfg.matrix.enabled {
+                                    let mc = MatrixClient::new(&cfg.matrix.base_url);
+                                    info!(url = %cfg.matrix.base_url, "Matrix client attached");
+                                    orch.with_matrix(Arc::new(mc))
                                 } else {
                                     orch
                                 };
