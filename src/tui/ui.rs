@@ -6,24 +6,24 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{AppState, ConnectionStatus, MessageRole};
+use super::app::{AppState, ConnectionStatus, StageStatus, TaskStatus, ToolStatus};
 use super::presets::QueryConfig;
 
-// ── Palette — Tokyo Night Storm + Hyprland accent ────────────────────────────
+// ── Palette — Tokyo Night Storm + Hyprland accent ─────────────────────────────
 
 pub mod colors {
     use ratatui::style::Color;
     pub const FG: Color = Color::Rgb(192, 202, 245); // #c0caf5  foreground
-    pub const FG_DIM: Color = Color::Rgb(169, 177, 214); // #a9b1d6  dim foreground (AI text)
+    pub const FG_DIM: Color = Color::Rgb(169, 177, 214); // #a9b1d6  dim foreground
     pub const PRIMARY: Color = Color::Rgb(122, 162, 247); // #7aa2f7  blue  (active border)
-    pub const CYAN: Color = Color::Rgb(125, 207, 255); // #7dcfff  user label
-    pub const ACCENT: Color = Color::Rgb(187, 154, 247); // #bb9af7  purple (preset badge, spinner)
-    pub const SUCCESS: Color = Color::Rgb(158, 206, 106); // #9ece6a  green  (ai label, connected)
-    pub const WARNING: Color = Color::Rgb(255, 158, 100); // #ff9e64  orange (degraded)
-    pub const ERROR: Color = Color::Rgb(247, 118, 142); // #f7768e  red    (offline)
+    pub const CYAN: Color = Color::Rgb(125, 207, 255); // #7dcfff  tools label
+    pub const ACCENT: Color = Color::Rgb(187, 154, 247); // #bb9af7  purple (pipeline)
+    pub const SUCCESS: Color = Color::Rgb(158, 206, 106); // #9ece6a  green  (done, connected)
+    pub const WARNING: Color = Color::Rgb(255, 158, 100); // #ff9e64  orange (deferred)
+    pub const ERROR: Color = Color::Rgb(247, 118, 142); // #f7768e  red    (failed, offline)
     pub const MUTED: Color = Color::Rgb(86, 95, 137); // #565f89  muted text
     pub const BORDER: Color = Color::Rgb(65, 72, 104); // #414868  inactive border
-    pub const CURSOR_BG: Color = Color::Rgb(26, 27, 38); // #1a1b26  cursor char bg (= true bg)
+    pub const CURSOR_BG: Color = Color::Rgb(26, 27, 38); // #1a1b26  cursor bg
 }
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -32,28 +32,19 @@ const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 
 pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
     let area = f.area();
-    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(area);
+    let [main, input] = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(area);
 
-    let content_area = if app.sidebar_visible {
-        let split = Layout::horizontal([Constraint::Percentage(72), Constraint::Percentage(28)])
-            .split(chunks[0]);
-        render_sidebar(f, split[1], app);
-        split[0]
-    } else {
-        chunks[0]
-    };
-
-    render_chat(f, content_area, app);
-    render_input(f, chunks[1], app);
+    render_main(f, main, app);
+    render_input(f, input, app);
 }
 
-// ── Chat panel ────────────────────────────────────────────────────────────────
+// ── Main panel ────────────────────────────────────────────────────────────────
 
-fn render_chat(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppState) {
+fn render_main(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppState) {
     let inner_w = area.width.saturating_sub(2);
     let inner_h = area.height.saturating_sub(2);
 
-    let lines = build_chat_lines(app);
+    let lines = build_main_lines(app);
     let total = count_visual_lines(&lines, inner_w);
 
     if app.auto_scroll {
@@ -61,7 +52,7 @@ fn render_chat(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppStat
     }
     app.scroll_offset = app.scroll_offset.min(total.saturating_sub(inner_h as usize) as u16);
 
-    // Waybar-style status: ● · gpt-4o-mini · 1.2k tok · 42ms
+    // Status bar — waybar pill style
     let (dot, dot_color) = match app.connection_status {
         ConnectionStatus::Connected => ("●", colors::SUCCESS),
         ConnectionStatus::Degraded => ("◐", colors::WARNING),
@@ -73,16 +64,7 @@ fn render_chat(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppStat
         format!(" {} ", dot),
         Style::default().fg(dot_color).add_modifier(Modifier::BOLD),
     )];
-    if let Some(ref b) = app.active_backend {
-        status.push(Span::styled(" · ", Style::default().fg(colors::BORDER)));
-        status.push(Span::styled(b.clone(), Style::default().fg(colors::ACCENT)));
-    }
-    if app.session_tokens > 0 {
-        status.push(Span::styled(" · ", Style::default().fg(colors::BORDER)));
-        status.push(Span::styled(
-            format!("{}tok", app.session_tokens),
-            Style::default().fg(colors::MUTED),
-        ));
+    if app.last_latency_ms > 0 {
         status.push(Span::styled(" · ", Style::default().fg(colors::BORDER)));
         status.push(Span::styled(
             format!("{}ms ", app.last_latency_ms),
@@ -122,184 +104,237 @@ fn render_chat(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppStat
     );
 }
 
-fn build_chat_lines(app: &AppState) -> Vec<Line<'static>> {
+fn build_main_lines(app: &AppState) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
+    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
 
-    for msg in &app.messages {
-        let time = msg.timestamp.format("%H:%M").to_string();
-        match msg.role {
-            MessageRole::User => {
-                lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(
-                        "◆ you",
-                        Style::default().fg(colors::CYAN).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(format!("   {}", time), Style::default().fg(colors::MUTED)),
-                ]));
-                for text in msg.content.lines() {
-                    lines.push(Line::from(Span::styled(
-                        format!("    {}", text),
-                        Style::default().fg(colors::FG),
-                    )));
-                }
-                lines.push(Line::from(""));
-            },
-            MessageRole::Assistant => {
-                lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(
-                        "◆ ai",
-                        Style::default().fg(colors::SUCCESS).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(format!("    {}", time), Style::default().fg(colors::MUTED)),
-                ]));
-                for text in msg.content.lines() {
-                    lines.push(Line::from(Span::styled(
-                        format!("    {}", text),
-                        Style::default().fg(colors::FG_DIM),
-                    )));
-                }
-                lines.push(Line::from(""));
-            },
-            MessageRole::System => {
-                for text in msg.content.lines() {
-                    lines.push(Line::from(Span::styled(
-                        format!("    {}", text),
-                        Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-                    )));
-                }
-                lines.push(Line::from(""));
-            },
+    // ── TASKS ─────────────────────────────────────────────────────────
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("TASKS", Style::default().fg(colors::MUTED).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+
+    if app.tasks.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  no tasks yet — type a description and press Enter",
+            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for task in &app.tasks {
+            let (bullet, bullet_color) = match task.status {
+                TaskStatus::Running => (spin, colors::ACCENT),
+                TaskStatus::Done => ("✓", colors::SUCCESS),
+                TaskStatus::Failed => ("✗", colors::ERROR),
+                TaskStatus::Queued => ("○", colors::MUTED),
+            };
+            let status_label = match task.status {
+                TaskStatus::Running => "running",
+                TaskStatus::Done => "done   ",
+                TaskStatus::Failed => "failed ",
+                TaskStatus::Queued => "queued ",
+            };
+            let id_short = task.id.to_string()[..6].to_string();
+            let desc = task.description.chars().take(45).collect::<String>();
+            let padding = " ".repeat(47usize.saturating_sub(desc.chars().count()));
+
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    bullet.to_string(),
+                    Style::default().fg(bullet_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" "),
+                Span::styled(format!("[{}]", id_short), Style::default().fg(colors::MUTED)),
+                Span::raw(" "),
+                Span::styled(desc, Style::default().fg(colors::FG)),
+                Span::raw(padding),
+                Span::styled(status_label.to_string(), Style::default().fg(bullet_color)),
+            ]));
         }
     }
 
-    // In-flight streaming / thinking
-    if let Some(ref pending) = app.pending_message {
-        let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("◆ ai", Style::default().fg(colors::SUCCESS).add_modifier(Modifier::BOLD)),
-            Span::raw("   "),
-            Span::styled(spin, Style::default().fg(colors::ACCENT)),
-        ]));
-        for text in pending.lines() {
-            lines.push(Line::from(Span::styled(
-                format!("    {}", text),
-                Style::default().fg(colors::FG_DIM),
-            )));
-        }
-        lines.push(Line::from(""));
-    } else if app.is_thinking {
-        let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("◆ ai", Style::default().fg(colors::SUCCESS).add_modifier(Modifier::BOLD)),
-            Span::raw("   "),
-            Span::styled(spin, Style::default().fg(colors::ACCENT)),
-            Span::styled(
-                " generating",
-                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-            ),
-        ]));
-    }
-
-    lines
-}
-
-// ── Sidebar ───────────────────────────────────────────────────────────────────
-
-fn render_sidebar(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) {
-    let (conn_label, conn_color) = match app.connection_status {
-        ConnectionStatus::Connected => ("connected", colors::SUCCESS),
-        ConnectionStatus::Degraded => ("degraded", colors::WARNING),
-        ConnectionStatus::Offline => ("offline", colors::ERROR),
-        ConnectionStatus::Unknown => ("checking", colors::MUTED),
-    };
-
-    let preset = preset_name(&app.config);
-
-    let mut lines: Vec<Line<'static>> = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  session",
-            Style::default().fg(colors::MUTED).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  status   ", Style::default().fg(colors::MUTED)),
-            Span::styled(conn_label.to_string(), Style::default().fg(conn_color)),
-        ]),
-    ];
-
-    if let Some(ref b) = app.active_backend {
-        lines.push(Line::from(vec![
-            Span::styled("  backend  ", Style::default().fg(colors::MUTED)),
-            Span::styled(b.clone(), Style::default().fg(colors::FG)),
-        ]));
-    }
-    if app.session_tokens > 0 {
-        lines.push(Line::from(vec![
-            Span::styled("  tokens   ", Style::default().fg(colors::MUTED)),
-            Span::styled(app.session_tokens.to_string(), Style::default().fg(colors::FG)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  latency  ", Style::default().fg(colors::MUTED)),
-            Span::styled(format!("{}ms", app.last_latency_ms), Style::default().fg(colors::FG)),
-        ]));
-    }
-
+    // ── Divider ───────────────────────────────────────────────────────
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  preset",
-        Style::default().fg(colors::MUTED).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("  active   ", Style::default().fg(colors::MUTED)),
-        Span::styled(
-            preset.to_string(),
-            Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD),
-        ),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("  temp     ", Style::default().fg(colors::MUTED)),
-        Span::styled(format!("{:.2}", app.config.temperature), Style::default().fg(colors::FG)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("  top_p    ", Style::default().fg(colors::MUTED)),
-        Span::styled(format!("{:.2}", app.config.top_p), Style::default().fg(colors::FG)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("  max_tok  ", Style::default().fg(colors::MUTED)),
-        Span::styled(app.config.max_tokens.to_string(), Style::default().fg(colors::FG)),
-    ]));
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ^1–5 preset  tab hide",
+        "  ─────────────────────────────────────────────────────────────────",
         Style::default().fg(colors::BORDER),
     )));
+    lines.push(Line::from(""));
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(colors::BORDER))
-        .title(
-            Line::from(Span::styled(" info ", Style::default().fg(colors::MUTED))).left_aligned(),
-        );
+    // ── PIPELINE ──────────────────────────────────────────────────────
+    if app.pipeline_visible || !app.pipeline_stages.is_empty() {
+        let active_id = app
+            .active_task_id
+            .map(|id| format!("  [{}]", &id.to_string()[..6]))
+            .unwrap_or_default();
 
-    f.render_widget(Paragraph::new(lines).block(block), area);
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                "▸ pipeline",
+                Style::default().fg(colors::ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(active_id, Style::default().fg(colors::MUTED)),
+        ]));
+        lines.push(Line::from(""));
+
+        if app.pipeline_stages.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "    no pipeline running",
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+            )));
+        } else {
+            for stage in &app.pipeline_stages {
+                let (icon, icon_color): (&str, ratatui::style::Color) = match &stage.status {
+                    StageStatus::Done { .. } => ("✓", colors::SUCCESS),
+                    StageStatus::Running => (spin, colors::ACCENT),
+                    StageStatus::Skipped => ("○", colors::MUTED),
+                    StageStatus::Failed => ("✗", colors::ERROR),
+                    StageStatus::Pending => ("·", colors::BORDER),
+                };
+
+                let conf_str = stage
+                    .confidence
+                    .map(|c| format!("{:.2}", c))
+                    .unwrap_or_else(|| "    ".to_string());
+
+                let latency_str = match &stage.status {
+                    StageStatus::Done { latency_ms } => format!("{}ms", latency_ms),
+                    StageStatus::Running => "running...".to_string(),
+                    StageStatus::Skipped => "skipped".to_string(),
+                    StageStatus::Failed => "failed".to_string(),
+                    StageStatus::Pending => String::new(),
+                };
+
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(
+                        icon.to_string(),
+                        Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(format!("{:<14}", stage.name), Style::default().fg(colors::FG)),
+                    Span::styled(format!("{:<8}", conf_str), Style::default().fg(colors::MUTED)),
+                    Span::styled(latency_str, Style::default().fg(colors::MUTED)),
+                ]));
+            }
+        }
+        lines.push(Line::from(""));
+    }
+
+    // ── TOOLS ─────────────────────────────────────────────────────────
+    if !app.tool_calls.is_empty() {
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("▸ tools", Style::default().fg(colors::CYAN).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+
+        for tool in &app.tool_calls {
+            let (icon, icon_color): (&str, ratatui::style::Color) = match &tool.status {
+                ToolStatus::Done { .. } => ("✓", colors::SUCCESS),
+                ToolStatus::Running => (spin, colors::ACCENT),
+                ToolStatus::Failed => ("✗", colors::ERROR),
+            };
+            let duration_str = match &tool.status {
+                ToolStatus::Done { duration_ms } => format!("{}ms", duration_ms),
+                ToolStatus::Running => "running...".to_string(),
+                ToolStatus::Failed => "failed".to_string(),
+            };
+            let args = tool.args_summary.chars().take(22).collect::<String>();
+
+            lines.push(Line::from(vec![
+                Span::raw("    "),
+                Span::styled(
+                    icon.to_string(),
+                    Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("  "),
+                Span::styled(format!("{:<18}", tool.name), Style::default().fg(colors::FG)),
+                Span::styled(format!("{:<24}", args), Style::default().fg(colors::MUTED)),
+                Span::styled(duration_str, Style::default().fg(colors::MUTED)),
+            ]));
+        }
+        lines.push(Line::from(""));
+    }
+
+    // ── OUTPUT ────────────────────────────────────────────────────────
+    {
+        let active_id = app
+            .active_task_id
+            .map(|id| format!("  [{}]", &id.to_string()[..6]))
+            .unwrap_or_default();
+
+        let adr_suffix = match (&app.adr_status, &app.adr_title) {
+            (Some(status), Some(title)) => {
+                let color = match status.as_str() {
+                    "accepted" => colors::SUCCESS,
+                    "rejected" => colors::ERROR,
+                    _ => colors::WARNING,
+                };
+                Some((format!("  {} — {}", status, title), color))
+            },
+            _ => None,
+        };
+
+        let mut header = vec![
+            Span::raw("  "),
+            Span::styled(
+                "▸ output",
+                Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(active_id, Style::default().fg(colors::MUTED)),
+        ];
+        if let Some((label, color)) = adr_suffix {
+            header.push(Span::styled(label, Style::default().fg(color)));
+        }
+        lines.push(Line::from(header));
+        lines.push(Line::from(""));
+
+        if app.output_text.is_empty() && app.active_task_id.is_some() {
+            lines.push(Line::from(vec![
+                Span::raw("    "),
+                Span::styled(spin.to_string(), Style::default().fg(colors::ACCENT)),
+                Span::styled(
+                    " pipeline running...",
+                    Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+        } else if app.output_text.is_empty() && app.tasks.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "    submit a task above to see the pipeline output here",
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+            )));
+        } else {
+            for text_line in app.output_text.lines() {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", text_line),
+                    Style::default().fg(colors::FG_DIM),
+                )));
+            }
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines
 }
 
 // ── Input bar ─────────────────────────────────────────────────────────────────
 
 fn render_input(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) {
     let preset = preset_name(&app.config);
+    let busy = app.active_task_id.is_some();
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(colors::PRIMARY))
+        .border_style(Style::default().fg(if busy {
+            colors::ACCENT
+        } else {
+            colors::PRIMARY
+        }))
         .title(
             Line::from(Span::styled(
                 format!(" [ {} ] ", preset),
@@ -309,19 +344,29 @@ fn render_input(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) 
         )
         .title_bottom(
             Line::from(Span::styled(
-                " ↵ send  ^l clear  ^c quit ",
+                " ↵ task  ^p pipeline  ^m matrix  ^x cancel  ^c quit ",
                 Style::default().fg(colors::MUTED),
             ))
             .right_aligned(),
         );
 
     f.render_widget(
-        Paragraph::new(build_input_line(&app.input_buffer, app.cursor_pos)).block(block),
+        Paragraph::new(build_input_line(&app.input_buffer, app.cursor_pos, busy)).block(block),
         area,
     );
 }
 
-fn build_input_line(buf: &str, cursor: usize) -> Line<'static> {
+fn build_input_line(buf: &str, cursor: usize, busy: bool) -> Line<'static> {
+    if busy {
+        return Line::from(vec![
+            Span::raw(" "),
+            Span::styled(
+                "pipeline running — ^x to cancel",
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+            ),
+        ]);
+    }
+
     let before = buf[..cursor].to_owned();
     let at_char = buf[cursor..].chars().next();
     let after_start = cursor + at_char.map(|c| c.len_utf8()).unwrap_or(0);

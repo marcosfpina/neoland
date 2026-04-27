@@ -1,6 +1,62 @@
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 use super::presets::QueryConfig;
+
+// ── Agent workstation types ───────────────────────────────────────────────────
+
+#[derive(Clone, PartialEq)]
+pub enum TaskStatus {
+    Queued,
+    Running,
+    Done,
+    Failed,
+}
+
+#[derive(Clone)]
+pub struct Task {
+    pub id: Uuid,
+    pub description: String,
+    pub status: TaskStatus,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum StageStatus {
+    Pending,
+    Running,
+    Done { latency_ms: u64 },
+    Skipped,
+    Failed,
+}
+
+#[derive(Clone)]
+pub struct PipelineStage {
+    pub name: &'static str,
+    pub status: StageStatus,
+    pub confidence: Option<f32>,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum ToolStatus {
+    Running,
+    Done { duration_ms: u64 },
+    Failed,
+}
+
+#[derive(Clone)]
+pub struct ToolCall {
+    pub name: String,
+    pub args_summary: String,
+    pub status: ToolStatus,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum Panel {
+    Tasks,
+    Pipeline,
+    Output,
+}
 
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
@@ -12,6 +68,7 @@ pub enum ConnectionStatus {
 
 #[derive(Clone)]
 pub struct AppState {
+    // ── Legacy chat fields (kept for fallback) ────────────────────────
     pub messages: Vec<ChatMessage>,
     pub pending_message: Option<String>,
     pub input_buffer: String,
@@ -28,6 +85,17 @@ pub struct AppState {
     pub session_tokens: u64,
     pub last_latency_ms: u64,
     pub tick: u8,
+    // ── Agent workstation ─────────────────────────────────────────────
+    pub tasks: Vec<Task>,
+    pub pipeline_stages: Vec<PipelineStage>,
+    pub tool_calls: Vec<ToolCall>,
+    pub active_task_id: Option<Uuid>,
+    pub output_text: String,
+    pub pipeline_visible: bool,
+    pub focused_panel: Panel,
+    pub adr_title: Option<String>,
+    pub adr_status: Option<String>,
+    pub active_session: Uuid,
 }
 
 #[derive(Clone)]
@@ -63,6 +131,97 @@ impl AppState {
             session_tokens: 0,
             last_latency_ms: 0,
             tick: 0,
+            tasks: Vec::new(),
+            pipeline_stages: Vec::new(),
+            tool_calls: Vec::new(),
+            active_task_id: None,
+            output_text: String::new(),
+            pipeline_visible: true,
+            focused_panel: Panel::Output,
+            adr_title: None,
+            adr_status: None,
+            active_session: Uuid::new_v4(),
+        }
+    }
+
+    // ── Agent workstation methods ─────────────────────────────────────
+
+    pub fn enqueue_task(&mut self, description: String) -> Uuid {
+        let id = Uuid::new_v4();
+        self.tasks.push(Task {
+            id,
+            description,
+            status: TaskStatus::Queued,
+            created_at: Utc::now(),
+        });
+        id
+    }
+
+    pub fn start_task(&mut self, id: Uuid) {
+        if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+            t.status = TaskStatus::Running;
+        }
+        self.active_task_id = Some(id);
+        self.pipeline_stages = vec![
+            PipelineStage { name: "junior", status: StageStatus::Pending, confidence: None },
+            PipelineStage { name: "senior", status: StageStatus::Pending, confidence: None },
+            PipelineStage { name: "architect", status: StageStatus::Pending, confidence: None },
+            PipelineStage { name: "tech-leader", status: StageStatus::Pending, confidence: None },
+        ];
+        self.tool_calls.clear();
+        self.output_text.clear();
+        self.adr_title = None;
+        self.adr_status = None;
+        self.auto_scroll = true;
+    }
+
+    pub fn update_stage(&mut self, name: &str, status: StageStatus, confidence: Option<f32>) {
+        let normalized = name.replace('_', "-");
+        if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
+            s.status = status;
+            if confidence.is_some() {
+                s.confidence = confidence;
+            }
+        }
+    }
+
+    pub fn complete_task(&mut self, id: Uuid, ok: bool) {
+        if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+            t.status = if ok {
+                TaskStatus::Done
+            } else {
+                TaskStatus::Failed
+            };
+        }
+        if self.active_task_id == Some(id) {
+            self.active_task_id = None;
+        }
+    }
+
+    pub fn add_tool_call(&mut self, name: String, args_summary: String) {
+        self.tool_calls
+            .push(ToolCall { name, args_summary, status: ToolStatus::Running });
+    }
+
+    pub fn finish_tool_call(&mut self, name: &str, duration_ms: u64) {
+        if let Some(t) = self
+            .tool_calls
+            .iter_mut()
+            .rev()
+            .find(|t| t.name == name && t.status == ToolStatus::Running)
+        {
+            t.status = ToolStatus::Done { duration_ms };
+        }
+    }
+
+    pub fn fail_tool_call(&mut self, name: &str) {
+        if let Some(t) = self
+            .tool_calls
+            .iter_mut()
+            .rev()
+            .find(|t| t.name == name && t.status == ToolStatus::Running)
+        {
+            t.status = ToolStatus::Failed;
         }
     }
 
