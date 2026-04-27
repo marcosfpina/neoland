@@ -12,3 +12,6 @@ agents/.nix-installed-agents
 agents/*.egg-info/
 **/__pycache__/
 **/*.pyc
+# Next.js build artifacts
+matrix/frontend/.next/
+matrix/frontend/tsconfig.tsbuildinfo
