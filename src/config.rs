@@ -18,6 +18,7 @@ pub struct Config {
     pub agents: AgentsConfig,
     pub mmap: MmapConfig,
     pub nats: NatsConfig,
+    pub mcp: McpConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,6 +133,21 @@ pub struct NatsConfig {
 impl Default for NatsConfig {
     fn default() -> Self {
         Self { url: "nats://localhost:4222".to_string(), enabled: false }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct McpConfig {
+    /// Path or name of the MCP stdio server binary.
+    pub binary: String,
+    /// Whether to spawn the MCP process on server startup.
+    pub enabled: bool,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self { binary: "securellm-mcp".to_string(), enabled: false }
     }
 }
 
@@ -250,6 +266,17 @@ impl Config {
             match v.to_ascii_lowercase().as_str() {
                 "1" | "true" | "yes" | "on" => self.nats.enabled = true,
                 "0" | "false" | "no" | "off" => self.nats.enabled = false,
+                _ => {},
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_MCP_BINARY") {
+            self.mcp.binary = v;
+            self.mcp.enabled = true;
+        }
+        if let Some(v) = get_env("NEOLAND_MCP_ENABLED") {
+            match v.to_ascii_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" => self.mcp.enabled = true,
+                "0" | "false" | "no" | "off" => self.mcp.enabled = false,
                 _ => {},
             }
         }

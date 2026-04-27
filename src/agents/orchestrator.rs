@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 use tracing::instrument;
 
+use std::sync::Arc;
+
 use crate::{
     agents::{
         client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult},
@@ -19,6 +21,7 @@ use crate::{
         session::SessionManager,
     },
     config::AgentsConfig,
+    mcp::McpRegistry,
     metrics::utils as metrics,
 };
 
@@ -28,6 +31,7 @@ pub struct AgentOrchestrator {
     escalation: EscalationPolicy,
     nats: Option<NatsPublisher>,
     event_bus: Option<tokio::sync::broadcast::Sender<AgentEvent>>,
+    mcp: Option<Arc<McpRegistry>>,
 }
 
 impl AgentOrchestrator {
@@ -45,6 +49,7 @@ impl AgentOrchestrator {
             },
             nats: None,
             event_bus: None,
+            mcp: None,
         })
     }
 
@@ -61,6 +66,12 @@ impl AgentOrchestrator {
         self
     }
 
+    /// Attach an MCP registry for tool-augmented pipeline execution.
+    pub fn with_mcp(mut self, registry: Arc<McpRegistry>) -> Self {
+        self.mcp = Some(registry);
+        self
+    }
+
     fn publish(&self, event: AgentEvent) {
         if let Some(tx) = &self.event_bus {
             let _ = tx.send(event);
@@ -73,7 +84,7 @@ impl AgentOrchestrator {
         task: &str,
         session_id: Uuid,
         requester_role: &str,
-        rag_context: String,
+        mut rag_context: String,
     ) -> Result<PipelineResult> {
         // Load session state for escalation decision
         let session = self.sessions.get_or_create(session_id).await?;
@@ -95,6 +106,41 @@ impl AgentOrchestrator {
             .await;
             metrics::record_escalation("high"); // architect escalation implies
                                                 // high risk
+        }
+
+        // MCP: search knowledge base to enrich RAG context before pipeline
+        if let Some(mcp) = &self.mcp {
+            if mcp.has_tool("search_knowledge") {
+                let preview = task.chars().take(40).collect::<String>();
+                self.publish(AgentEvent::ToolCallStarted {
+                    session_id,
+                    tool: "search_knowledge".to_string(),
+                    args_summary: preview,
+                });
+                let t0 = Instant::now();
+                match mcp
+                    .call("search_knowledge", serde_json::json!({ "query": task, "limit": 5 }))
+                    .await
+                {
+                    Ok(r) => {
+                        self.publish(AgentEvent::ToolCallDone {
+                            session_id,
+                            tool: "search_knowledge".to_string(),
+                            duration_ms: t0.elapsed().as_millis() as u64,
+                        });
+                        if !r.text.is_empty() {
+                            rag_context = format!("{}\n\n{}", r.text, rag_context);
+                        }
+                    },
+                    Err(e) => {
+                        self.publish(AgentEvent::ToolCallFailed {
+                            session_id,
+                            tool: "search_knowledge".to_string(),
+                            error: e.to_string(),
+                        });
+                    },
+                }
+            }
         }
 
         let request = AgentTaskRequest {
@@ -177,6 +223,44 @@ impl AgentOrchestrator {
         // Record pipeline completion metrics
         metrics::record_pipeline_completed(&decision_str, duration_secs, result.junior.confidence);
         metrics::record_escalation(&result.senior.risk_assessment);
+
+        // MCP: persist the ADR decision to the knowledge base
+        if let Some(mcp) = &self.mcp {
+            if mcp.has_tool("save_knowledge") {
+                let entry = format!(
+                    "ADR {session_id}-{task_id} — {decision_str} — {}",
+                    result.tech_leader.rationale
+                );
+                self.publish(AgentEvent::ToolCallStarted {
+                    session_id,
+                    tool: "save_knowledge".to_string(),
+                    args_summary: "adr checkpoint".to_string(),
+                });
+                let t0 = Instant::now();
+                match mcp
+                    .call(
+                        "save_knowledge",
+                        serde_json::json!({ "content": entry, "tags": ["adr", "neoland"] }),
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        self.publish(AgentEvent::ToolCallDone {
+                            session_id,
+                            tool: "save_knowledge".to_string(),
+                            duration_ms: t0.elapsed().as_millis() as u64,
+                        });
+                    },
+                    Err(e) => {
+                        self.publish(AgentEvent::ToolCallFailed {
+                            session_id,
+                            tool: "save_knowledge".to_string(),
+                            error: e.to_string(),
+                        });
+                    },
+                }
+            }
+        }
 
         // Publish completion + full output events
         if let Some(nats) = &self.nats {

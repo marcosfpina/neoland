@@ -1211,6 +1211,32 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                 } else {
                                     orch
                                 };
+                                // Optionally attach MCP tool registry (Phase 3)
+                                let orch = if cfg.mcp.enabled {
+                                    use crate::mcp::{McpClient, McpRegistry};
+                                    match McpClient::spawn(&cfg.mcp.binary).await {
+                                        Ok(client) => match McpRegistry::new(client).await {
+                                            Ok(reg) => {
+                                                info!(
+                                                    tools = reg.tools().len(),
+                                                    binary = %cfg.mcp.binary,
+                                                    "MCP registry initialized"
+                                                );
+                                                orch.with_mcp(Arc::new(reg))
+                                            },
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "MCP tool discovery failed — MCP disabled");
+                                                orch
+                                            },
+                                        },
+                                        Err(e) => {
+                                            tracing::warn!(error = %e, "MCP spawn failed — MCP disabled");
+                                            orch
+                                        },
+                                    }
+                                } else {
+                                    orch
+                                };
                                 let orch = orch.with_event_bus(event_tx.clone());
                                 info!(
                                     dspy_url = %cfg.agents.dspy_url,
