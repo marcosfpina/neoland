@@ -5,7 +5,11 @@ from typing import Dict, Any, Optional, List
 import time
 import logging
 import os
+import uuid
 from pathlib import Path
+
+# In-memory pipeline run store (Phase 4: neoland integration)
+_pipeline_runs: List[Dict[str, Any]] = []
 
 # STF Integration
 import sys
@@ -358,3 +362,79 @@ def get_prometheus_metrics():
         content=metrics_data,
         media_type=get_metrics_content_type()
     )
+
+
+# ── Phase 4: Neoland pipeline tracking ───────────────────────────────────────
+
+class AgentRunMetrics(BaseModel):
+    confidence: Optional[float] = None
+    latency_ms: Optional[int] = None
+    escalated: Optional[bool] = None
+    decision: Optional[str] = None
+
+class PipelineMetricsRequest(BaseModel):
+    session_id: str
+    task: str
+    agents: Dict[str, AgentRunMetrics]
+    total_latency_ms: int
+    decision: str
+    adr_title: Optional[str] = None
+
+class PipelineRunSummary(BaseModel):
+    run_id: str
+    session_id: str
+    task_preview: str
+    decision: str
+    adr_title: Optional[str]
+    junior_confidence: Optional[float]
+    total_latency_ms: int
+    score: float
+    timestamp: float
+
+@app.post("/pipeline/metrics", response_model=PipelineRunSummary)
+async def store_pipeline_metrics(request: PipelineMetricsRequest):
+    """Store a completed neoland pipeline run for the matrix dashboard."""
+    run_id = str(uuid.uuid4())
+    junior = request.agents.get("junior") or AgentRunMetrics()
+    junior_confidence = junior.confidence
+
+    score = (junior_confidence or 0.5)
+    if request.decision != "accepted":
+        score *= 0.5
+
+    entry: Dict[str, Any] = {
+        "run_id": run_id,
+        "session_id": request.session_id,
+        "task": request.task,
+        "task_preview": request.task[:120],
+        "agents": {k: v.model_dump() for k, v in request.agents.items()},
+        "total_latency_ms": request.total_latency_ms,
+        "decision": request.decision,
+        "adr_title": request.adr_title,
+        "junior_confidence": junior_confidence,
+        "score": round(score, 4),
+        "timestamp": time.time(),
+    }
+    _pipeline_runs.append(entry)
+    logger.info(f"Pipeline run stored: {run_id} | {request.decision} | {request.total_latency_ms}ms")
+
+    return PipelineRunSummary(
+        run_id=run_id,
+        session_id=request.session_id,
+        task_preview=entry["task_preview"],
+        decision=request.decision,
+        adr_title=request.adr_title,
+        junior_confidence=junior_confidence,
+        total_latency_ms=request.total_latency_ms,
+        score=score,
+        timestamp=entry["timestamp"],
+    )
+
+@app.get("/pipeline/history")
+def get_pipeline_history(limit: int = 50):
+    """Return recent neoland pipeline runs for the matrix dashboard."""
+    runs = _pipeline_runs[-limit:]
+    return {
+        "runs": list(reversed(runs)),
+        "total": len(_pipeline_runs),
+    }

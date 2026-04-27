@@ -19,6 +19,7 @@ pub struct Config {
     pub mmap: MmapConfig,
     pub nats: NatsConfig,
     pub mcp: McpConfig,
+    pub matrix: MatrixConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +152,21 @@ impl Default for McpConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MatrixConfig {
+    /// Base URL of the matrix backend (ranking/metrics service).
+    pub base_url: String,
+    /// Whether to post pipeline metrics to matrix after each run.
+    pub enabled: bool,
+}
+
+impl Default for MatrixConfig {
+    fn default() -> Self {
+        Self { base_url: "http://localhost:8002".to_string(), enabled: false }
+    }
+}
+
 impl Config {
     /// Load config from file, with env var overrides applied on top.
     /// Returns default config if no file is found (no error).
@@ -277,6 +293,17 @@ impl Config {
             match v.to_ascii_lowercase().as_str() {
                 "1" | "true" | "yes" | "on" => self.mcp.enabled = true,
                 "0" | "false" | "no" | "off" => self.mcp.enabled = false,
+                _ => {},
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_MATRIX_URL") {
+            self.matrix.base_url = v;
+            self.matrix.enabled = true;
+        }
+        if let Some(v) = get_env("NEOLAND_MATRIX_ENABLED") {
+            match v.to_ascii_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" => self.matrix.enabled = true,
+                "0" | "false" | "no" | "off" => self.matrix.enabled = false,
                 _ => {},
             }
         }

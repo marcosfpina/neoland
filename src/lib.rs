@@ -11,6 +11,7 @@ pub mod health; // Phase 4.3: Health Checks & Readiness Probes
 pub mod hyprland_ops;
 pub mod llm;
 pub mod logging; // Phase 4.2: Structured Logging
+pub mod matrix;
 pub mod mcp;
 pub mod metrics; // Phase 4.1: Prometheus Metrics
 pub mod ml_offload;

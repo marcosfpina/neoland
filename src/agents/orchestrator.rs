@@ -21,6 +21,7 @@ use crate::{
         session::SessionManager,
     },
     config::AgentsConfig,
+    matrix::{AgentRunMetrics, MatrixClient, PipelineAgents, PipelineMetricsPayload},
     mcp::McpRegistry,
     metrics::utils as metrics,
 };
@@ -32,6 +33,7 @@ pub struct AgentOrchestrator {
     nats: Option<NatsPublisher>,
     event_bus: Option<tokio::sync::broadcast::Sender<AgentEvent>>,
     mcp: Option<Arc<McpRegistry>>,
+    matrix: Option<Arc<MatrixClient>>,
 }
 
 impl AgentOrchestrator {
@@ -50,6 +52,7 @@ impl AgentOrchestrator {
             nats: None,
             event_bus: None,
             mcp: None,
+            matrix: None,
         })
     }
 
@@ -69,6 +72,12 @@ impl AgentOrchestrator {
     /// Attach an MCP registry for tool-augmented pipeline execution.
     pub fn with_mcp(mut self, registry: Arc<McpRegistry>) -> Self {
         self.mcp = Some(registry);
+        self
+    }
+
+    /// Attach a Matrix client for pipeline run tracking.
+    pub fn with_matrix(mut self, client: Arc<MatrixClient>) -> Self {
+        self.matrix = Some(client);
         self
     }
 
@@ -213,6 +222,45 @@ impl AgentOrchestrator {
 
         // Persist session update
         let decision_str = format!("{:?}", result.tech_leader.decision).to_lowercase();
+
+        // Matrix: post pipeline run metrics for dashboard tracking (fire-and-forget)
+        if let Some(matrix) = &self.matrix {
+            let escalated = result.senior.risk_assessment.to_lowercase().contains("high")
+                || result.senior.risk_assessment.to_lowercase().contains("critical");
+            let payload = PipelineMetricsPayload {
+                session_id,
+                task: task.to_owned(),
+                agents: PipelineAgents {
+                    junior: AgentRunMetrics {
+                        confidence: Some(result.junior.confidence),
+                        latency_ms: Some(junior_ms),
+                        escalated: None,
+                        decision: None,
+                    },
+                    senior: AgentRunMetrics {
+                        confidence: None,
+                        latency_ms: Some(senior_ms),
+                        escalated: Some(escalated),
+                        decision: None,
+                    },
+                    tech_leader: AgentRunMetrics {
+                        confidence: None,
+                        latency_ms: Some(leader_ms),
+                        escalated: None,
+                        decision: Some(decision_str.clone()),
+                    },
+                },
+                total_latency_ms: total_ms,
+                decision: decision_str.clone(),
+                adr_title: Some(result.tech_leader.adr_title.clone()),
+            };
+            let matrix = Arc::clone(matrix);
+            tokio::spawn(async move {
+                if let Err(e) = matrix.post_pipeline_metrics(&payload).await {
+                    tracing::warn!(error = %e, "Matrix metrics post failed");
+                }
+            });
+        }
         let decision_json = json!({
             "decision": decision_str,
             "adr_title": result.tech_leader.adr_title,
