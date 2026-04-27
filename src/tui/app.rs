@@ -35,6 +35,7 @@ pub struct PipelineStage {
     pub name: &'static str,
     pub status: StageStatus,
     pub confidence: Option<f32>,
+    pub output: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -96,6 +97,8 @@ pub struct AppState {
     pub adr_title: Option<String>,
     pub adr_status: Option<String>,
     pub active_session: Uuid,
+    pub input_history: Vec<String>,
+    pub history_idx: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -141,6 +144,8 @@ impl AppState {
             adr_title: None,
             adr_status: None,
             active_session: Uuid::new_v4(),
+            input_history: Vec::new(),
+            history_idx: None,
         }
     }
 
@@ -163,10 +168,30 @@ impl AppState {
         }
         self.active_task_id = Some(id);
         self.pipeline_stages = vec![
-            PipelineStage { name: "junior", status: StageStatus::Pending, confidence: None },
-            PipelineStage { name: "senior", status: StageStatus::Pending, confidence: None },
-            PipelineStage { name: "architect", status: StageStatus::Pending, confidence: None },
-            PipelineStage { name: "tech-leader", status: StageStatus::Pending, confidence: None },
+            PipelineStage {
+                name: "junior",
+                status: StageStatus::Pending,
+                confidence: None,
+                output: None,
+            },
+            PipelineStage {
+                name: "senior",
+                status: StageStatus::Pending,
+                confidence: None,
+                output: None,
+            },
+            PipelineStage {
+                name: "architect",
+                status: StageStatus::Pending,
+                confidence: None,
+                output: None,
+            },
+            PipelineStage {
+                name: "tech-leader",
+                status: StageStatus::Pending,
+                confidence: None,
+                output: None,
+            },
         ];
         self.tool_calls.clear();
         self.output_text.clear();
@@ -183,6 +208,58 @@ impl AppState {
                 s.confidence = confidence;
             }
         }
+    }
+
+    pub fn set_stage_output(&mut self, stage: &str, content: String) {
+        let normalized = stage.replace('_', "-");
+        if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
+            s.output = Some(content);
+        }
+    }
+
+    pub fn history_prev(&mut self) {
+        if self.input_history.is_empty() {
+            return;
+        }
+        match self.history_idx {
+            None => {
+                let idx = self.input_history.len() - 1;
+                self.history_idx = Some(idx);
+                self.input_buffer = self.input_history[idx].clone();
+                self.cursor_pos = self.input_buffer.len();
+            },
+            Some(0) => {},
+            Some(idx) => {
+                let new_idx = idx - 1;
+                self.history_idx = Some(new_idx);
+                self.input_buffer = self.input_history[new_idx].clone();
+                self.cursor_pos = self.input_buffer.len();
+            },
+        }
+    }
+
+    pub fn history_next(&mut self) {
+        match self.history_idx {
+            None => {},
+            Some(idx) if idx + 1 >= self.input_history.len() => {
+                self.history_idx = None;
+                self.input_buffer.clear();
+                self.cursor_pos = 0;
+            },
+            Some(idx) => {
+                let new_idx = idx + 1;
+                self.history_idx = Some(new_idx);
+                self.input_buffer = self.input_history[new_idx].clone();
+                self.cursor_pos = self.input_buffer.len();
+            },
+        }
+    }
+
+    pub fn history_commit(&mut self, text: String) {
+        if !text.is_empty() && self.input_history.last().map(|s| s.as_str()) != Some(&text) {
+            self.input_history.push(text);
+        }
+        self.history_idx = None;
     }
 
     pub fn complete_task(&mut self, id: Uuid, ok: bool) {
@@ -567,5 +644,63 @@ mod tests {
         let mut a = AppState::new("u".into(), "m".into());
         a.apply_preset("unknown_preset");
         assert!((a.config.temperature - 0.7).abs() < f32::EPSILON);
+    }
+
+    // ── set_stage_output ──────────────────────────────────────────────────────
+
+    #[test]
+    fn set_stage_output_updates_matching_stage() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.start_task(Uuid::new_v4());
+        a.set_stage_output("junior", "hypothesis text".into());
+        let s = a.pipeline_stages.iter().find(|s| s.name == "junior").unwrap();
+        assert_eq!(s.output.as_deref(), Some("hypothesis text"));
+    }
+
+    #[test]
+    fn set_stage_output_normalizes_underscore() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.start_task(Uuid::new_v4());
+        a.set_stage_output("tech_leader", "rationale".into());
+        let s = a.pipeline_stages.iter().find(|s| s.name == "tech-leader").unwrap();
+        assert_eq!(s.output.as_deref(), Some("rationale"));
+    }
+
+    // ── history navigation ────────────────────────────────────────────────────
+
+    #[test]
+    fn history_commit_and_prev() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.history_commit("first task".into());
+        a.history_commit("second task".into());
+        a.history_prev();
+        assert_eq!(a.input_buffer, "second task");
+        a.history_prev();
+        assert_eq!(a.input_buffer, "first task");
+    }
+
+    #[test]
+    fn history_next_clears_buffer() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.history_commit("task one".into());
+        a.history_prev();
+        a.history_next();
+        assert_eq!(a.history_idx, None);
+        assert_eq!(a.input_buffer, "");
+    }
+
+    #[test]
+    fn history_commit_deduplicates_consecutive() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.history_commit("same".into());
+        a.history_commit("same".into());
+        assert_eq!(a.input_history.len(), 1);
+    }
+
+    #[test]
+    fn history_prev_on_empty_is_noop() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.history_prev();
+        assert_eq!(a.history_idx, None);
     }
 }

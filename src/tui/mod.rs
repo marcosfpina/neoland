@@ -26,6 +26,7 @@ enum AgentStreamEvent {
     StageStarted { stage: String },
     StageDone { stage: String, confidence: Option<f32>, latency_ms: u64 },
     StageSkipped { stage: String },
+    StageOutput { stage: String, content: String },
     ToolCallStarted { tool: String, args_summary: String },
     ToolCallDone { tool: String, duration_ms: u64 },
     ToolCallFailed { tool: String },
@@ -89,6 +90,9 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                     }
                     AgentStreamEvent::StageSkipped { stage } => {
                         app.update_stage(&stage, StageStatus::Skipped, None);
+                    }
+                    AgentStreamEvent::StageOutput { stage, content } => {
+                        app.set_stage_output(&stage, content);
                     }
                     AgentStreamEvent::ToolCallStarted { tool, args_summary } => {
                         app.add_tool_call(tool, args_summary);
@@ -240,10 +244,16 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         // ── Quit ──────────────────────────────────────────────────────
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Action::Quit,
 
+        // ── Multi-line input ──────────────────────────────────────────
+        (KeyCode::Enter, KeyModifiers::SHIFT) => {
+            app.insert_char('\n');
+        },
+
         // ── Submit task ───────────────────────────────────────────────
         (KeyCode::Enter, _) if !app.input_buffer.is_empty() && app.active_task_id.is_none() => {
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
+            app.history_commit(msg.clone());
             return Action::SubmitTask(msg);
         },
 
@@ -292,15 +302,23 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.input_buffer.truncate(app.cursor_pos);
         },
 
-        // ── Scroll ────────────────────────────────────────────────────
+        // ── History navigation (shell-like) ──────────────────────────
+        (KeyCode::Up, KeyModifiers::NONE) => {
+            app.history_prev();
+        },
+        (KeyCode::Down, KeyModifiers::NONE) => {
+            app.history_next();
+        },
+
+        // ── Scroll (PageUp/PageDown + Shift+arrow) ────────────────────
         (KeyCode::Char('g'), KeyModifiers::NONE) if app.input_buffer.is_empty() => {
             app.auto_scroll = true;
         },
-        (KeyCode::Up, _) => {
+        (KeyCode::Up, KeyModifiers::SHIFT) => {
             app.scroll_offset = app.scroll_offset.saturating_sub(3);
             app.auto_scroll = false;
         },
-        (KeyCode::Down, _) => {
+        (KeyCode::Down, KeyModifiers::SHIFT) => {
             app.scroll_offset = app.scroll_offset.saturating_add(3);
         },
         (KeyCode::PageUp, _) => {
@@ -442,6 +460,10 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
         "stage_skipped" => {
             Some(AgentStreamEvent::StageSkipped { stage: val["stage"].as_str()?.to_string() })
         },
+        "stage_output" => Some(AgentStreamEvent::StageOutput {
+            stage: val["stage"].as_str()?.to_string(),
+            content: val["content"].as_str().unwrap_or("").to_string(),
+        }),
         "tool_call_started" => Some(AgentStreamEvent::ToolCallStarted {
             tool: val["tool"].as_str()?.to_string(),
             args_summary: val["args_summary"].as_str().unwrap_or("").to_string(),
