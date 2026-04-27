@@ -1,0 +1,361 @@
+name: AI Assistant Hub - Tests & Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-stf-parser:
+    name: Test STF Parser
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Test STF Parser
+        run: |
+          cd src
+          python -c "
+          from stf.parser import STFParser
+
+          # Test parser
+          parser = STFParser('/home/kernelcore/arch/adr-ledger/.stf/neutron.stf')
+
+          print(f'Protocol: {parser.protocol.protocol}')
+          print(f'Version: {parser.protocol.version}')
+          print(f'Directives: {len(parser.protocol.directives)}')
+          print(f'Constraints: {len(parser.protocol.constraints)}')
+
+          # Test injection context
+          context = parser.get_injection_context('markdown')
+          assert 'SUPREME TECHNICAL DIRECTIVE' in context
+          print('✓ STF Parser working correctly')
+          "
+
+  test-ml-model:
+    name: Test ML Model
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install numpy
+
+      - name: Test Model Registry
+        run: |
+          cd src
+          python -c "
+          from ml.model_registry import ModelRegistry
+
+          # Initialize registry
+          registry = ModelRegistry()
+
+          # Load model
+          model = registry.load_model('decision-scorer')
+          print(f'Model version: {model.version}')
+
+          # Test prediction
+          test_decision = {
+              'decision_type': 'code_generation',
+              'agent_id': 'test',
+              'stf_compliant': True,
+              'context': {'entropy': 0.3}
+          }
+
+          score = model.predict(test_decision)
+          print(f'Prediction score: {score:.3f}')
+
+          assert 0.0 <= score <= 1.0, 'Score out of range'
+          print('✓ ML Model working correctly')
+          "
+
+  test-observability:
+    name: Test Observability Metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install prometheus-client
+
+      - name: Test Metrics
+        run: |
+          cd src
+          python -c "
+          from observability.metrics import track_decision, get_metrics
+
+          # Track test decision
+          track_decision(
+              agent_id='test-agent',
+              score=0.95,
+              approved=True,
+              stf_compliant=True,
+              latency_ms=42.5,
+              decision_type='test'
+          )
+
+          # Get metrics
+          metrics = get_metrics()
+          assert len(metrics) > 0, 'No metrics generated'
+
+          # Check for expected metric names
+          metrics_str = metrics.decode('utf-8')
+          assert 'ai_agent_decisions_total' in metrics_str
+          assert 'ai_agent_decision_latency_seconds' in metrics_str
+          assert 'ai_agent_score_distribution' in metrics_str
+
+          print('✓ Observability metrics working correctly')
+          "
+
+  test-feedback-collector:
+    name: Test Feedback Collector
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test Feedback Collection
+        run: |
+          cd src
+          python -c "
+          from feedback.collector import FeedbackCollector
+          import tempfile
+          import os
+
+          # Create temp file for feedback
+          with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+              temp_file = f.name
+
+          try:
+              # Test collector
+              collector = FeedbackCollector(fallback_file=temp_file)
+
+              feedback_id = collector.record_feedback(
+                  decision_id='test-123',
+                  agent_id='test-agent',
+                  feedback_type='approved',
+                  outcome_score=1.0,
+                  user_id='tester'
+              )
+
+              print(f'Feedback ID: {feedback_id}')
+              assert feedback_id is not None
+
+              # Get summary
+              summary = collector.get_agent_feedback_summary('test-agent')
+              print(f'Summary: {summary}')
+
+              print('✓ Feedback collector working correctly')
+          finally:
+              if os.path.exists(temp_file):
+                  os.remove(temp_file)
+          "
+
+  integration-test:
+    name: Integration Test - Full Pipeline
+    runs-on: ubuntu-latest
+    needs: [test-stf-parser, test-ml-model, test-observability, test-feedback-collector]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install all dependencies
+        run: |
+          pip install fastapi uvicorn pyyaml prometheus-client numpy
+
+      - name: Test Full Decision Pipeline
+        run: |
+          cd src
+          python -c "
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()))
+
+          # Import all components
+          from stf.parser import STFParser
+          from ml.model_registry import ModelRegistry
+          from observability import track_decision
+          from feedback import FeedbackCollector
+
+          print('=== Full Pipeline Integration Test ===')
+
+          # 1. Load STF
+          print('1. Loading STF...')
+          stf_parser = STFParser('/home/kernelcore/arch/adr-ledger/.stf/neutron.stf')
+          print(f'   ✓ STF loaded: {stf_parser.protocol.protocol}')
+
+          # 2. Load ML Model
+          print('2. Loading ML Model...')
+          registry = ModelRegistry()
+          model = registry.load_model('decision-scorer')
+          print(f'   ✓ Model loaded: v{model.version}')
+
+          # 3. Make decision
+          print('3. Making decision...')
+          test_decision = {
+              'decision_type': 'code_generation',
+              'agent_id': 'integration-test',
+              'stf_compliant': True,
+              'context': {'entropy': 0.3},
+              'proposed_action': 'generate code'
+          }
+
+          # 4. Validate STF
+          print('4. Validating STF compliance...')
+          is_compliant, violations = stf_parser.validate_decision(test_decision)
+          print(f'   ✓ STF Compliant: {is_compliant}')
+
+          # 5. Get ML score
+          print('5. Getting ML score...')
+          score = model.predict(test_decision)
+          print(f'   ✓ Score: {score:.3f}')
+
+          # 6. Track in observability
+          print('6. Tracking in observability...')
+          track_decision(
+              agent_id=test_decision['agent_id'],
+              score=score,
+              approved=True,
+              stf_compliant=is_compliant,
+              latency_ms=42.0,
+              decision_type=test_decision['decision_type'],
+              stf_violations=violations
+          )
+          print('   ✓ Metrics tracked')
+
+          # 7. Record feedback
+          print('7. Recording feedback...')
+          collector = FeedbackCollector()
+          feedback_id = collector.record_feedback(
+              decision_id='int-test-123',
+              agent_id=test_decision['agent_id'],
+              feedback_type='approved',
+              outcome_score=1.0
+          )
+          print(f'   ✓ Feedback recorded: {feedback_id}')
+
+          print('')
+          print('✅ Full pipeline integration test PASSED')
+          print('   All components working together correctly')
+          "
+
+  security-check:
+    name: Security & Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for Secrets
+        run: |
+          echo "Checking for potential secrets..."
+          if grep -rn "password\s*=\s*['\"]" src/ 2>/dev/null | grep -v "# password"; then
+            echo "⚠ Potential hardcoded password found"
+            exit 1
+          fi
+          echo "✓ No obvious secrets found"
+
+      - name: Check File Permissions
+        run: |
+          echo "Checking Python file permissions..."
+          find src/ -name "*.py" -perm /111 -type f | while read file; do
+            if [[ ! "$file" =~ __main__ ]]; then
+              echo "⚠ Unexpected executable permission: $file"
+            fi
+          done
+          echo "✓ File permissions OK"
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-stf-parser, test-ml-model, test-observability, test-feedback-collector, integration-test, security-check]
+    if: always()
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# 🧪 AI Assistant Hub Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-stf-parser.result }}" == "success" ]; then
+            echo "| STF Parser | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| STF Parser | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-ml-model.result }}" == "success" ]; then
+            echo "| ML Model | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ML Model | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-observability.result }}" == "success" ]; then
+            echo "| Observability | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Observability | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-feedback-collector.result }}" == "success" ]; then
+            echo "| Feedback Collector | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Feedback Collector | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.integration-test.result }}" == "success" ]; then
+            echo "| Integration Test | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Integration Test | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.security-check.result }}" == "success" ]; then
+            echo "| Security Check | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Security Check | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

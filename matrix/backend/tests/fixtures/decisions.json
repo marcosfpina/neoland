@@ -1,0 +1,67 @@
+{
+  "approved_decision": {
+    "agent_id": "test-agent",
+    "decision_type": "code_generation",
+    "context": {
+      "files": ["src/main.py", "README.md"],
+      "complexity_score": 45,
+      "entropy": 0.3,
+      "modified_files": ["src/main.py"]
+    },
+    "proposed_action": "Generate unit test for main function",
+    "model_version": "v1"
+  },
+  "rejected_low_score": {
+    "agent_id": "test-agent",
+    "decision_type": "deploy",
+    "context": {
+      "entropy": 0.95,
+      "complexity_score": 85,
+      "modified_files": ["config/production.yaml", "schema/migrations/001.sql"]
+    },
+    "proposed_action": "Deploy to production without review",
+    "model_version": "v1"
+  },
+  "stf_violation_nix_first": {
+    "agent_id": "test-agent",
+    "decision_type": "dependency_install",
+    "context": {
+      "method": "pip_install",
+      "package": "numpy"
+    },
+    "proposed_action": "Run pip install numpy",
+    "model_version": "v1"
+  },
+  "stf_violation_human_fallback": {
+    "agent_id": "test-agent",
+    "decision_type": "code_modification",
+    "context": {
+      "bypass_review": true,
+      "skip_validation": true
+    },
+    "proposed_action": "Modify code without human oversight",
+    "model_version": "v1"
+  },
+  "critical_decision_requires_review": {
+    "agent_id": "test-agent",
+    "decision_type": "delete_db",
+    "context": {
+      "database": "production",
+      "tables": ["users", "transactions"]
+    },
+    "proposed_action": "DROP TABLE users CASCADE",
+    "model_version": "v1"
+  },
+  "high_score_approval": {
+    "agent_id": "test-agent",
+    "decision_type": "test",
+    "context": {
+      "files": ["tests/test_main.py"],
+      "complexity_score": 20,
+      "entropy": 0.1,
+      "has_documentation": true
+    },
+    "proposed_action": "Run unit tests",
+    "model_version": "v1"
+  }
+}
