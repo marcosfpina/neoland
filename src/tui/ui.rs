@@ -219,6 +219,21 @@ fn build_main_lines(app: &AppState) -> Vec<Line<'static>> {
                     Span::styled(format!("{:<8}", conf_str), Style::default().fg(colors::MUTED)),
                     Span::styled(latency_str, Style::default().fg(colors::MUTED)),
                 ]));
+
+                // Transparent thinking — show first 2 lines of agent output
+                if let Some(output) = &stage.output {
+                    for text in output.lines().take(2) {
+                        let truncated: String = text.chars().take(72).collect();
+                        lines.push(Line::from(vec![
+                            Span::raw("      "),
+                            Span::styled("┊ ", Style::default().fg(colors::BORDER)),
+                            Span::styled(
+                                truncated,
+                                Style::default().fg(colors::MUTED).add_modifier(Modifier::DIM),
+                            ),
+                        ]));
+                    }
+                }
             }
         }
         lines.push(Line::from(""));

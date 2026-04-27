@@ -196,6 +196,15 @@ impl AgentOrchestrator {
             risk_level: None,
             latency_ms: junior_ms,
         });
+        self.publish(AgentEvent::StageOutput {
+            session_id,
+            stage: "junior",
+            content: format!(
+                "{}\n\nUnknowns: {}",
+                result.junior.hypothesis,
+                result.junior.unknowns.join(", ")
+            ),
+        });
         self.publish(AgentEvent::StageStarted { session_id, stage: "senior" });
         self.publish(AgentEvent::StageDone {
             session_id,
@@ -204,6 +213,14 @@ impl AgentOrchestrator {
             risk_level: None,
             latency_ms: senior_ms,
         });
+        self.publish(AgentEvent::StageOutput {
+            session_id,
+            stage: "senior",
+            content: format!(
+                "{}\n\nRisk: {}",
+                result.senior.refined_hypothesis, result.senior.risk_assessment
+            ),
+        });
         self.publish(AgentEvent::StageStarted { session_id, stage: "tech_leader" });
         self.publish(AgentEvent::StageDone {
             session_id,
@@ -211,6 +228,11 @@ impl AgentOrchestrator {
             confidence: None,
             risk_level: None,
             latency_ms: leader_ms,
+        });
+        self.publish(AgentEvent::StageOutput {
+            session_id,
+            stage: "tech_leader",
+            content: result.tech_leader.rationale.clone(),
         });
         self.publish(AgentEvent::AdrCheckpoint {
             session_id,

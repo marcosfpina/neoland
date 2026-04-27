@@ -52,6 +52,12 @@ pub enum AgentEvent {
         session_id: Uuid,
         error: String,
     },
+    /// Actual agent output text — reveals the reasoning for each stage.
+    StageOutput {
+        session_id: Uuid,
+        stage: &'static str,
+        content: String,
+    },
 }
 
 impl AgentEvent {
@@ -66,7 +72,8 @@ impl AgentEvent {
             | Self::ToolCallFailed { session_id, .. }
             | Self::AdrCheckpoint { session_id, .. }
             | Self::PipelineDone { session_id, .. }
-            | Self::PipelineError { session_id, .. } => *session_id,
+            | Self::PipelineError { session_id, .. }
+            | Self::StageOutput { session_id, .. } => *session_id,
         }
     }
 }
