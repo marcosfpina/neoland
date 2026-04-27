@@ -2,14 +2,32 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
+import json
 import time
 import logging
 import os
 import uuid
 from pathlib import Path
 
-# In-memory pipeline run store (Phase 4: neoland integration)
-_pipeline_runs: List[Dict[str, Any]] = []
+# Pipeline run store — persisted to NEOLAND_RUNS_FILE on every write
+_RUNS_FILE = Path(os.getenv("NEOLAND_RUNS_FILE", "/var/lib/neoland/matrix/pipeline_runs.json"))
+
+def _load_runs() -> List[Dict[str, Any]]:
+    try:
+        if _RUNS_FILE.exists():
+            return json.loads(_RUNS_FILE.read_text())
+    except Exception:
+        pass
+    return []
+
+def _save_runs(runs: List[Dict[str, Any]]) -> None:
+    try:
+        _RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _RUNS_FILE.write_text(json.dumps(runs, default=str))
+    except Exception as exc:
+        logging.getLogger("ai-ranking").warning(f"Could not persist pipeline runs: {exc}")
+
+_pipeline_runs: List[Dict[str, Any]] = _load_runs()
 
 # STF Integration
 import sys
@@ -416,6 +434,7 @@ async def store_pipeline_metrics(request: PipelineMetricsRequest):
         "timestamp": time.time(),
     }
     _pipeline_runs.append(entry)
+    _save_runs(_pipeline_runs)
     logger.info(f"Pipeline run stored: {run_id} | {request.decision} | {request.total_latency_ms}ms")
 
     return PipelineRunSummary(
