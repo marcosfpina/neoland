@@ -1,8 +1,34 @@
 # NEOLAND Production Readiness Progress
 
-**Last Updated**: 2026-04-26
-**Overall Progress**: 99% — Ciclo 2 fechado, TUI reescrita, tracing + contract tests ativos
-**Production Readiness Score**: 96/100
+**Last Updated**: 2026-04-27
+**Overall Progress**: 100% ciclos fechados — SSE + MCP + Matrix + TUI builder shipados
+**Rust tests**: 221 passing, 17 ignored | **Python tests**: 24 contract (sem LLM)
+
+## Ciclo 4 — Agent Workstation (ROADMAP Fases 2–5A) ✅ (fechado 2026-04-27)
+
+| Fase | Commit | Status | Entregável |
+|------|--------|--------|-----------|
+| 2 — TUI redesign | `a14c057` | ✅ | Agent workstation: task queue, pipeline panel ao vivo, tool calls, SSE consumer, keybindings (`^t ^p ^m ^x`) |
+| 3 — MCP stdio | `841ddd6` | ✅ | `src/mcp/` — JSON-RPC 2.0 stdio client, `McpRegistry`, `search_knowledge` pré-pipeline + `save_knowledge` pós-ADR, 7 testes |
+| 4 — Matrix | `1ca938a` | ✅ | `src/matrix/` — `MatrixClient`, `POST /pipeline/metrics` + `GET /pipeline/history` no backend Python, dashboard Next.js (`/pipeline-history`), 5 testes |
+| 5A — Thinking transparente | `75cc14f` | ✅ | `AgentEvent::StageOutput` via SSE → `PipelineStage.output` → TUI renderiza 2 linhas com `┊` dim por stage; `input_history` + `↑/↓` shell-like; `Shift+Enter` multi-line; 8 novos testes |
+
+### Arquivos-chave Ciclo 4
+
+| Módulo | Arquivo | Descrição |
+|--------|---------|-----------|
+| MCP | `src/mcp/{mod,client,registry,types}.rs` | Stdio client JSON-RPC 2.0 + tool registry |
+| Matrix | `src/matrix/{mod,client}.rs` | HTTP client fire-and-forget para matrix backend |
+| TUI app | `src/tui/app.rs` | `PipelineStage.output`, `input_history`, `history_prev/next/commit`, `set_stage_output` |
+| TUI render | `src/tui/ui.rs` | Stage output `┊` dim rendering sob cada stage row |
+| TUI loop | `src/tui/mod.rs` | `AgentStreamEvent::StageOutput`, `stage_output` SSE parse, history keybindings |
+| Orchestrator | `src/agents/orchestrator.rs` | Publica `StageOutput` (junior hypothesis, senior risk, tech-leader rationale) |
+| Events | `src/agents/events.rs` | `AgentEvent::StageOutput { session_id, stage, content }` |
+| Matrix backend | `matrix/backend/src/ranking/main.py` | `POST /pipeline/metrics`, `GET /pipeline/history?limit=N` |
+| Matrix frontend | `matrix/frontend/app/pipeline-history/page.tsx` | Dashboard com summary cards + run table |
+| Config | `src/config.rs` | `McpConfig` + `MatrixConfig` com env overrides |
+
+---
 
 ## Ciclo 1 — IPC + NATS + adr-ledger + Phantom ✅
 
@@ -38,11 +64,11 @@
 | Agent tracing | ✅ | `#[instrument]` com `skip()` + `fields()` em `orchestrator.rs`, `client.rs`, `session.rs` — spans OpenTelemetry |
 | Python contract tests | ✅ | 24 testes `@pytest.mark.contract` em `agents/tests/test_contracts.py` — AgentFlags IPC + todos schemas Pydantic |
 
-### Test counts across stack (2026-04-26)
+### Test counts across stack (2026-04-27)
 
 | Repo | Tests | Notes |
 |------|-------|-------|
-| neoland (Rust) | 195 | lib unit tests (212 total com ignored) |
+| neoland (Rust) | **221** | lib unit tests (238 total com ignored) — +26 vs 2026-04-26 |
 | neoland (Python) | 24 | contract tests sem LLM (`pytest -m contract`) |
 | adr-ledger | 15 | ledger-subscriber, MerkleStore, JetStream |
 | owasaka | 17 | 12 pipeline + 5 API |
@@ -233,16 +259,20 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 ---
 
 ### ⏳ Phase 5: Infrastructure & Scalability (Pending)
-**Status**: 0% | **Estimated**: 3 weeks | **Effort**: 80 hours
+**Status**: 5A done | **Estimated**: 2 weeks restantes | **Effort**: ~60 hours
 
-**Planned**:
-- Docker containerization (multi-stage builds)
-- Kubernetes deployment (Helm charts)
-- High availability configuration (3+ replicas)
-- Load balancing + health checks
-- Multi-region deployment capability
-- Circuit breaker pattern
-- Horizontal autoscaling
+**Done (5A)**:
+- ✅ TUI transparent thinking (`StageOutput` SSE → `┊` dim por stage)
+- ✅ Input history shell-like (`↑/↓`, dedup, commit on submit)
+- ✅ Shift+Enter multi-line input
+
+**Pending (5B–5E)**:
+- ⏳ Load testing — 500 RPS, p99 <200ms (ghz + wrk)
+- ⏳ Test coverage 80%+ (currently ~75%)
+- ⏳ Task queue persistida no PostgreSQL (sqlx)
+- ⏳ Multi-session management no TUI
+- ⏳ Docker containerization (multi-stage builds)
+- ⏳ Kubernetes deployment (Helm charts, HA 3 replicas)
 
 **Target Score**: 95/100
 
@@ -267,7 +297,7 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 ## Metrics Summary
 
 ### Code Quality
-- **Total Tests**: 195 Rust + 24 Python contract + 15 adr-ledger = 234+
+- **Total Tests**: 221 Rust + 24 Python contract + 15 adr-ledger = 260+
 - **Test Coverage**: ~75% (target: 80%+)
 - **Clippy Warnings**: 0 (strict mode enabled)
 - **Format Compliance**: 100%
@@ -321,13 +351,18 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 - [x] cargo-audit in devShell
 - [x] EDR: 3 SIGMA + 6 YARA rules
 
-### ⏳ In Progress (3%)
-- [ ] 80%+ Rust test coverage (currently ~75%)
-- [ ] Centralized logging (Vector/Loki)
-- [ ] Alerting + operational runbooks
+### ✅ Completed additions (2026-04-27) — Ciclo 4
+- [x] TUI agent workstation redesign (task queue, pipeline panel, SSE, keybindings)
+- [x] MCP stdio client — `src/mcp/` JSON-RPC 2.0, `McpRegistry`, search + save_knowledge wired
+- [x] Matrix integration — `MatrixClient`, matrix backend endpoints, pipeline-history dashboard
+- [x] TUI transparent thinking — `AgentEvent::StageOutput`, `┊` dim rendering per stage
+- [x] Input history — `↑/↓` shell-like navigation, dedup, `Shift+Enter` multi-line
+- [x] 221 Rust tests passing (net +26 vs 2026-04-26)
 
-### ⏳ Pending (Phase 5-6)
-- [ ] Load testing (500 RPS target)
+### ⏳ Pending (Phase 5B–6)
+- [ ] 80%+ Rust test coverage (currently ~75%)
+- [ ] Load testing (500 RPS target, p99 <200ms)
+- [ ] Task queue persistida no PostgreSQL
 - [ ] Docker containerization
 - [ ] Kubernetes deployment + HA
 - [ ] OpenAPI spec for axum endpoints
@@ -354,19 +389,20 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ## Next Steps
 
-### Immediate
-1. **Logging centralizado** — Vector → Loki, JSON structured logs (4h)
-2. **Alerting** — Prometheus alertrules + runbooks básicos (4h)
-3. **OpenAPI spec** — `utoipa` ou `aide` para axum REST endpoints (6h)
+### 5B — Curto prazo (próximas sessões)
+1. **Load testing** — ghz gRPC + wrk REST, target 500 RPS p99 <200ms
+2. **Test coverage 80%+** — focar em `src/server/`, `src/mcp/`, `src/matrix/`
+3. **Task queue PostgreSQL** — persistir tasks no banco (sqlx), multi-session no TUI
 
-### Short-term
-4. **Load testing** — ghz gRPC + wrk REST, target 500 RPS p99 <200ms
-5. **TUI multi-line input** — textarea + history navigation (↑/↓)
+### 5C–5E — Médio prazo
+4. **Docker** — multi-stage build Rust + Python pipeline
+5. **Kubernetes** — Helm chart, HA 3 replicas, health checks
+6. **OpenAPI spec** — `utoipa` ou `aide` para axum REST endpoints
 
-### Medium-term (Phase 5-6)
-6. **Docker** — multi-stage build Rust + Python pipeline
-7. **Kubernetes** — Helm chart, HA 3 replicas
-8. **Compliance docs** — OpenAPI completo, SOC 2 gap analysis
+### Fase 6 — Compliance
+7. **Centralized logging** — Vector → Loki, JSON structured logs
+8. **Alerting** — Prometheus alertrules + runbooks básicos
+9. **Compliance docs** — OpenAPI completo, SOC 2 gap analysis
 
 ---
 
@@ -384,7 +420,7 @@ Pipeline multi-agent DSPy integrado ao control plane Rust. Ciclo 0 fechado.
 
 ## Contributors
 
-- **Architecture & Implementation**: Claude Sonnet 4.5 + marcosfpina
+- **Architecture & Implementation**: Claude Sonnet 4.6 + marcosfpina
 - **Code Review**: Production Readiness Team && VoidNxLabs Team
 - **Testing**: Automated CI/CD + Manual validation
 
