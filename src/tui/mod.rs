@@ -7,6 +7,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::StreamExt as _;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 
@@ -15,11 +16,26 @@ pub mod events;
 pub mod presets;
 pub mod ui;
 
-use app::{AppState, ConnectionStatus};
+use app::{AppState, ConnectionStatus, StageStatus};
 use events::Action;
 use ui::render;
 
-// ── LLM channel events ────────────────────────────────────────────────
+// ── Agent stream events (TUI-internal) ───────────────────────────────
+
+enum AgentStreamEvent {
+    StageStarted { stage: String },
+    StageDone { stage: String, confidence: Option<f32>, latency_ms: u64 },
+    StageSkipped { stage: String },
+    ToolCallStarted { tool: String, args_summary: String },
+    ToolCallDone { tool: String, duration_ms: u64 },
+    ToolCallFailed { tool: String },
+    AdrCheckpoint { status: String, title: String },
+    PipelineDone { latency_ms: u64 },
+    PipelineError { error: String },
+    FinalResult { rationale: String, adr_title: String, adr_status: String },
+}
+
+// ── Legacy LLM channel events (kept for fallback) ─────────────────────
 
 enum LlmEvent {
     Chunk(String),
@@ -37,9 +53,9 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Keyboard events: blocking thread → async channel
     let (key_tx, mut key_rx) = mpsc::channel::<Event>(64);
     let (llm_tx, mut llm_rx) = mpsc::channel::<LlmEvent>(16);
+    let (agent_tx, mut agent_rx) = mpsc::channel::<AgentStreamEvent>(64);
 
     std::thread::spawn(move || {
         while let Ok(ev) = event::read() {
@@ -49,6 +65,7 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
         }
     });
 
+    let api_key = std::env::var("NEOLAND_API_KEY").unwrap_or_default();
     let mut app = AppState::new(server_url.to_string(), ml_api_url.to_string());
     check_server_health(&mut app).await;
 
@@ -61,6 +78,57 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
         tokio::select! {
             biased;
 
+            // ── Agent pipeline events ─────────────────────────────────
+            Some(ev) = agent_rx.recv() => {
+                match ev {
+                    AgentStreamEvent::StageStarted { stage } => {
+                        app.update_stage(&stage, StageStatus::Running, None);
+                    }
+                    AgentStreamEvent::StageDone { stage, confidence, latency_ms } => {
+                        app.update_stage(&stage, StageStatus::Done { latency_ms }, confidence);
+                    }
+                    AgentStreamEvent::StageSkipped { stage } => {
+                        app.update_stage(&stage, StageStatus::Skipped, None);
+                    }
+                    AgentStreamEvent::ToolCallStarted { tool, args_summary } => {
+                        app.add_tool_call(tool, args_summary);
+                    }
+                    AgentStreamEvent::ToolCallDone { tool, duration_ms } => {
+                        app.finish_tool_call(&tool, duration_ms);
+                    }
+                    AgentStreamEvent::ToolCallFailed { tool } => {
+                        app.fail_tool_call(&tool);
+                    }
+                    AgentStreamEvent::AdrCheckpoint { status, title } => {
+                        app.adr_status = Some(status);
+                        app.adr_title = Some(title);
+                    }
+                    AgentStreamEvent::PipelineDone { latency_ms } => {
+                        app.last_latency_ms = latency_ms;
+                        if let Some(id) = app.active_task_id {
+                            app.complete_task(id, true);
+                        }
+                    }
+                    AgentStreamEvent::PipelineError { error } => {
+                        app.output_text = format!("error: {}", error);
+                        if let Some(id) = app.active_task_id {
+                            app.complete_task(id, false);
+                        }
+                    }
+                    AgentStreamEvent::FinalResult { rationale, adr_title, adr_status } => {
+                        app.output_text = rationale;
+                        if !adr_title.is_empty() {
+                            app.adr_title = Some(adr_title);
+                        }
+                        if !adr_status.is_empty() {
+                            app.adr_status = Some(adr_status);
+                        }
+                        app.auto_scroll = true;
+                    }
+                }
+            }
+
+            // ── Legacy LLM events ─────────────────────────────────────
             Some(ev) = llm_rx.recv() => {
                 match ev {
                     LlmEvent::Chunk(s) => {
@@ -97,6 +165,7 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                 }
             }
 
+            // ── Keyboard ──────────────────────────────────────────────
             Some(key_ev) = key_rx.recv() => {
                 match key_ev {
                     Event::Key(key)
@@ -105,6 +174,19 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                     {
                         match process_key(&mut app, key.code, key.modifiers) {
                             Action::Quit => break,
+
+                            Action::SubmitTask(task) => {
+                                let task_id = app.enqueue_task(task.clone());
+                                app.start_task(task_id);
+                                let tx = agent_tx.clone();
+                                let srv = app.server_url.clone();
+                                let key = api_key.clone();
+                                let session = app.active_session;
+                                tokio::spawn(async move {
+                                    run_agent_task(task, session, srv, key, tx).await;
+                                });
+                            }
+
                             Action::Send(msg) => {
                                 app.is_thinking = true;
                                 app.auto_scroll = true;
@@ -114,6 +196,24 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                 let cfg = app.config.clone();
                                 tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, tx));
                             }
+
+                            Action::TogglePipeline => {
+                                app.pipeline_visible = !app.pipeline_visible;
+                            }
+
+                            Action::OpenMatrix => {
+                                let _ = std::process::Command::new("xdg-open")
+                                    .arg("http://localhost:3000")
+                                    .spawn();
+                            }
+
+                            Action::CancelTask => {
+                                if let Some(id) = app.active_task_id {
+                                    app.complete_task(id, false);
+                                    app.output_text = "task cancelled".to_string();
+                                }
+                            }
+
                             Action::None => {}
                         }
                     }
@@ -122,9 +222,7 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
             }
 
             _ = tick.tick() => {
-                if app.is_thinking {
-                    app.tick = app.tick.wrapping_add(1);
-                }
+                app.tick = app.tick.wrapping_add(1);
             }
         }
     }
@@ -141,17 +239,20 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
     match (code, mods) {
         // ── Quit ──────────────────────────────────────────────────────
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Action::Quit,
-        (KeyCode::Esc, _) => return Action::Quit,
 
-        // ── Send ──────────────────────────────────────────────────────
-        (KeyCode::Enter, _) if !app.input_buffer.is_empty() && !app.is_thinking => {
+        // ── Submit task ───────────────────────────────────────────────
+        (KeyCode::Enter, _) if !app.input_buffer.is_empty() && app.active_task_id.is_none() => {
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
-            app.add_user_message(&msg);
-            return Action::Send(msg);
+            return Action::SubmitTask(msg);
         },
 
-        // ── Clear chat ────────────────────────────────────────────────
+        // ── Agent keybindings ─────────────────────────────────────────
+        (KeyCode::Char('p'), KeyModifiers::CONTROL) => return Action::TogglePipeline,
+        (KeyCode::Char('m'), KeyModifiers::CONTROL) => return Action::OpenMatrix,
+        (KeyCode::Char('x'), KeyModifiers::CONTROL) => return Action::CancelTask,
+
+        // ── Clear ─────────────────────────────────────────────────────
         (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
             app.messages.clear();
             app.scroll_offset = 0;
@@ -165,10 +266,14 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         (KeyCode::Char('4'), KeyModifiers::CONTROL) => app.apply_preset("research"),
         (KeyCode::Char('5'), KeyModifiers::CONTROL) => app.apply_preset("safe"),
 
-        // ── Sidebar ───────────────────────────────────────────────────
+        // ── Sidebar / Esc ─────────────────────────────────────────────
         (KeyCode::Tab, _) => app.sidebar_visible = !app.sidebar_visible,
+        (KeyCode::Esc, _) if !app.input_buffer.is_empty() => {
+            app.input_buffer.clear();
+            app.cursor_pos = 0;
+        },
 
-        // ── Ctrl/Alt combos (must be before generic Char arm) ─────────
+        // ── Ctrl/Alt combos ───────────────────────────────────────────
         (KeyCode::Left, KeyModifiers::CONTROL) | (KeyCode::Char('b'), KeyModifiers::ALT) => {
             app.cursor_word_left()
         },
@@ -187,29 +292,10 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.input_buffer.truncate(app.cursor_pos);
         },
 
-        // ── Scroll to bottom when buffer empty (vim-g) ────────────────
+        // ── Scroll ────────────────────────────────────────────────────
         (KeyCode::Char('g'), KeyModifiers::NONE) if app.input_buffer.is_empty() => {
             app.auto_scroll = true;
         },
-
-        // ── Generic char input ────────────────────────────────────────
-        (KeyCode::Char(c), m) if m == KeyModifiers::NONE || m == KeyModifiers::SHIFT => {
-            app.insert_char(c)
-        },
-
-        // ── Editing ───────────────────────────────────────────────────
-        (KeyCode::Backspace, KeyModifiers::NONE) => app.backspace(),
-        (KeyCode::Delete, _) if app.cursor_pos < app.input_buffer.len() => {
-            app.input_buffer.remove(app.cursor_pos);
-        },
-
-        // ── Cursor movement ───────────────────────────────────────────
-        (KeyCode::Left, KeyModifiers::NONE) => app.cursor_left(),
-        (KeyCode::Right, KeyModifiers::NONE) => app.cursor_right(),
-        (KeyCode::Home, _) => app.cursor_pos = 0,
-        (KeyCode::End, _) => app.cursor_pos = app.input_buffer.len(),
-
-        // ── Chat scroll ───────────────────────────────────────────────
         (KeyCode::Up, _) => {
             app.scroll_offset = app.scroll_offset.saturating_sub(3);
             app.auto_scroll = false;
@@ -225,13 +311,163 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.scroll_offset = app.scroll_offset.saturating_add(10);
         },
 
+        // ── Generic char input ────────────────────────────────────────
+        (KeyCode::Char(c), m) if m == KeyModifiers::NONE || m == KeyModifiers::SHIFT => {
+            app.insert_char(c)
+        },
+        (KeyCode::Backspace, KeyModifiers::NONE) => app.backspace(),
+        (KeyCode::Delete, _) if app.cursor_pos < app.input_buffer.len() => {
+            app.input_buffer.remove(app.cursor_pos);
+        },
+        (KeyCode::Left, KeyModifiers::NONE) => app.cursor_left(),
+        (KeyCode::Right, KeyModifiers::NONE) => app.cursor_right(),
+        (KeyCode::Home, _) => app.cursor_pos = 0,
+        (KeyCode::End, _) => app.cursor_pos = app.input_buffer.len(),
+
         _ => {},
     }
 
     Action::None
 }
 
-// ── LLM task (spawned per request) ───────────────────────────────────
+// ── Agent task runner (spawned per submission) ────────────────────────
+
+async fn run_agent_task(
+    task: String,
+    session_id: uuid::Uuid,
+    server_url: String,
+    api_key: String,
+    tx: mpsc::Sender<AgentStreamEvent>,
+) {
+    // Subscribe to SSE in the background (events arrive before POST returns)
+    let sse_url = format!("{}/v1/agents/events/{}", server_url, session_id);
+    let sse_tx = tx.clone();
+    let sse_key = api_key.clone();
+    tokio::spawn(async move { subscribe_sse(sse_url, sse_key, sse_tx).await });
+
+    // POST /v1/agents/task — blocks until pipeline completes
+    let result = post_agent_task(&server_url, &api_key, &task, session_id).await;
+    match result {
+        Ok(data) => {
+            let rationale = data
+                .get("tech_leader")
+                .and_then(|tl| tl.get("rationale"))
+                .and_then(|r| r.as_str())
+                .unwrap_or("")
+                .to_string();
+            let adr_title = data
+                .get("tech_leader")
+                .and_then(|tl| tl.get("adr_title"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let adr_status = data
+                .get("tech_leader")
+                .and_then(|tl| tl.get("decision"))
+                .and_then(|d| d.as_str())
+                .map(|s| format!("{:?}", s).to_lowercase())
+                .unwrap_or_default();
+            tx.send(AgentStreamEvent::FinalResult { rationale, adr_title, adr_status })
+                .await
+                .ok();
+        },
+        Err(e) => {
+            tx.send(AgentStreamEvent::PipelineError { error: e.to_string() }).await.ok();
+        },
+    }
+}
+
+async fn post_agent_task(
+    server_url: &str,
+    api_key: &str,
+    task: &str,
+    session_id: uuid::Uuid,
+) -> Result<serde_json::Value> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/agents/task", server_url))
+        .header("X-API-Key", api_key)
+        .json(&serde_json::json!({"task": task, "session_id": session_id}))
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        anyhow::bail!("server returned {}", resp.status());
+    }
+    Ok(resp.json::<serde_json::Value>().await?)
+}
+
+// ── SSE subscriber ────────────────────────────────────────────────────
+
+async fn subscribe_sse(url: String, api_key: String, tx: mpsc::Sender<AgentStreamEvent>) {
+    let client = reqwest::Client::new();
+    let resp = match client.get(&url).header("X-API-Key", &api_key).send().await {
+        Ok(r) if r.status().is_success() => r,
+        _ => return,
+    };
+
+    let mut stream = resp.bytes_stream();
+    let mut buf = String::new();
+
+    while let Some(Ok(bytes)) = stream.next().await {
+        buf.push_str(&String::from_utf8_lossy(&bytes));
+        while let Some(pos) = buf.find("\n\n") {
+            let event_text = buf[..pos].to_string();
+            buf.drain(..pos + 2);
+            for line in event_text.lines() {
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                        if let Some(evt) = parse_sse_event(&val) {
+                            if tx.send(evt).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
+    match val["type"].as_str()? {
+        "stage_started" => {
+            Some(AgentStreamEvent::StageStarted { stage: val["stage"].as_str()?.to_string() })
+        },
+        "stage_done" => Some(AgentStreamEvent::StageDone {
+            stage: val["stage"].as_str()?.to_string(),
+            confidence: val["confidence"].as_f64().map(|f| f as f32),
+            latency_ms: val["latency_ms"].as_u64().unwrap_or(0),
+        }),
+        "stage_skipped" => {
+            Some(AgentStreamEvent::StageSkipped { stage: val["stage"].as_str()?.to_string() })
+        },
+        "tool_call_started" => Some(AgentStreamEvent::ToolCallStarted {
+            tool: val["tool"].as_str()?.to_string(),
+            args_summary: val["args_summary"].as_str().unwrap_or("").to_string(),
+        }),
+        "tool_call_done" => Some(AgentStreamEvent::ToolCallDone {
+            tool: val["tool"].as_str()?.to_string(),
+            duration_ms: val["duration_ms"].as_u64().unwrap_or(0),
+        }),
+        "tool_call_failed" => {
+            Some(AgentStreamEvent::ToolCallFailed { tool: val["tool"].as_str()?.to_string() })
+        },
+        "adr_checkpoint" => Some(AgentStreamEvent::AdrCheckpoint {
+            status: val["status"].as_str().unwrap_or("").to_string(),
+            title: val["title"].as_str().unwrap_or("").to_string(),
+        }),
+        "pipeline_done" => Some(AgentStreamEvent::PipelineDone {
+            latency_ms: val["latency_ms"].as_u64().unwrap_or(0),
+        }),
+        "pipeline_error" => Some(AgentStreamEvent::PipelineError {
+            error: val["error"].as_str().unwrap_or("pipeline error").to_string(),
+        }),
+        _ => None,
+    }
+}
+
+// ── Legacy LLM task (kept for direct ML API access) ──────────────────
 
 async fn run_llm(
     message: String,
@@ -369,22 +605,16 @@ async fn check_server_health(app: &mut AppState) {
     match reqwest::get(&url).await {
         Ok(r) if r.status().is_success() => {
             app.connection_status = ConnectionStatus::Connected;
-            app.add_system_message(&format!("connected → {}", app.server_url));
         },
         Ok(r) => {
             app.connection_status = ConnectionStatus::Degraded;
-            app.add_system_message(&format!(
-                "server {} returned {} (degraded)",
-                app.server_url,
-                r.status()
-            ));
+            app.output_text =
+                format!("server {} returned {} (degraded)", app.server_url, r.status());
         },
         Err(_) => {
             app.connection_status = ConnectionStatus::Offline;
-            app.add_system_message(&format!(
-                "cannot reach {} — run `neoland server` to start",
-                app.server_url
-            ));
+            app.output_text =
+                format!("cannot reach {} — run `neoland server` to start", app.server_url);
         },
     }
 }
