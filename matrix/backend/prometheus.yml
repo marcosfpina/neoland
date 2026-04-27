@@ -1,0 +1,74 @@
+# Prometheus Configuration - AI Assistant Backend
+# ================================================
+# Scrapes metrics from the AI Agent Ranking System.
+#
+# Usage:
+#   prometheus --config.file=prometheus.yml
+#
+# Access:
+#   - Prometheus UI: http://localhost:9090
+#   - Targets: http://localhost:9090/targets
+#   - Metrics: http://localhost:9090/graph
+
+global:
+  scrape_interval: 5s          # Scrape targets every 5 seconds
+  evaluation_interval: 5s       # Evaluate rules every 5 seconds
+  scrape_timeout: 4s           # Timeout for scrape requests
+
+  external_labels:
+    environment: 'development'
+    project: 'ai-agent-hub'
+    cluster: 'local'
+
+# Scrape configurations
+scrape_configs:
+  # AI Agent Backend - Main API
+  - job_name: 'ai-agent-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - 'localhost:8000'
+        labels:
+          service: 'ranking-api'
+          component: 'backend'
+
+    # Metric relabeling (optional)
+    metric_relabel_configs:
+      # Add instance label
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'ai-backend'
+
+  # System Metrics (if node_exporter is running)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets:
+          - 'localhost:9100'
+        labels:
+          service: 'system-metrics'
+    # Optional: Only scrape if available
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9100
+
+# Alerting rules
+rule_files:
+  - 'alerts.yml'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - 'localhost:9093'
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /tmp/prometheus-data
+    retention.time: 7d         # Keep 7 days of data
+    retention.size: 10GB       # Max 10GB storage

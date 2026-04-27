@@ -1,0 +1,24 @@
+[
+  {
+    "feedback_id": "cb071286-b834-49e2-b53f-16d8c14bfe44",
+    "decision_id": "dec-123",
+    "agent_id": "claude-code",
+    "feedback_type": "approved",
+    "outcome_score": 1.0,
+    "user_id": "kernelcore",
+    "comments": "Excellent code generation",
+    "metadata": {},
+    "timestamp": "2026-01-25T19:42:47.104439"
+  },
+  {
+    "feedback_id": "5a64dac1-972c-4404-b6c8-a2b5ae9c272c",
+    "decision_id": "dec-123",
+    "agent_id": "claude-code",
+    "feedback_type": "approved",
+    "outcome_score": 1.0,
+    "user_id": "kernelcore",
+    "comments": "Excellent code generation",
+    "metadata": {},
+    "timestamp": "2026-01-25T19:42:52.652345"
+  }
+]
