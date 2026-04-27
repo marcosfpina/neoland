@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
+
 // Axum imports for REST
 use axum::{
     body::Body,
@@ -33,7 +35,7 @@ use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 use tracing::Instrument; // Phase 4.2: For span instrumentation
 
 use crate::{
-    agents::orchestrator::AgentOrchestrator,
+    agents::{events::AgentEvent, orchestrator::AgentOrchestrator},
     audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
     auth::AuthManager,
     engine::{GenerationConfig, LocalEngine},
@@ -162,6 +164,8 @@ pub struct AppState {
     /// Multi-agent DSPy pipeline orchestrator (set when DATABASE_URL is
     /// configured).
     agent_orchestrator: Option<Arc<AgentOrchestrator>>,
+    /// Broadcast channel for real-time agent pipeline events (SSE).
+    event_bus: tokio::sync::broadcast::Sender<AgentEvent>,
 }
 
 // gRPC Service Implementation
@@ -995,6 +999,37 @@ async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
     }
 }
 
+/// GET /v1/agents/events — global SSE stream of all agent pipeline events.
+/// Requires ReadOnly+ auth (enforced by auth_middleware).
+async fn agent_events_handler(
+    State(state): State<Arc<AppState>>,
+) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.event_bus.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|msg| match msg {
+        Ok(event) => serde_json::to_string(&event).ok().map(|d| Ok(Event::default().data(d))),
+        Err(_) => None,
+    });
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15)))
+}
+
+/// GET /v1/agents/events/:session — SSE stream filtered to a specific session.
+/// Requires ReadOnly+ auth (enforced by auth_middleware).
+async fn agent_events_session_handler(
+    State(state): State<Arc<AppState>>,
+    Path(session_id): Path<uuid::Uuid>,
+) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.event_bus.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(move |msg| match msg {
+        Ok(event) if event.session_id() == session_id => {
+            serde_json::to_string(&event).ok().map(|d| Ok(Event::default().data(d)))
+        },
+        _ => None,
+    });
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15)))
+}
+
 fn user_audit_log_path_from_env(xdg_state_home: Option<&str>, home: Option<&str>) -> String {
     if let Some(xdg_state_home) = xdg_state_home {
         let base = xdg_state_home.trim_end_matches('/');
@@ -1117,6 +1152,9 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
     let rate_limiter = Arc::new(RateLimiter::new(100, 60));
     info!("⏱️  Rate limiter enabled (100 req/min)");
 
+    // SSE event bus — broadcast channel for agent pipeline events.
+    let (event_tx, _) = tokio::sync::broadcast::channel::<AgentEvent>(128);
+
     // Initialize PersistentVectorStore (Phase 4.9) when DATABASE_URL is set.
     // Falls back gracefully to in-memory-only mode if DB is unavailable.
     let persistent_store = {
@@ -1173,6 +1211,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                 } else {
                                     orch
                                 };
+                                let orch = orch.with_event_bus(event_tx.clone());
                                 info!(
                                     dspy_url = %cfg.agents.dspy_url,
                                     "🤖 Agent orchestrator initialized"
@@ -1208,6 +1247,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         rate_limiter,
         start_time: Instant::now(), // Phase 4.3: Track service start time
         agent_orchestrator,
+        event_bus: event_tx,
     });
 
     // 1. Start gRPC Server
@@ -1224,6 +1264,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         .route("/v1/chat/completions", post(rest_chat_handler))
         .route("/v1/agents/task", post(submit_agent_task))
         .route("/v1/agents/session/:id", get(get_agent_session))
+        .route("/v1/agents/events", get(agent_events_handler))
+        .route("/v1/agents/events/:session", get(agent_events_session_handler))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))
         .layer(middleware::from_fn_with_state(shared_state.clone(), validation_middleware))
         .layer(middleware::from_fn_with_state(shared_state.clone(), rate_limit_middleware))
@@ -1287,6 +1329,7 @@ mod tests {
     /// VectorStore::new() loads an ML model — call only from `#[ignore]` tests.
     #[allow(dead_code)]
     async fn build_test_state(vector_store: VectorStore) -> AppState {
+        let (event_tx, _) = tokio::sync::broadcast::channel(1);
         AppState {
             engine: Arc::new(Mutex::new(None)),
             vector_store: Arc::new(Mutex::new(vector_store)),
@@ -1299,6 +1342,7 @@ mod tests {
             rate_limiter: Arc::new(RateLimiter::new(100, 60)),
             start_time: Instant::now(),
             agent_orchestrator: None,
+            event_bus: event_tx,
         }
     }
 

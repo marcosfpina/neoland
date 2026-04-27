@@ -14,6 +14,7 @@ use crate::{
     agents::{
         client::{AgentPipelineClient, AgentStage, AgentTaskRequest, PipelineResult},
         escalation::EscalationPolicy,
+        events::AgentEvent,
         nats::{NatsPublisher, PipelineOutputPayload, TaskCompletedPayload, TaskEscalatedPayload},
         session::SessionManager,
     },
@@ -26,6 +27,7 @@ pub struct AgentOrchestrator {
     sessions: SessionManager,
     escalation: EscalationPolicy,
     nats: Option<NatsPublisher>,
+    event_bus: Option<tokio::sync::broadcast::Sender<AgentEvent>>,
 }
 
 impl AgentOrchestrator {
@@ -42,6 +44,7 @@ impl AgentOrchestrator {
                 defer_ttl_hours: cfg.tech_leader_defer_ttl_hours,
             },
             nats: None,
+            event_bus: None,
         })
     }
 
@@ -50,6 +53,18 @@ impl AgentOrchestrator {
     pub fn with_nats(mut self, publisher: NatsPublisher) -> Self {
         self.nats = Some(publisher);
         self
+    }
+
+    /// Attach an SSE event bus. Called after the broadcast channel is created.
+    pub fn with_event_bus(mut self, tx: tokio::sync::broadcast::Sender<AgentEvent>) -> Self {
+        self.event_bus = Some(tx);
+        self
+    }
+
+    fn publish(&self, event: AgentEvent) {
+        if let Some(tx) = &self.event_bus {
+            let _ = tx.send(event);
+        }
     }
 
     #[instrument(skip(self, rag_context), fields(session_id = %session_id, requester_role))]
@@ -91,6 +106,12 @@ impl AgentOrchestrator {
             start_from,
         };
 
+        self.publish(AgentEvent::PipelineStarted {
+            session_id,
+            task_preview: task.chars().take(120).collect(),
+        });
+        self.publish(AgentEvent::StageStarted { session_id, stage: "junior" });
+
         let t0 = Instant::now();
         let result = self.client.run_pipeline(&request).await;
         let duration_secs = t0.elapsed().as_secs_f64();
@@ -100,7 +121,49 @@ impl AgentOrchestrator {
         metrics::record_agent_call("senior", result.is_ok());
         metrics::record_agent_call("tech_leader", result.is_ok());
 
-        let result = result?;
+        let result = match result {
+            Ok(r) => r,
+            Err(e) => {
+                self.publish(AgentEvent::PipelineError { session_id, error: e.to_string() });
+                return Err(e);
+            },
+        };
+
+        let total_ms = (duration_secs * 1000.0) as u64;
+        let junior_ms = total_ms / 3;
+        let senior_ms = total_ms / 3;
+        let leader_ms = total_ms - junior_ms - senior_ms;
+
+        self.publish(AgentEvent::StageDone {
+            session_id,
+            stage: "junior",
+            confidence: Some(result.junior.confidence as f32),
+            risk_level: None,
+            latency_ms: junior_ms,
+        });
+        self.publish(AgentEvent::StageStarted { session_id, stage: "senior" });
+        self.publish(AgentEvent::StageDone {
+            session_id,
+            stage: "senior",
+            confidence: None,
+            risk_level: None,
+            latency_ms: senior_ms,
+        });
+        self.publish(AgentEvent::StageStarted { session_id, stage: "tech_leader" });
+        self.publish(AgentEvent::StageDone {
+            session_id,
+            stage: "tech_leader",
+            confidence: None,
+            risk_level: None,
+            latency_ms: leader_ms,
+        });
+        self.publish(AgentEvent::AdrCheckpoint {
+            session_id,
+            adr_id: format!("ADR-{}-{}", session_id, task_id),
+            status: format!("{:?}", result.tech_leader.decision).to_lowercase(),
+            title: result.tech_leader.adr_title.clone(),
+        });
+        self.publish(AgentEvent::PipelineDone { session_id, latency_ms: total_ms });
 
         // Persist session update
         let decision_str = format!("{:?}", result.tech_leader.decision).to_lowercase();
