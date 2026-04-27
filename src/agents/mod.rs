@@ -7,6 +7,7 @@
 pub mod checkpoint_store;
 pub mod client;
 pub mod escalation;
+pub mod events;
 pub mod flags;
 pub mod mmap;
 pub mod nats;
