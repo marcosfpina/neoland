@@ -1,20 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Command,
   Bot,
-  GitBranch,
-  Database,
-  Sparkles,
+  CheckCircle,
   Activity,
   FileText,
   Terminal,
   Zap,
-  Trophy,
   Clock,
   ArrowRight,
   BarChart2,
@@ -25,9 +22,24 @@ import { AgentLeaderboard } from "@/components/agents/agent-leaderboard"
 import { ResourceMonitor } from "@/components/system/resource-monitor"
 import { getAllAgents, getActiveAgents } from "@/lib/agents/registry"
 
+interface NeolandStats {
+  total: number
+  accepted: number
+  avg_latency_ms: number
+  avg_score: number
+}
+
 export default function MissionControl() {
-  const [selectedTab, setSelectedTab] = useState("overview")
+
+  const [neolandStats, setNeolandStats] = useState<NeolandStats | null>(null)
   const agents = getAllAgents()
+
+  useEffect(() => {
+    fetch("/api/neoland/stats")
+      .then((r) => r.json())
+      .then(setNeolandStats)
+      .catch(() => {})
+  }, [])
   const activeAgents = getActiveAgents()
 
   const modules = [
@@ -83,11 +95,6 @@ export default function MissionControl() {
     },
   ]
 
-  // Calculate totals
-  const totalTasks = agents.reduce((sum, a) => sum + a.metrics.tasksCompleted, 0)
-  const avgEfficiency = Math.round(agents.reduce((sum, a) => sum + a.metrics.efficiencyScore, 0) / agents.length)
-  const totalXP = agents.reduce((sum, a) => sum + a.metrics.xp, 0)
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -124,17 +131,35 @@ export default function MissionControl() {
           <ResourceMonitor />
         </section>
 
-        {/* Quick Stats */}
+        {/* Neoland Live Stats */}
         <section className="grid grid-cols-4 gap-4 mb-8">
           <Card className="bg-card border-border">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/20 rounded-lg">
-                  <Bot className="w-5 h-5 text-primary" />
+                  <BarChart2 className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{agents.length}</div>
-                  <div className="text-xs text-muted-foreground">Active Agents</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {neolandStats?.total ?? "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Pipeline Runs</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border-border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {neolandStats?.accepted ?? "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Accepted</div>
                 </div>
               </div>
             </CardContent>
@@ -144,11 +169,13 @@ export default function MissionControl() {
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-accent/20 rounded-lg">
-                  <Zap className="w-5 h-5 text-accent" />
+                  <Clock className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{avgEfficiency}%</div>
-                  <div className="text-xs text-muted-foreground">Avg Efficiency</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {neolandStats ? `${neolandStats.avg_latency_ms}ms` : "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Avg Latency</div>
                 </div>
               </div>
             </CardContent>
@@ -157,26 +184,14 @@ export default function MissionControl() {
           <Card className="bg-card border-border">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-secondary/20 rounded-lg">
-                  <Trophy className="w-5 h-5 text-secondary" />
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <Zap className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{totalXP.toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Total XP</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-destructive/20 rounded-lg">
-                  <Clock className="w-5 h-5 text-destructive" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{totalTasks.toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Tasks Completed</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {neolandStats ? `${neolandStats.avg_score}%` : "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Avg Score</div>
                 </div>
               </div>
             </CardContent>
