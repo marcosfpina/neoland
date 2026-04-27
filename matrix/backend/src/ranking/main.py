@@ -27,7 +27,7 @@ app = FastAPI(title="AI Agent Ranking System - STF Enforced")
 # Allow requests from frontend (development and production)
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3006,http://localhost:3001,https://ai-assistant.yourdomain.com"
+    "http://localhost:3000,http://localhost:3006,http://localhost:3001,https://ai-assistant.yourdomain.com"
 ).split(",")
 
 app.add_middleware(

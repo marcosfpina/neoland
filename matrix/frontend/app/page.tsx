@@ -17,6 +17,7 @@ import {
   Trophy,
   Clock,
   ArrowRight,
+  BarChart2,
 } from "lucide-react"
 import Link from "next/link"
 import { AgentCard } from "@/components/agents/agent-card"
@@ -68,6 +69,16 @@ export default function MissionControl() {
       color: "from-pink-500 to-rose-600",
       href: "/services",
       agent: "HEALTH",
+      status: "ready",
+    },
+    {
+      id: "pipeline-history",
+      title: "Pipeline History",
+      description: "All neoland pipeline runs — latency, confidence, ADR decisions over time",
+      icon: BarChart2,
+      color: "from-amber-500 to-orange-600",
+      href: "/pipeline-history",
+      agent: "MATRIX",
       status: "ready",
     },
   ]
