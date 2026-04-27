@@ -45,7 +45,7 @@
           dust
 
           # System info
-          neofetch
+          
           fastfetch
           lshw
           dmidecode

@@ -131,7 +131,7 @@
           runtimeInputs = with pkgs; [ nodejs_24 ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             cd "$frontend_dir"
             npm install "$@"
           '';
@@ -142,7 +142,7 @@
           runtimeInputs = with pkgs; [ nodejs_24 ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             frontend_host="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
             frontend_port="''${NEOLAND_FRONTEND_PORT:-3006}"
             control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
@@ -160,7 +160,7 @@
           runtimeInputs = with pkgs; [ nodejs_24 ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
             dspy_url="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
             export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$control_plane_url}"
@@ -176,7 +176,7 @@
           runtimeInputs = with pkgs; [ nodejs_24 ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             frontend_host="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
             frontend_port="''${NEOLAND_FRONTEND_PORT:-3006}"
             control_plane_url="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
@@ -194,7 +194,7 @@
           runtimeInputs = with pkgs; [ nodejs_24 ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             cd "$frontend_dir"
             npm run lint "$@"
           '';
@@ -205,7 +205,7 @@
           runtimeInputs = with pkgs; [ coreutils ];
           text = ''
             project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/apps/frontend}"
+            frontend_dir="''${NEOLAND_FRONTEND_DIR:-$project_root/matrix/frontend}"
             cd "$frontend_dir"
             rm -rf .next
             echo "cleared $frontend_dir/.next"
@@ -330,7 +330,7 @@
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            export NEOLAND_FRONTEND_DIR="$NEOLAND_PROJECT_ROOT/matrix/apps/frontend"
+            export NEOLAND_FRONTEND_DIR="$NEOLAND_PROJECT_ROOT/matrix/frontend"
             export NEOLAND_FRONTEND_HOST="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
             export NEOLAND_FRONTEND_PORT="''${NEOLAND_FRONTEND_PORT:-3006}"
             export NEOLAND_FRONTEND_URL="''${NEOLAND_FRONTEND_URL:-http://$NEOLAND_FRONTEND_HOST:$NEOLAND_FRONTEND_PORT}"
