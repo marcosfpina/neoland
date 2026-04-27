@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { BookCopy, Radar } from "lucide-react"
+import { BookCopy, History, Radar } from "lucide-react"
 
 import { PipelineRunner } from "@/components/pipeline/pipeline-runner"
 import { PageHeader } from "@/components/shared/page-header"
@@ -30,6 +30,12 @@ export default async function PipelinePage() {
               <Link href="/adr">
                 <BookCopy className="size-4" />
                 Open vault
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/pipeline-history">
+                <History className="size-4" />
+                History
               </Link>
             </Button>
           </>

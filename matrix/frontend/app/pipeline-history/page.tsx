@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { Activity, ArrowLeft, CheckCircle, XCircle, Clock, RefreshCw, Bot } from "lucide-react"
+import { Activity, ArrowLeft, CheckCircle, XCircle, Clock, RefreshCw, Bot, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -110,10 +110,18 @@ export default function PipelineHistoryPage() {
             <h1 className="text-2xl font-bold">Pipeline History</h1>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchRuns}>
-          <RefreshCw className="size-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/pipeline">
+              <Play className="size-4" />
+              Run pipeline
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchRuns}>
+            <RefreshCw className="size-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}
