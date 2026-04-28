@@ -8,15 +8,17 @@ Get up and running with Neoland in under 5 minutes.
 
 ## Prerequisites
 
-- NixOS or Nix package manager
 - 2GB free RAM (for local inference)
 - Terminal emulator
+- One of:
+  - Nix / NixOS recommended
+  - Ubuntu or comparable bare metal environment supported
 
 ---
 
 ## Installation
 
-### Option 1: Development Mode
+### Option 1: Development Mode With Nix (Recommended)
 
 ```bash
 cd /home/kernelcore/master/neoland
@@ -84,7 +86,8 @@ neoland client \
 
 ## Secrets
 
-For local encrypted secrets, edit `secrets/neoland.sops.env` with:
+For local encrypted secrets, the preferred workflow is to edit
+`secrets/neoland.sops.env` with:
 
 ```bash
 neoland-secrets
@@ -93,6 +96,17 @@ neoland-secrets
 The `neoland`, `neoland-server`, `neoland-client`, `neoland-test`,
 `neoland-doctor`, `neoland-restart`, `nsrv`, and `ncli` commands decrypt and
 load that file automatically before launch.
+
+If you are on bare metal Ubuntu or do not want to use SOPS, exporting the same
+environment variables manually is also valid:
+
+```bash
+export NEOLAND_ADMIN_API_KEY=...
+export NEOLAND_USER_API_KEY=...
+export NEOLAND_READONLY_API_KEY=...
+```
+
+SOPS is recommended, not mandatory.
 
 ---
 

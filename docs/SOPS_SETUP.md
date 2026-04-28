@@ -8,6 +8,15 @@ This repo supports local development secrets through an encrypted dotenv file:
 The application itself still reads environment variables as before. The SOPS
 integration only decrypts those variables immediately before launch.
 
+## Positioning
+
+SOPS is the **preferred** secrets workflow for this repo, especially when using
+`nix develop` or NixOS-style environments.
+
+SOPS is **not mandatory** for every setup. If you are running Neoland on bare
+metal Ubuntu or another non-Nix environment, you can still run it with normal
+environment variables or another secret-management workflow.
+
 ## Why This Is Safe Enough For Local Development
 
 - encrypted secrets are committed, not plaintext
@@ -35,6 +44,23 @@ Or inside the dev shell:
 ```bash
 neoland-secrets
 ```
+
+## Bare Metal Ubuntu Alternative
+
+If you do not want to use SOPS, export the same variables directly in your
+shell or load them from a local, untracked `.env` file.
+
+Example:
+
+```bash
+export NEOLAND_ADMIN_API_KEY=...
+export NEOLAND_USER_API_KEY=...
+export NEOLAND_READONLY_API_KEY=...
+export OPENAI_API_KEY=...
+```
+
+The application does not require SOPS at runtime as long as the needed
+environment variables are present.
 
 ## Run With Secrets
 

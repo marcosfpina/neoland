@@ -1,0 +1,383 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Nightly DX Validation
+    branches:
+      include:
+        - main
+    always: true
+
+variables:
+  CARGO_HOME: $(Pipeline.Workspace)/.cargo
+  TOOL_HOME: $(Pipeline.Workspace)/tools
+  TARGET_DIR: $(Build.SourcesDirectory)/target
+  FRONTEND_DIR: $(Build.SourcesDirectory)/matrix/frontend
+  NPM_CACHE_DIR: $(Pipeline.Workspace)/.npm
+  REPORTS_DIR: $(Build.SourcesDirectory)/.azure-reports
+
+stages:
+  - stage: fast_feedback
+    displayName: Fast Feedback
+    jobs:
+      - job: rust_lint
+        displayName: Rust Lint
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - task: Cache@2
+            inputs:
+              key: 'target | "$(Agent.OS)" | Cargo.lock | flake.lock'
+              restoreKeys: |
+                target | "$(Agent.OS)" | Cargo.lock
+                target | "$(Agent.OS)"
+              path: $(TARGET_DIR)
+            displayName: Restore target cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+              nix --version
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              if [ -n "${CACHIX_AUTH_TOKEN:-}" ]; then
+                nix profile install nixpkgs#cachix
+                cachix use neoland
+                cachix authtoken "$CACHIX_AUTH_TOKEN"
+              fi
+            displayName: Configure optional Cachix
+            env:
+              CACHIX_AUTH_TOKEN: $(CACHIX_AUTH_TOKEN)
+            condition: always()
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              nix develop --command cargo fmt --all -- --check
+              nix develop --command cargo clippy --all-targets --all-features -- -D warnings
+              nix develop --command cargo check --all-targets --all-features
+            displayName: cargo fmt + clippy + check
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              CARGO_TARGET_DIR: $(TARGET_DIR)
+
+      - job: rust_tests
+        displayName: Rust Tests
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - task: Cache@2
+            inputs:
+              key: 'target | "$(Agent.OS)" | Cargo.lock | flake.lock'
+              restoreKeys: |
+                target | "$(Agent.OS)" | Cargo.lock
+                target | "$(Agent.OS)"
+              path: $(TARGET_DIR)
+            displayName: Restore target cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+              mkdir -p "$(REPORTS_DIR)"
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              nix develop --command cargo test --lib --no-fail-fast
+              nix develop --command cargo test --tests --no-fail-fast -- --test-threads=1
+            displayName: Run Rust test suites
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              CARGO_TARGET_DIR: $(TARGET_DIR)
+              RUST_BACKTRACE: "1"
+
+          - bash: |
+              cat > "$(REPORTS_DIR)/rust-tests-summary.md" <<'EOF'
+              # Rust Test Summary
+
+              Rust tests were executed through `nix develop`:
+
+              - `cargo test --lib --no-fail-fast`
+              - `cargo test --tests --no-fail-fast -- --test-threads=1`
+
+              This first Azure DevOps pass prioritizes fast feedback and cache reuse.
+              If we want richer test tabs later, the next step is introducing `cargo-nextest`
+              with JUnit export or a dedicated Rust test reporter.
+              EOF
+            displayName: Generate Rust test summary artifact
+
+          - publish: $(REPORTS_DIR)/rust-tests-summary.md
+            artifact: rust-test-summary
+            displayName: Publish Rust test summary
+
+      - job: agents_contract
+        displayName: Agents Contract Tests
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+              mkdir -p "$(REPORTS_DIR)"
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              nix develop --command bash -lc \
+                'cd agents && poetry run pytest tests/ -m contract -v --junitxml="$(REPORTS_DIR)/agents-contract.xml"'
+            displayName: Run Python contract tests
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              REPORTS_DIR: $(REPORTS_DIR)
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: $(REPORTS_DIR)/agents-contract.xml
+              failTaskOnFailedTests: true
+              testRunTitle: Neoland Agents Contract Tests
+            condition: always()
+            displayName: Publish contract test results
+
+      - job: frontend_checks
+        displayName: Frontend Lint and Build
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '24.x'
+            displayName: Use Node 24
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | matrix/frontend/package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: $(NPM_CACHE_DIR)
+            displayName: Restore npm cache
+
+          - bash: |
+              set -euxo pipefail
+              cd "$(FRONTEND_DIR)"
+              npm ci --cache "$(NPM_CACHE_DIR)"
+              npm run lint
+              npm run build
+            displayName: npm ci + lint + build
+            env:
+              NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3001
+              NEOLAND_CONTROL_PLANE_URL: http://127.0.0.1:3001
+              NEOLAND_DSPY_URL: http://127.0.0.1:8001
+
+  - stage: extended_validation
+    displayName: Extended Validation
+    dependsOn: fast_feedback
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: release_build
+        displayName: Release Build
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - task: Cache@2
+            inputs:
+              key: 'target | "$(Agent.OS)" | Cargo.lock | flake.lock'
+              restoreKeys: |
+                target | "$(Agent.OS)" | Cargo.lock
+                target | "$(Agent.OS)"
+              path: $(TARGET_DIR)
+            displayName: Restore target cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              nix build .#neoland
+              ./result/bin/neoland --version || true
+            displayName: Build release binary
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              CARGO_TARGET_DIR: $(TARGET_DIR)
+
+          - publish: $(Build.SourcesDirectory)/result/bin/neoland
+            artifact: neoland-binary
+            displayName: Publish release artifact
+
+      - job: rust_coverage
+        displayName: Rust Coverage
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - task: Cache@2
+            inputs:
+              key: 'target | "$(Agent.OS)" | Cargo.lock | flake.lock'
+              restoreKeys: |
+                target | "$(Agent.OS)" | Cargo.lock
+                target | "$(Agent.OS)"
+              path: $(TARGET_DIR)
+            displayName: Restore target cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              nix develop --command cargo install cargo-tarpaulin --locked --root "$(TOOL_HOME)" || true
+              export PATH="$(TOOL_HOME)/bin:$PATH"
+              nix develop --command cargo tarpaulin --lib --out Xml --output-dir ./coverage
+            displayName: Generate Rust coverage
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              CARGO_TARGET_DIR: $(TARGET_DIR)
+              TOOL_HOME: $(TOOL_HOME)
+
+          - task: PublishCodeCoverageResults@2
+            inputs:
+              summaryFileLocation: $(Build.SourcesDirectory)/coverage/cobertura.xml
+              failIfCoverageEmpty: false
+            condition: always()
+            displayName: Publish coverage report
+
+      - job: dx_validation
+        displayName: DX Validation Audit
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: $(CARGO_HOME)
+            displayName: Restore cargo cache
+
+          - bash: |
+              set -euxo pipefail
+              curl -fsSL https://nixos.org/nix/install -o /tmp/install-nix.sh
+              sh /tmp/install-nix.sh --no-daemon
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              mkdir -p ~/.config/nix
+              printf '%s\n' 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+              nix flake metadata --json > /dev/null
+              mkdir -p "$(REPORTS_DIR)"
+            displayName: Install Nix
+
+          - bash: |
+              set -euxo pipefail
+              . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+              ./scripts/validate-production-readiness.sh | tee "$(REPORTS_DIR)/dx-validation.txt"
+            displayName: Run DX validation script
+            env:
+              CARGO_HOME: $(CARGO_HOME)
+              CARGO_TARGET_DIR: $(TARGET_DIR)
+              REPORTS_DIR: $(REPORTS_DIR)
+
+          - publish: $(REPORTS_DIR)/dx-validation.txt
+            artifact: dx-validation
+            displayName: Publish DX validation artifact

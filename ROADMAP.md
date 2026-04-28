@@ -1,321 +1,361 @@
-# Neoland — Roadmap
+# Neoland — Roadmap To Production
 
-**Última atualização**: 2026-04-26
-**Versão atual**: v0.1.0 (beta)
-**Direção**: Code agent suite — não um chatbot, software de alto nível para agentes de código
+**Última atualização**: 2026-04-28  
+**Objetivo deste documento**: ser a fonte única de tracking até produção.  
+**Leitura atual do projeto**: **72/100 rumo a prod**  
+**Regra**: quando README, checkpoints antigos e código divergirem, o código vence.
 
----
-
-## Visão
-
-Neoland é uma **estação de trabalho para agentes de código**. O objetivo não é um chat bonito — é um
-terminal especializado onde agentes chamam ferramentas reais, gerenciam tarefas, tomam decisões
-arquiteturais e têm seu desempenho rastreado ao longo do tempo.
-
-Referências de nível:
-- Claude Code (terminal agent com MCP)
-- Aider (agent para código com ferramenta real)
-- Cursor (IDE agent com tool calls ao vivo)
-
-Stack alvo:
-
-```
-neoland/
-├── control plane (Rust)         ← já existe
-├── DSPy pipeline (Python)       ← já existe
-├── TUI — agent workstation      ← redesign completo
-│   ├── SSE consumer             ← real-time events
-│   ├── MCP stdio client         ← securellm-mcp como tool provider
-│   ├── task manager             ← fila de tasks, status, prioridade
-│   ├── pipeline monitor         ← Junior→TechLeader ao vivo
-│   └── keybindings              ← power user shortcuts
-└── matrix (mover pra cá)
-    ├── FastAPI backend          ← /rank, /metrics, /stf/context
-    └── Next.js frontend         ← dashboard de performance dos agents
-```
+**Definição de prod para Neoland**: release com acesso público e condição de compartilhar o projeto publicamente de forma responsável.  
+Isso significa não apenas “funciona em ambiente interno”, mas “pode ser exposto, demonstrado e adotado sem esconder riscos operacionais centrais”.
 
 ---
 
-## Fase 1 — SSE Infrastructure (próxima)
+## Resumo Executivo
 
-**Objetivo**: o server publica eventos em tempo real; o TUI os consome.
+Neoland já tem um núcleo técnico forte:
 
-### 1.1 — Tipos de evento
+- control plane Rust com auth, health, métricas, OpenAPI e rotas reais de agentes
+- pipeline Python DSPy com contrato tipado e checkpoints ADR
+- SSE já exposto no backend para eventos de pipeline
+- mmap IPC entregue em base estrutural
+- frontend reposicionado em torno de `Pipeline`, `Sessions`, `ADR` e `Services`
+- suíte Rust validada localmente via `nix develop --command cargo test --lib --quiet`: **221 passed, 17 ignored**
 
-```rust
-// src/agents/events.rs (novo)
-pub enum AgentEvent {
-    PipelineStarted  { session_id: Uuid, task_preview: String },
-    StageStarted     { session_id: Uuid, stage: &'static str },
-    StageDone        { session_id: Uuid, stage: &'static str,
-                       confidence: Option<f32>, risk_level: Option<u8>,
-                       latency_ms: u64 },
-    StageSkipped     { session_id: Uuid, stage: &'static str },
-    ToolCallStarted  { session_id: Uuid, tool: String, args_summary: String },
-    ToolCallDone     { session_id: Uuid, tool: String, duration_ms: u64 },
-    ToolCallFailed   { session_id: Uuid, tool: String, error: String },
-    AdrCheckpoint    { session_id: Uuid, adr_id: String, status: String, title: String },
-    PipelineDone     { session_id: Uuid, latency_ms: u64 },
-    PipelineError    { session_id: Uuid, error: String },
-}
-```
+O principal trabalho que falta para produção **não é fundação**. É alinhamento operacional:
 
-### 1.2 — Broadcast channel no AppState (server)
+- fechar gaps entre backend real e frontend consumindo apenas payload final
+- remover dependências de narrativa herdada de Matrix onde não houver backend verdadeiro
+- transformar observabilidade, deploy, runbooks e rollout em rotina verificável
+- reduzir drift documental, hoje alto
+- fechar os mínimos de exposição pública responsável: release discipline, defaults seguros, onboarding honesto e superfície pública coerente
 
-```rust
-// Adicionar em src/server/mod.rs — AppState
-pub struct AppState {
-    // ... campos existentes ...
-    pub event_bus: tokio::sync::broadcast::Sender<AgentEvent>,
-}
-```
+Mas a ordem correta importa: **estabilização do produto principal vem antes do fechamento operacional**.  
+Enquanto ainda houver bugs relevantes em TUI, fluxo principal e superfícies centrais, Neoland deve ser tratado como **pré-release técnico**, não como release candidate.
 
-### 1.3 — Endpoint SSE
-
-```
-GET /v1/agents/events           → stream global (todos os sessions)
-GET /v1/agents/events/:session  → stream de um session específico
-```
-
-- Auth: `ReadOnly+` (mesmo nível de `/v1/agents/session/:id`)
-- Formato: `text/event-stream`, eventos JSON, heartbeat 15s
-- O orchestrator publica no `event_bus` durante execução do pipeline
-
-### 1.4 — Orchestrator publica eventos
-
-Modificar `src/agents/orchestrator.rs` para publicar em cada etapa:
-- Antes de chamar Junior → `StageStarted { stage: "junior" }`
-- Depois de Junior retornar → `StageDone { ..., confidence, risk_level, latency_ms }`
-- Idem para Senior, Architect (se escalado), TechLeader
-- Na decisão final → `AdrCheckpoint`
-
-**Entregável**: `cargo test --lib` passa + endpoint SSE retorna eventos reais
+Há também uma trilha explícita de `DX verification`: não basta termos componentes, precisamos provar que eles funcionam conforme prometido nas docs e superfícies.  
+Ver: [`docs/DX_ROADMAP.md`](/home/kernelcore/master/neoland/docs/DX_ROADMAP.md)
 
 ---
 
-## Fase 2 — TUI Redesign (agent workstation)
+## Estado Integral Atual
 
-**Objetivo**: terminal especializado para trabalho com agents, não chatbot.
+### 1. Control Plane Rust — **85%**
 
-### 2.1 — Novo layout
+**Confirmado no código**
 
-```
-╭─ ◆ neoland ─────────────────────────────── ● connected · 42ms ─╮
-│                                                                   │
-│  TASKS                                                            │
-│  ● [abc123] analyze src/auth.rs            running               │
-│  ○ [def456] write unit tests               queued                │
-│  ○ [ghi789] refactor error handling        queued                │
-│                                                                   │
-│  ─────────────────────────────────────────────────────────────   │
-│                                                                   │
-│  ▸ pipeline  [abc123]                                             │
-│    ✓  junior       0.82  low        312ms                         │
-│    ✓  senior       no-escalate      891ms                         │
-│    ⠹  tech-leader  running...                                     │
-│    ○  architect    skipped                                        │
-│                                                                   │
-│  ▸ tools                                                          │
-│    ✓  read_file    src/auth.rs      12ms                          │
-│    ✓  search       "jwt token"       5ms                          │
-│    ⠹  analyze_code running...                                     │
-│                                                                   │
-│  ▸ output  [abc123]                                               │
-│    O módulo de autenticação tem 3 problemas críticos...           │
-│                                                                   │
-╰───────────────────────────────────────────────────────────────────╯
-╭─ [ balanced ] ──── ^t task  ^p pipeline  ^m matrix  ^c quit ──────╮
-│  > █                                                               │
-╰────────────────────────────────────────────────────────────────────╯
-```
+- `POST /v1/agents/task`
+- `GET /v1/agents/session/:id`
+- `GET /v1/agents/health`
+- `GET /v1/agents/events`
+- `GET /v1/agents/events/:session`
+- `GET /health`, `GET /ready`, `GET /live`
+- OpenAPI e Swagger em `src/openapi.rs`
 
-### 2.2 — Novos tipos em `app.rs`
+**Leitura**
 
-```rust
-pub struct Task {
-    pub id: Uuid,
-    pub description: String,
-    pub status: TaskStatus,   // Queued | Running | Done | Failed
-    pub created_at: DateTime<Utc>,
-}
+Base pronta para beta operacional single-host. O trabalho restante aqui é mais de integração, rollout e endurecimento final do que de arquitetura base.
 
-pub struct PipelineStage {
-    pub name: &'static str,
-    pub status: StageStatus,  // Pending | Running | Done{latency_ms} | Skipped | Failed
-    pub confidence: Option<f32>,
-    pub risk_level: Option<u8>,
-}
+### 2. Pipeline Python DSPy — **80%**
 
-pub struct ToolCall {
-    pub name: String,
-    pub args_summary: String,
-    pub status: ToolStatus,   // Running | Done{duration_ms} | Failed
-}
-```
+**Confirmado no código**
 
-### 2.3 — SSE consumer no TUI
+- contrato espelhado entre `agents/neoland_agents/schemas/api.py` e `src/agents/client.rs`
+- pipeline multiagente ativo em `agents/neoland_agents/app.py`
+- ADR-019 e ADR-020 aceitas e implementadas parcialmente
+- sessão persistida via `src/agents/session.rs`
 
-```rust
-// mod.rs — novo LlmEvent
-enum AgentStreamEvent {
-    StageUpdate(PipelineStage),
-    ToolUpdate(ToolCall),
-    AdrDecision(AdrSummary),
-    OutputChunk(String),
-    Done { latency_ms: u64 },
-    Error(String),
-}
-```
+**Gaps**
 
-TUI conecta em `GET /v1/agents/events/:session` via `reqwest::Response::bytes_stream()`.
+- `GET /v1/pipeline/session/{session_id}` no app Python segue stub
+- Fase B do mmap ainda precisa integrar abort/progresso fino no fluxo completo
+- streaming fino por stage ainda não está consumido ponta a ponta
 
-### 2.4 — Keybindings
+### 3. Frontend Workbench — **55%**
 
-| Key | Ação |
-|-----|------|
-| `^t` | Nova task |
-| `^p` | Toggle pipeline panel |
-| `^m` | Abrir matrix dashboard |
-| `^x` | Cancelar task em execução |
-| `^h` | Histórico de tasks |
-| `Tab` | Focar próximo painel |
-| `↑↓` | Navegar tasks / output |
-| `Enter` | Executar task selecionada / enviar |
-| `Esc` | Cancelar input / fechar painel |
+**Confirmado no código**
 
-**Entregável**: TUI mostra pipeline ao vivo via SSE + task queue funcional
+- páginas alinhadas ao produto em `matrix/frontend/app/pipeline`, `sessions`, `adr`, `services`
+- adapters tipados em `matrix/frontend/lib/neoland`
+- ADR Vault já renderiza arquivos reais de checkpoint
+- Services já usa health/readiness/liveness reais
 
----
+**Gaps críticos**
 
-## Fase 3 — MCP stdio (securellm-mcp como tool provider)
+- `PipelineLiveView` ainda afirma que stage streaming “não está exposto”, mas o backend já expõe SSE
+- `PipelineRunner` ainda espera payload final, sem consumir `/v1/agents/events/:session`
+- home ainda mistura workbench real com métricas derivadas do backend Matrix
+- `app/api/neoland/stats/route.ts` depende de `NEOLAND_MATRIX_URL` e usa decisão `"accepted"`, enquanto o contrato Neoland trabalha com `approve | reject | defer | escalate`
+- `Sessions` continua lookup-first porque não há listagem real de sessões
 
-**Objetivo**: agents chamam ferramentas reais via MCP, o TUI mostra cada call.
+### 4. Operações, SRE e Deploy — **65%**
 
-### 3.1 — Flake input
+**Confirmado no código e docs**
 
-```nix
-# flake.nix
-inputs.securellm-mcp.url = "github:marcosfpina/securellm-mcp";
-```
+- métricas Prometheus
+- probes de health/readiness/liveness
+- runbooks em `docs/runbooks/`
+- backup scripts
+- Nix-first setup
 
-O neoland spawna o processo `securellm-mcp` via stdio na inicialização do server.
+**Gaps**
 
-### 3.2 — MCP client em Rust
+- falta checklist de release única e verificável
+- falta validação rotineira de restore, rollback e smoke de deploy
+- falta convergir serviço Rust, pipeline Python, frontend e runtime dirs em um fluxo de operação simples
 
-```
-src/mcp/
-├── mod.rs          — spawn processo, gerenciar stdio
-├── client.rs       — protocolo MCP (JSON-RPC 2.0 sobre stdio)
-├── types.rs        — Tool, CallToolRequest, CallToolResult
-└── registry.rs     — lista de tools disponíveis do securellm-mcp
-```
+### 5. Segurança e Governança — **80%**
 
-### 3.3 — Tools disponíveis (securellm-mcp)
+**Confirmado**
 
-Prioridade para integração:
-- `advanced_code_analysis` — análise estática
-- `build_and_test` — rodar testes
-- `run_tests` — suite específica
-- `security_audit` — auditoria de segurança
-- `search_knowledge` / `save_knowledge` — base de conhecimento
-- `web_search` / `web_crawl` — pesquisa externa
-- `ssh_execute` — execução remota
+- auth/RBAC
+- audit logging
+- Vault/secrets path
+- validação/rate limit
+- documentação de segurança e ADRs
 
-### 3.4 — Wiring
+**Gaps**
 
-Orchestrator → MCP client → securellm-mcp processo
-Tool calls publicadas no `event_bus` → SSE → TUI
+- mTLS/edge hardening não está fechado como gate operacional
+- falta declarar claramente o mínimo aceitável de prod versus backlog enterprise
 
-**Entregável**: TUI mostra tool calls reais do securellm-mcp em tempo real
+### 6. Documentação e Fonte de Verdade — **40%**
+
+Hoje este é um dos maiores riscos de execução.
+
+**Drifts encontrados**
+
+- `ROADMAP.md` antigo falava em SSE como próximo passo, mas SSE já existe
+- `README.md` vende 96/100 e features mais avançadas do que o caminho operacional validado
+- `docs/PROGRESS.md`, `docs/PRODUCTION_CHECKPOINT.md` e `docs/PROJECT_SNAPSHOT.md` usam percentuais e escopos diferentes
+- houve drift documental sobre o path do `matrix`, mas o path do projeto não deve ser renomeado por este roadmap
 
 ---
 
-## Fase 4 — Matrix Integration
+## O Que Está Bloqueando Produção De Verdade
 
-**Objetivo**: mover matrix para dentro do neoland e conectar métricas dos agents.
+### P-1. Bugs e inconsistências na superfície principal ainda bloqueiam release
 
-### 4.1 — Estrutura no repo
+Impacto:
+- não adianta endurecer operação se a experiência central ainda falha
+- release público com TUI e fluxo principal instáveis gera retrabalho e perda de confiança
+- smoke operacional perde valor se o produto-base ainda não está estável
 
-```
-neoland/
-└── matrix/
-    ├── backend/     ← FastAPI (ranking, STF, metrics)
-    ├── frontend/    ← Next.js (dashboard)
-    └── flake.nix   ← integrado no flake principal
-```
+### P0. Frontend ainda não usa o streaming que o backend já expõe
 
-### 4.2 — Métricas dos agents
+Impacto:
+- operador não vê progressão real do pipeline
+- produto vende “live view” sem consumir a fonte mais importante do sistema
 
-Matrix recebe dados de performance dos agents via:
-- `POST /rank` — ranking de decisões do TechLeader
-- `GET /metrics` — pipeline latency, confidence distribution, escalation rate
+### P1. Dependência residual do mundo Matrix onde Neoland deveria ser a verdade
 
-O control plane Rust faz `POST /rank` ao final de cada pipeline run com:
-```json
-{
-  "session_id": "...",
-  "task": "...",
-  "agents": {
-    "junior":      { "confidence": 0.82, "latency_ms": 312 },
-    "senior":      { "escalated": false, "latency_ms": 891 },
-    "tech_leader": { "decision": "accepted", "latency_ms": 445 }
-  },
-  "total_latency_ms": 1648
-}
-```
+Impacto:
+- risco de dashboards mostrarem números inconsistentes
+- ambiguidade de ownership entre workbench Neoland e analytics herdado
 
-### 4.3 — TUI → Matrix dashboard
+### P2. Falta de um caminho único de deploy e validação
 
-`^m` no TUI abre o dashboard do matrix no browser:
-```rust
-open::that("http://localhost:3000")?;  // ou via terminal emulator
-```
+Impacto:
+- projeto parece mais pronto do que realmente está para operação contínua
+- ambiente de dev e ambiente de release ainda não estão fechando em um único ritual simples
 
-**Entregável**: pipeline runs rastreados no matrix, dashboard mostra histórico
+### P3. Documentação inflada e desalinhada
+
+Impacto:
+- decisões ruins de priorização
+- onboarding mais lento
+- percepção falsa de readiness
+
+### P4. Critério de public release ainda não está explicitado no produto inteiro
+
+Impacto:
+- difícil dizer com honestidade “isto já pode ser compartilhado publicamente”
+- risco de expor superfícies incompletas como se fossem maduras
+- messaging, defaults e demo path ainda podem prometer mais do que a operação sustenta
 
 ---
 
-## Fase 5 — Produção e Performance
+## Roadmap De Execução Até Prod
 
-**Objetivo**: SLOs reais, load testing, HA.
+## Fase -1 — Estabilização Do Produto Principal
+**Status**: `in_progress`  
+**Objetivo**: fechar bugs e regressões na experiência central antes do hardening de release.
 
-- Load testing: 500 RPS, p99 < 200ms (ghz + wrk)
-- Coverage: 80%+ (target atual: ~75%)
-- TUI multi-line input + history navigation (↑/↓ no input)
-- Task queue persistida no PostgreSQL
-- Multi-session management no TUI
-- HA: 3+ réplicas via Helm (Phase 5 infra já tem Helm chart)
+- [ ] corrigir bugs relevantes no TUI
+- [ ] estabilizar fluxo principal de execução e inspeção
+- [ ] reduzir inconsistências visíveis entre superfícies do produto
+- [ ] garantir que os caminhos principais funcionem de forma repetível em ambiente de desenvolvimento real
+- [ ] cruzar bugs e regressões com a trilha de DX verification
+
+**Saída da fase**
+
+- produto principal utilizável sem comportamento quebrado recorrente
+- base confiável para iniciar checklist real de release
+
+## Fase 0 — Verdade Única e Corte de Escopo
+**Status**: `in_progress`  
+**Objetivo**: parar drift e definir o que é “prod” para Neoland agora.
+
+- [x] consolidar um roadmap único na raiz
+- [ ] alinhar `README.md`, `docs/PROGRESS.md` e `docs/PROJECT_SNAPSHOT.md` a esta leitura
+- [ ] alinhar documentação antiga ao path já corrigido do `matrix`, sem mudar a estrutura atual do repo
+- [ ] declarar explicitamente o alvo de prod: **public release responsável do workbench Neoland**, com escopo controlado e sem claims infladas
+
+**Saída da fase**
+
+- uma narrativa única de produto
+- zero contradição sobre o que já existe e o que falta
+
+## Fase 1 — Verdade Do Produto Nas Superfícies
+**Status**: `next`  
+**Objetivo**: fazer o centerpiece do produto refletir a verdade operacional.
+
+- [ ] consumir `GET /v1/agents/events/:session` no frontend
+- [ ] renderizar `StageStarted`, `StageDone`, `StageOutput`, `AdrCheckpoint`, `PipelineError`
+- [ ] parar de mostrar copy dizendo que stage streaming não existe
+- [ ] persistir no client o `session_id` retornado para reconectar ao stream
+- [ ] definir estado degradado quando SSE falhar, sem mockar progresso
+
+**Gate para avançar**
+
+- operador consegue iniciar task e ver progressão real por stage sem refresh
+
+## Fase 2 — Session e ADR Forensics Fechados
+**Status**: `next`  
+**Objetivo**: tornar sessões e checkpoints navegáveis de ponta a ponta.
+
+- [ ] enriquecer `Sessions` com fluxo claro de entrada a partir do resultado do pipeline
+- [ ] expor, no backend, o mínimo necessário para browsing real de sessões se isso for requisito imediato
+- [ ] ligar melhor sessão -> checkpoint -> ADR Vault
+- [ ] padronizar leitura dos arquivos de checkpoint e campos obrigatórios
+
+**Gate para avançar**
+
+- qualquer execução real pode ser reconstituída por sessão e checkpoint
+
+## Fase 3 — Desacoplamento de Matrix Residual
+**Status**: `next`  
+**Objetivo**: deixar claro o que é infra reaproveitada e o que é dependência de produto.
+
+- [ ] revisar `app/page.tsx` e `app/api/neoland/stats/route.ts`
+- [ ] remover ou reclassificar métricas que dependem de backend Matrix não canônico
+- [ ] normalizar decisão `accepted` para o vocabulário Neoland ou eliminar a dependência
+- [ ] manter analytics herdado apenas onde houver contrato explícito e ownership claro
+
+**Gate para avançar**
+
+- frontend principal não depende de payload sem fonte de verdade Neoland
+
+## Fase 4 — Operação Single-Host Confiável
+**Status**: `planned`  
+**Objetivo**: transformar a stack atual em serviço operável sem improviso, depois da estabilização do produto principal.
+
+- [ ] fechar runtime dirs, envs e secrets para Rust + Python + frontend
+- [ ] validar smoke de boot completo
+- [ ] validar backup e restore de sessão/checkpoints
+- [ ] documentar rollout, rollback e incident response mínimos
+- [ ] definir pacote único de health checks para preflight
+- [ ] definir baseline de exposição pública: portas, auth obrigatória, envs inseguros proibidos, comportamento seguro por default
+
+**Gate para avançar**
+
+- subir stack, validar health, rodar task real e recuperar de falha com roteiro curto
+
+## Fase 5 — Release Candidate
+**Status**: `planned`  
+**Objetivo**: preparar go/no-go real para release público responsável.
+
+- [ ] smoke E2E do fluxo principal
+- [ ] validar alertas e métricas mínimas em ambiente de staging
+- [ ] congelar contratos do frontend com backend real
+- [ ] revisar hardening que é obrigatório para primeira release, separando do backlog enterprise
+- [ ] revisar README, quickstart, positioning e screenshots sob ótica de divulgação pública honesta
+- [ ] definir checklist de “safe to share”: instalação, auth, health, known limitations, recovery path
+
+**Gate para avançar**
+
+- release candidata passa checklist completo sem intervenção manual ad hoc
+
+## Fase 6 — Produção
+**Status**: `planned`  
+**Objetivo**: publicar com escopo controlado e responsabilidade operacional.
+
+- [ ] deploy em ambiente alvo
+- [ ] soak period com tasks reais
+- [ ] revisão de incidentes da primeira semana
+- [ ] replanejamento para multi-host, ledger mais profundo e expansão de analytics
+- [ ] publicação externa com documentação e limitações explícitas
 
 ---
 
-## Dependências entre fases
+## Backlog Após Prod Inicial
 
-```
-Fase 1 (SSE) ──► Fase 2 (TUI) ──► Fase 3 (MCP) ──► Fase 4 (Matrix)
-                                                          │
-                                                    Fase 5 (Prod)
-```
+Isto **não** deve bloquear o primeiro corte de produção:
 
-Fase 1 desbloqueada agora — server existente suporta adição de SSE sem breaking changes.
-
----
-
-## O que NÃO é prioridade agora
-
-- gRPC mTLS (ADR-011 pendente — não bloqueia nada)
-- SOC 2 / GDPR documentation (compliance — Fase 6 original)
-- Kubernetes HA multi-region (infra existe, não urgente)
-- Neutron NEXUS integration (Q3 2026)
+- multi-tenancy
+- compliance automation completa
+- mTLS end-to-end em todos os planos
+- analytics avançado de ranking
+- automações enterprise de adr-ledger
+- mobile / desktop app
 
 ---
 
-## Stack técnico das novas features
+## Tracking Board
 
-| Feature | Tecnologia |
-|---------|-----------|
-| SSE server | `axum::response::sse::Sse` + `tokio::sync::broadcast` |
-| SSE client (TUI) | `reqwest` bytes_stream + `eventsource-stream` |
-| MCP stdio | `tokio::process::Command` + JSON-RPC 2.0 |
-| Task queue | `Vec<Task>` → PostgreSQL (sqlx) |
-| Matrix backend | FastAPI existente (mover + integrar) |
-| Matrix frontend | Next.js existente (mover + integrar) |
+| ID | Item | Status | Criticidade |
+|----|------|--------|-------------|
+| P-1 | Corrigir bugs do TUI e estabilizar superfície principal | In progress | Alta |
+| DX-1 | Inventariar promessas do produto por superfície | Next | Alta |
+| DX-2 | Validar jornadas principais Nix e Ubuntu | Next | Alta |
+| DX-3 | Classificar claims em verified / partial / stale | Next | Alta |
+| P0 | Unificar documentação e score real | In progress | Alta |
+| P1 | Consumir SSE no Pipeline Live View | Next | Alta |
+| P2 | Fechar fluxo sessão -> ADR -> forensics | Next | Alta |
+| P3 | Remover dependência ambígua de Matrix no core UI | Next | Alta |
+| P4 | Definir deploy single-host repetível | Planned | Alta |
+| P5 | Validar backup/restore e rollback | Planned | Alta |
+| P6 | Checklist de release candidate | Planned | Alta |
+| P7 | Ajustar README para não superestimar readiness | Planned | Média |
+| P8 | Alinhar docs antigas ao path já corrigido do `matrix` | Planned | Média |
+| P9 | Revisar home para foco total em workbench operacional | Planned | Média |
+| P10 | Session listing ou alternativa oficial | Planned | Média |
+| P11 | Integrar Fase B do mmap no fluxo real | Planned | Média |
+| P12 | Separar backlog enterprise do primeiro corte | In progress | Média |
+
+---
+
+## Critério De Produção
+
+Consideraremos Neoland pronto para o primeiro corte quando estes pontos forem verdadeiros ao mesmo tempo:
+
+- TUI e fluxo principal não apresentam bugs relevantes que comprometam a demo, uso básico ou avaliação pública
+- uma task real inicia no frontend e mostra progressão real até decisão final
+- sessão e checkpoint resultantes podem ser inspecionados sem dados simulados
+- health, readiness e liveness refletem o estado real da stack
+- deploy e rollback funcionam com procedimento curto e reproduzível
+- documentação principal não contradiz o comportamento do código
+- o projeto pode ser mostrado publicamente sem depender de explicações defensivas sobre flows quebrados, defaults inseguros ou superfícies enganosas
+- a experiência pública mínima de instalação, autenticação e uso inicial está clara e suportável
+
+---
+
+## Regras De Atualização
+
+- atualizar este arquivo ao fechar qualquer item P0-P12
+- não subir score geral sem evidência operacional ou teste correspondente
+- registrar feature como pronta só quando estiver ligada ao fluxo real, não apenas implementada isoladamente
+- usar percentuais por stream apenas quando houver critério observável
+
+---
+
+## Próxima Janela Recomendada
+
+Ordem sugerida para o próximo ciclo curto:
+
+1. P-1 — estabilizar TUI e fluxo principal
+2. P1 — SSE real no frontend
+3. P3 — limpar dependência ambígua de Matrix na home e stats
+4. P2 — fechar navegação entre pipeline, sessão e ADR
+5. P4/P5 — ritual de deploy, restore e rollback
+
+Se fizermos isso, Neoland sai de “tecnicamente impressionante, mas ainda instável na superfície principal” para “workbench control-plane estável e pronto para fechamento operacional de release”.

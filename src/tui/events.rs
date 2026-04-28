@@ -7,4 +7,7 @@ pub enum Action {
     TogglePipeline,     // ^p
     OpenMatrix,         // ^m
     CancelTask,         // ^x
+    ToggleLlamaManager, // ^l
+    LlamaManagerRun,    // r or enter
+    LlamaManagerStop,   // s or ctrl+c
 }

@@ -31,9 +31,12 @@ O sistema de observabilidade é baseado na stack Prometheus:
 
 O Neoland utiliza uma estratégia de camadas para segredos:
 
-1.  **SOPS (`secrets/neoland.sops.env`):** Segredos versionados em Git, criptografados com `age` ou chaves de nuvem.
+1.  **SOPS (`secrets/neoland.sops.env`):** Caminho preferido, especialmente para usuários Nix/NixOS. Segredos versionados em Git, criptografados com `age` ou chaves de nuvem.
 2.  **HashiCorp Vault:** Integração em tempo de execução para segredos dinâmicos e rotação de chaves.
-3.  **Configuração:** O comando `neoland-secrets` permite editar segredos de forma segura.
+3.  **Environment variables / external secret stores:** Caminho válido para Ubuntu bare metal e ambientes sem workflow SOPS.
+4.  **Configuração:** O comando `neoland-secrets` permite editar segredos de forma segura.
+
+`SOPS` é recomendado, mas não obrigatório para operar o projeto de forma responsável.
 
 ## 🚀 Estratégia de Deploy
 

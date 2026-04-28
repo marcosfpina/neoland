@@ -31,11 +31,87 @@ const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 // ── Top-level render ──────────────────────────────────────────────────────────
 
 pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
+    if app.mode == super::app::AppMode::LlamaManager {
+        render_llama_manager(f, app);
+        return;
+    }
+
     let area = f.area();
     let [main, input] = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(area);
 
     render_main(f, main, app);
     render_input(f, input, app);
+}
+
+// ── Llama Manager ─────────────────────────────────────────────────────────────
+
+fn render_llama_manager(f: &mut Frame<'_>, app: &mut AppState) {
+    let area = f.area();
+    let [browser, logs] =
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
+
+    let mut lines = Vec::new();
+    lines.push(Line::from(vec![
+        Span::styled(
+            " [Llama Manager] ",
+            Style::default().fg(colors::ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " (Press 'r' to run, 's' to stop, 'Esc' to exit) ",
+            Style::default().fg(colors::FG_DIM),
+        ),
+    ]));
+    lines.push(Line::from(""));
+
+    for (i, model) in app.llama_state.available_models.iter().enumerate() {
+        let is_selected = i == app.llama_state.selected_index;
+        let prefix = if is_selected { "> " } else { "  " };
+        let style = if is_selected {
+            Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(colors::FG)
+        };
+        lines.push(Line::from(Span::styled(format!("{}{}", prefix, model), style)));
+    }
+
+    let status_str = if app.llama_state.is_running {
+        "RUNNING"
+    } else {
+        "STOPPED"
+    };
+    let status_color = if app.llama_state.is_running {
+        colors::SUCCESS
+    } else {
+        colors::ERROR
+    };
+
+    let browser_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(colors::BORDER))
+        .title(Span::styled(
+            format!(" Models [{}] ", status_str),
+            Style::default().fg(status_color),
+        ));
+
+    f.render_widget(Paragraph::new(lines).block(browser_block), browser);
+
+    let log_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(colors::BORDER))
+        .title(Span::styled(" Logs ", Style::default().fg(colors::CYAN)));
+
+    let mut log_lines = Vec::new();
+    if let Ok(locked_logs) = app.llama_state.logs.try_lock() {
+        for log in locked_logs.iter().rev().take(logs.height as usize) {
+            log_lines.push(Line::from(Span::raw(log.clone())));
+        }
+    }
+    // Reverse again so newest is at the bottom
+    log_lines.reverse();
+
+    f.render_widget(Paragraph::new(log_lines).block(log_block), logs);
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
