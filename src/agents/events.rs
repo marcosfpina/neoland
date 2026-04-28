@@ -58,6 +58,11 @@ pub enum AgentEvent {
         stage: &'static str,
         content: String,
     },
+    /// Fired when human intervention is received via Live-Steering.
+    SteeringReceived {
+        session_id: Uuid,
+        message: String,
+    },
 }
 
 impl AgentEvent {
@@ -73,7 +78,8 @@ impl AgentEvent {
             | Self::AdrCheckpoint { session_id, .. }
             | Self::PipelineDone { session_id, .. }
             | Self::PipelineError { session_id, .. }
-            | Self::StageOutput { session_id, .. } => *session_id,
+            | Self::StageOutput { session_id, .. }
+            | Self::SteeringReceived { session_id, .. } => *session_id,
         }
     }
 }

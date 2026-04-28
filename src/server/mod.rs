@@ -945,6 +945,42 @@ async fn submit_agent_task(
     }
 }
 
+#[derive(Deserialize)]
+struct AgentSteerBody {
+    message: String,
+}
+
+/// POST /v1/agents/session/:id/steer — send human intervention message to active task
+async fn steer_agent_task(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<uuid::Uuid>,
+    Json(body): Json<AgentSteerBody>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    match orchestrator.steer_task(id, body.message).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"status": "Steering message delivered"})),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, session_id = %id, "Failed to deliver steering message");
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": e.to_string()})))
+                .into_response()
+        },
+    }
+}
+
 /// GET /v1/agents/session/:id — retrieve session state.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
 async fn get_agent_session(
@@ -1299,6 +1335,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         .route("/v1/chat/completions", post(rest_chat_handler))
         .route("/v1/agents/task", post(submit_agent_task))
         .route("/v1/agents/session/:id", get(get_agent_session))
+        .route("/v1/agents/session/:id/steer", post(steer_agent_task))
         .route("/v1/agents/events", get(agent_events_handler))
         .route("/v1/agents/events/:session", get(agent_events_session_handler))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))

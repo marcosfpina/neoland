@@ -4,6 +4,7 @@ pub enum Action {
     Quit,
     Send(String),       // legacy LLM chat path (kept for fallback)
     SubmitTask(String), // agent workstation: POST /v1/agents/task
+    SteerTask(String),  // agent workstation: POST /v1/agents/session/:id/steer
     TogglePipeline,     // ^p
     OpenMatrix,         // ^m
     CancelTask,         // ^x

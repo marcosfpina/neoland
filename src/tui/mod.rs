@@ -36,6 +36,7 @@ enum AgentStreamEvent {
     PipelineDone { latency_ms: u64 },
     PipelineError { error: String },
     FinalResult { rationale: String, adr_title: String, adr_status: String },
+    SteeringReceived { message: String },
 }
 
 // ── Legacy LLM channel events (kept for fallback) ─────────────────────
@@ -134,6 +135,9 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                         }
                         app.auto_scroll = true;
                     }
+                    AgentStreamEvent::SteeringReceived { message } => {
+                        app.output_text = format!("{}\n\n[STEERING]: {}", app.output_text, message);
+                    }
                 }
             }
 
@@ -193,6 +197,17 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                 let session = app.active_session;
                                 tokio::spawn(async move {
                                     run_agent_task(task, session, srv, key, tx).await;
+                                });
+                            }
+
+                            Action::SteerTask(msg) => {
+                                let srv = app.server_url.clone();
+                                let key = api_key.clone();
+                                let session = app.active_session;
+                                tokio::spawn(async move {
+                                    if let Err(e) = post_agent_steer(&srv, &key, session, &msg).await {
+                                        eprintln!("Failed to steer task: {}", e);
+                                    }
                                 });
                             }
 
@@ -316,11 +331,15 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         },
 
         // ── Submit task ───────────────────────────────────────────────
-        (KeyCode::Enter, _) if !app.input_buffer.is_empty() && app.active_task_id.is_none() => {
+        (KeyCode::Enter, _) if !app.input_buffer.is_empty() => {
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
             app.history_commit(msg.clone());
-            return Action::SubmitTask(msg);
+            if app.active_task_id.is_none() {
+                return Action::SubmitTask(msg);
+            } else {
+                return Action::SteerTask(msg);
+            }
         },
 
         // ── Agent keybindings ─────────────────────────────────────────
@@ -462,6 +481,33 @@ async fn run_agent_task(
     }
 }
 
+async fn post_agent_steer(
+    server_url: &str,
+    api_key: &str,
+    session_id: uuid::Uuid,
+    message: &str,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let url =
+        format!("{}/v1/agents/session/{}/steer", server_url.trim_end_matches('/'), session_id);
+
+    let res = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "message": message,
+        }))
+        .send()
+        .await?;
+
+    if !res.status().is_success() {
+        let err = res.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("Steer error: {}", err));
+    }
+
+    Ok(())
+}
+
 async fn post_agent_task(
     server_url: &str,
     api_key: &str,
@@ -550,7 +596,10 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
             latency_ms: val["latency_ms"].as_u64().unwrap_or(0),
         }),
         "pipeline_error" => Some(AgentStreamEvent::PipelineError {
-            error: val["error"].as_str().unwrap_or("pipeline error").to_string(),
+            error: val["error"].as_str().unwrap_or("Unknown error").to_string(),
+        }),
+        "steering_received" => Some(AgentStreamEvent::SteeringReceived {
+            message: val["message"].as_str().unwrap_or("").to_string(),
         }),
         _ => None,
     }
