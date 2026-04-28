@@ -1,7 +1,14 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use super::llama_manager::LlamaManagerState;
 use super::presets::QueryConfig;
+
+#[derive(Clone, PartialEq)]
+pub enum AppMode {
+    Workstation,
+    LlamaManager,
+}
 
 // ── Agent workstation types ───────────────────────────────────────────────────
 
@@ -99,6 +106,8 @@ pub struct AppState {
     pub active_session: Uuid,
     pub input_history: Vec<String>,
     pub history_idx: Option<usize>,
+    pub mode: AppMode,
+    pub llama_state: LlamaManagerState,
 }
 
 #[derive(Clone)]
@@ -146,6 +155,8 @@ impl AppState {
             active_session: Uuid::new_v4(),
             input_history: Vec::new(),
             history_idx: None,
+            mode: AppMode::Workstation,
+            llama_state: LlamaManagerState::new(),
         }
     }
 
