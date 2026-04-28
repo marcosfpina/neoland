@@ -34,6 +34,8 @@ pub struct AgentOrchestrator {
     event_bus: Option<tokio::sync::broadcast::Sender<AgentEvent>>,
     mcp: Option<Arc<McpRegistry>>,
     matrix: Option<Arc<MatrixClient>>,
+    steering_channels:
+        tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::mpsc::Sender<String>>>,
 }
 
 impl AgentOrchestrator {
@@ -53,6 +55,7 @@ impl AgentOrchestrator {
             event_bus: None,
             mcp: None,
             matrix: None,
+            steering_channels: tokio::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -152,10 +155,11 @@ impl AgentOrchestrator {
             }
         }
 
-        let request = AgentTaskRequest {
+        let mut current_task = task.to_owned();
+        let mut request = AgentTaskRequest {
             task_id,
             session_id,
-            task: task.to_owned(),
+            task: current_task.clone(),
             requester_role: requester_role.to_owned(),
             rag_context,
             start_from,
@@ -167,9 +171,50 @@ impl AgentOrchestrator {
         });
         self.publish(AgentEvent::StageStarted { session_id, stage: "junior" });
 
-        let t0 = Instant::now();
-        let result = self.client.run_pipeline(&request).await;
-        let duration_secs = t0.elapsed().as_secs_f64();
+        let (steer_tx, mut steer_rx) = tokio::sync::mpsc::channel::<String>(10);
+        {
+            let mut channels = self.steering_channels.lock().await;
+            channels.insert(session_id, steer_tx);
+        }
+
+        let (result, duration_secs) = loop {
+            let t0 = Instant::now();
+            let req_clone = request.clone();
+
+            tokio::select! {
+                // 1. The Main Work (Pipeline progression)
+                res = self.client.run_pipeline(&req_clone) => {
+                    break (res, t0.elapsed().as_secs_f64());
+                },
+
+                // 2. The Agent's "Ear" (Human Intervention Channel for Live-Steering)
+                Some(user_message) = steer_rx.recv() => {
+                    self.publish(AgentEvent::SteeringReceived {
+                        session_id,
+                        message: user_message.clone(),
+                    });
+
+                    tracing::info!(session_id = %session_id, "Live steering message received: {}", user_message);
+
+                    // Replan: Update context with the new steering directive.
+                    // This interrupts the Python DSPy call and starts over from Junior with the new rule.
+                    current_task = format!("{}\n\n[STEERING UPDATE]: {}", current_task, user_message);
+                    request.task = current_task.clone();
+
+                    self.publish(AgentEvent::StageOutput {
+                        session_id,
+                        stage: "junior",
+                        content: format!("Received steering directive: {}. Replanning...", user_message),
+                    });
+                    self.publish(AgentEvent::StageStarted { session_id, stage: "junior" });
+                }
+            }
+        };
+
+        {
+            let mut channels = self.steering_channels.lock().await;
+            channels.remove(&session_id);
+        }
 
         // Record per-agent call outcomes
         metrics::record_agent_call("junior", result.is_ok());
@@ -365,6 +410,23 @@ impl AgentOrchestrator {
         }
 
         Ok(result)
+    }
+
+    #[instrument(skip(self), fields(session_id = %session_id))]
+    pub async fn steer_task(&self, session_id: Uuid, message: String) -> Result<()> {
+        let tx = {
+            let channels = self.steering_channels.lock().await;
+            channels.get(&session_id).cloned()
+        };
+
+        if let Some(tx) = tx {
+            tx.send(message)
+                .await
+                .map_err(|_| anyhow::anyhow!("Failed to send steering message"))?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No active task found for session {}", session_id))
+        }
     }
 
     #[instrument(skip(self), fields(session_id = %session_id))]
