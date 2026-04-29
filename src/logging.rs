@@ -2,8 +2,7 @@
 // Production-ready logging with JSON output, correlation IDs, and performance
 // tracking
 
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry::KeyValue;
+use opentelemetry::{trace::TracerProvider as _, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{runtime, trace as sdktrace, Resource};
 use tracing::Level;
