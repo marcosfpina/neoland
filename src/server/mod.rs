@@ -5,12 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tokio_stream::{wrappers::BroadcastStream, StreamExt as _};
-
 // Axum imports for REST
 use axum::{
     body::Body,
-    extract::{Json, Path, State},
+    extract::{Json, Path, Query, State},
     http::{HeaderMap, Request as HttpRequest, Response as HttpResponse, StatusCode},
     middleware::{self, Next},
     response::{
@@ -30,7 +28,10 @@ use llamachat::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{
+    wrappers::{BroadcastStream, ReceiverStream},
+    StreamExt as _,
+};
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 use tracing::Instrument; // Phase 4.2: For span instrumentation
 
@@ -950,7 +951,13 @@ struct AgentSteerBody {
     message: String,
 }
 
-/// POST /v1/agents/session/:id/steer — send human intervention message to active task
+#[derive(Deserialize)]
+struct ListSessionsQuery {
+    limit: Option<usize>,
+}
+
+/// POST /v1/agents/session/:id/steer — send human intervention message to
+/// active task
 async fn steer_agent_task(
     State(state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
@@ -1004,6 +1011,39 @@ async fn get_agent_session(
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session");
             (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Session not found"})))
+                .into_response()
+        },
+    }
+}
+
+/// GET /v1/agents/sessions — retrieve recent session state list.
+/// Requires ReadOnly+ auth (enforced by auth_middleware).
+async fn list_agent_sessions(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ListSessionsQuery>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    let limit = query.limit.unwrap_or(24).clamp(1, 100) as i64;
+
+    match orchestrator.list_sessions(limit).await {
+        Ok(sessions) => (StatusCode::OK, Json(serde_json::to_value(&sessions).unwrap_or_default()))
+            .into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to list recent sessions");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to list sessions"})),
+            )
                 .into_response()
         },
     }
@@ -1334,6 +1374,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
     let protected_routes = Router::new()
         .route("/v1/chat/completions", post(rest_chat_handler))
         .route("/v1/agents/task", post(submit_agent_task))
+        .route("/v1/agents/sessions", get(list_agent_sessions))
         .route("/v1/agents/session/:id", get(get_agent_session))
         .route("/v1/agents/session/:id/steer", post(steer_agent_task))
         .route("/v1/agents/events", get(agent_events_handler))

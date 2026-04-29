@@ -1,16 +1,16 @@
 //! Control plane orchestrator: wires together session, RAG, escalation, and
 //! pipeline client.
 
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use serde_json::json;
 use sqlx::PgPool;
-use uuid::Uuid;
-
 use tracing::instrument;
-
-use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::{
     agents::{
@@ -435,6 +435,14 @@ impl AgentOrchestrator {
         session_id: Uuid,
     ) -> Result<crate::agents::session::SessionState> {
         self.sessions.get_or_create(session_id).await
+    }
+
+    #[instrument(skip(self))]
+    pub async fn list_sessions(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<crate::agents::session::SessionState>> {
+        self.sessions.list_recent(limit).await
     }
 
     #[instrument(skip(self))]

@@ -14,7 +14,8 @@ use utoipa::{
 };
 use utoipa_swagger_ui::SwaggerUi;
 
-// ─── Schema definitions ───────────────────────────────────────────────────────
+// ─── Schema definitions
+// ───────────────────────────────────────────────────────
 
 /// Incoming task for the multi-agent ADR pipeline.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -99,6 +100,12 @@ pub struct SessionState {
     pub active: bool,
 }
 
+/// Recent session listing response.
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct SessionListResponse {
+    pub sessions: Vec<SessionState>,
+}
+
 /// Generic error response.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct ErrorResponse {
@@ -154,6 +161,25 @@ pub fn _doc_submit_agent_task() {}
 )]
 pub fn _doc_get_agent_session() {}
 
+/// GET /v1/agents/sessions
+///
+/// Retrieve recent sessions ordered by latest activity.
+#[utoipa::path(
+    get,
+    path = "/v1/agents/sessions",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(
+        ("limit" = Option<u32>, Query, description = "Maximum number of sessions to return")
+    ),
+    responses(
+        (status = 200, description = "Recent sessions", body = [SessionState]),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
+pub fn _doc_list_agent_sessions() {}
+
 /// GET /v1/agents/health
 ///
 /// Health check for the DSPy Python pipeline (no auth required).
@@ -195,7 +221,8 @@ pub fn _doc_health() {}
 )]
 pub fn _doc_metrics() {}
 
-// ─── Security modifier ────────────────────────────────────────────────────────
+// ─── Security modifier
+// ────────────────────────────────────────────────────────
 
 struct ApiKeyAuth;
 
@@ -210,7 +237,8 @@ impl Modify for ApiKeyAuth {
     }
 }
 
-// ─── OpenAPI document ─────────────────────────────────────────────────────────
+// ─── OpenAPI document
+// ─────────────────────────────────────────────────────────
 
 #[derive(OpenApi)]
 #[openapi(
@@ -223,6 +251,7 @@ impl Modify for ApiKeyAuth {
     ),
     paths(
         _doc_submit_agent_task,
+        _doc_list_agent_sessions,
         _doc_get_agent_session,
         _doc_agent_health,
         _doc_health,
@@ -236,6 +265,7 @@ impl Modify for ApiKeyAuth {
         ArchitectOutput,
         TechLeaderOutput,
         SessionState,
+        SessionListResponse,
         ErrorResponse,
         AgentHealthResponse,
     )),
