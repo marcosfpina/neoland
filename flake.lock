@@ -18,6 +18,32 @@
         "type": "github"
       }
     },
+    "mlOpsApi": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": [
+          "rust-overlay"
+        ]
+      },
+      "locked": {
+        "lastModified": 1777372533,
+        "narHash": "sha256-dWoLbFNZHgIBQvz9cFCHfXfRtnPnKDRp/r2VdXDMPJg=",
+        "ref": "refs/heads/main",
+        "rev": "fec34e123b400870bad3870a83e5b5f0ee7b7fca",
+        "revCount": 28,
+        "type": "git",
+        "url": "file:../ml-ops-api"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:../ml-ops-api"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1776877367,
@@ -53,8 +79,10 @@
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
+        "mlOpsApi": "mlOpsApi",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay"
+        "rust-overlay": "rust-overlay",
+        "securellmBridge": "securellmBridge"
       }
     },
     "rust-overlay": {
@@ -73,6 +101,31 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "type": "github"
+      }
+    },
+    "securellmBridge": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": [
+          "rust-overlay"
+        ]
+      },
+      "locked": {
+        "dirtyRev": "98775b8ed9d2831d8d5ef8e0132ceb6f4ab29a0f-dirty",
+        "dirtyShortRev": "98775b8-dirty",
+        "lastModified": 1774869141,
+        "narHash": "sha256-E/OOHFyuLbcLXaXLGPuL3zh74vaAej6OhkorGzGa3B0=",
+        "type": "git",
+        "url": "file:../securellm-bridge"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:../securellm-bridge"
       }
     },
     "systems": {
