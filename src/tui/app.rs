@@ -1,8 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::llama_manager::LlamaManagerState;
-use super::presets::QueryConfig;
+use super::{llama_manager::LlamaManagerState, presets::QueryConfig};
 
 #[derive(Clone, PartialEq)]
 pub enum AppMode {
@@ -10,7 +9,8 @@ pub enum AppMode {
     LlamaManager,
 }
 
-// ── Agent workstation types ───────────────────────────────────────────────────
+// ── Agent workstation types
+// ───────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
 pub enum TaskStatus {
