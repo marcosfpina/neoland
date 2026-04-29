@@ -1,13 +1,13 @@
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
 use super::{
-    app::{AppMode, AppState, ConnectionStatus, Panel, StageStatus, TaskStatus, ToolStatus},
+    app::{AppMode, AppState, ConnectionStatus, StageStatus, TaskStatus, ToolStatus},
     presets::QueryConfig,
 };
 
@@ -58,7 +58,7 @@ pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
     let bg_block = Block::default().style(Style::default().bg(colors::GLASS_BG));
     f.render_widget(bg_block, ui_area);
 
-    let [header, canvas, input_spacer, input] = Layout::vertical([
+    let [header, canvas, _input_spacer, input] = Layout::vertical([
         Constraint::Length(2), // Header top
         Constraint::Min(0),    // Main Timeline
         Constraint::Length(1), // Spacer invisível
@@ -156,7 +156,10 @@ fn render_canvas(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                 ),
             ]));
 
-            if app.active_task_id == Some(task.id) {
+            let is_active = app.active_task_id == Some(task.id);
+            let is_last = Some(task.id) == app.tasks.last().map(|t| t.id);
+
+            if is_active || is_last {
                 // Árvore de Pipeline High-Fidelity
                 for stage in &app.pipeline_stages {
                     let (s_icon, s_color) = match stage.status {
