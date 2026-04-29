@@ -335,7 +335,10 @@ pub async fn collect_doctor_report(
         ProbeResult::Ok { url, status } => {
             checks.push(CheckResult::ok(
                 "LLM Gateway",
-                format!("SecureLLM API reachable at {} via {} (status {})", ml_api_url, url, status),
+                format!(
+                    "SecureLLM API reachable at {} via {} (status {})",
+                    ml_api_url, url, status
+                ),
             ));
         },
         ProbeResult::Status { url, status } => {
@@ -361,7 +364,10 @@ pub async fn collect_doctor_report(
             ProbeResult::Ok { url, status } => {
                 checks.push(CheckResult::ok(
                     "Inference Bridge",
-                    format!("ml-ops-api reachable at {} via {} (status {})", ml_ops_url, url, status),
+                    format!(
+                        "ml-ops-api reachable at {} via {} (status {})",
+                        ml_ops_url, url, status
+                    ),
                 ));
             },
             ProbeResult::Status { url, status } => {
@@ -388,7 +394,10 @@ pub async fn collect_doctor_report(
             ProbeResult::Ok { url, status } => {
                 checks.push(CheckResult::ok(
                     "llama.cpp",
-                    format!("llama.cpp reachable at {} via {} (status {})", llamacpp_url, url, status),
+                    format!(
+                        "llama.cpp reachable at {} via {} (status {})",
+                        llamacpp_url, url, status
+                    ),
                 ));
             },
             ProbeResult::Status { url, status } => {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use tokio::process::Child;
-use tokio::sync::Mutex;
+
+use tokio::{process::Child, sync::Mutex};
 
 #[derive(Clone)]
 pub struct LlamaFlags {

@@ -1,4 +1,5 @@
 use std::path::Path;
+
 use tokio::fs;
 
 pub async fn scan_models() -> Vec<String> {
@@ -33,11 +34,13 @@ pub async fn scan_models() -> Vec<String> {
     models
 }
 
-use std::process::Stdio;
-use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
-use tokio::sync::Mutex;
+use std::{process::Stdio, sync::Arc};
+
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::Mutex,
+};
 
 pub async fn run_llama_server(
     model_name: String,

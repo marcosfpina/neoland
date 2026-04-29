@@ -195,11 +195,7 @@ mod tests {
 
     #[test]
     fn defaults_to_server_when_only_global_flags_are_provided() {
-        let args = vec![
-            "neoland".to_string(),
-            "--log-level".to_string(),
-            "debug".to_string(),
-        ];
+        let args = vec!["neoland".to_string(), "--log-level".to_string(), "debug".to_string()];
         assert!(should_default_to_server(&args));
 
         let mut with_default = args.clone();
