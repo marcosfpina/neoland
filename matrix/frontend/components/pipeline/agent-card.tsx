@@ -36,6 +36,8 @@ function stateClassName(state: StageCardState) {
   switch (state) {
     case "complete":
       return "border-primary/20 bg-primary/10 text-primary"
+    case "running":
+      return "border-primary/20 bg-primary/10 text-primary"
     case "queued":
       return "border-amber-500/20 bg-amber-500/10 text-amber-300"
     case "skipped":
@@ -192,6 +194,7 @@ export function AgentCard({
   senior,
   architect,
   techLeader,
+  liveContent,
   compact = false,
 }: {
   stage: AgentStage
@@ -200,6 +203,7 @@ export function AgentCard({
   senior?: SeniorOutput
   architect?: ArchitectOutput | null
   techLeader?: TechLeaderOutput
+  liveContent?: string
   compact?: boolean
 }) {
   const Icon = stageIcon(stage)
@@ -207,8 +211,10 @@ export function AgentCard({
 
   let body = (
     <div className="space-y-2 rounded-2xl border border-dashed border-border/70 bg-background/30 p-4 text-sm leading-6 text-muted-foreground">
-      {state === "queued"
-        ? "The task is running on the control plane. This surface waits for the final pipeline payload before rendering stage detail."
+      {state === "running"
+        ? liveContent || "This stage is running and streaming live control-plane updates."
+        : state === "queued"
+          ? "This stage is queued behind the active pipeline relay."
         : state === "skipped"
           ? "This stage was intentionally skipped by the backend decision flow."
           : "No execution data is loaded yet."}
