@@ -29,7 +29,7 @@ pub enum Commands {
     /// Inicia o cliente TUI (Terminal User Interface)
     Client {
         /// URL do servidor gRPC
-        #[arg(long, default_value = "http://[::1]:50051")]
+        #[arg(long, default_value = "http://localhost:3001")]
         server_url: String,
 
         /// URL do endpoint OpenAI-compatible principal (SecureLLM Bridge API)
@@ -44,7 +44,7 @@ pub enum Commands {
         rest_endpoint: String,
 
         /// Endpoint gRPC para testes
-        #[arg(long, default_value = "http://[::1]:50051")]
+        #[arg(long, default_value = "http://localhost:3001")]
         grpc_endpoint: String,
 
         /// Renderiza o relatório em JSON para automação
