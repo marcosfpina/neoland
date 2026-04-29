@@ -1,49 +1,107 @@
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
     Frame,
 };
 
-use super::app::{AppState, ConnectionStatus, StageStatus, TaskStatus, ToolStatus};
+use super::app::{AppState, AppMode, ConnectionStatus, Panel, StageStatus, TaskStatus, ToolStatus};
 use super::presets::QueryConfig;
-
-// ── Palette — Tokyo Night Storm + Hyprland accent ─────────────────────────────
 
 pub mod colors {
     use ratatui::style::Color;
-    pub const FG: Color = Color::Rgb(192, 202, 245); // #c0caf5  foreground
-    pub const FG_DIM: Color = Color::Rgb(169, 177, 214); // #a9b1d6  dim foreground
-    pub const PRIMARY: Color = Color::Rgb(122, 162, 247); // #7aa2f7  blue  (active border)
-    pub const CYAN: Color = Color::Rgb(125, 207, 255); // #7dcfff  tools label
-    pub const ACCENT: Color = Color::Rgb(187, 154, 247); // #bb9af7  purple (pipeline)
-    pub const SUCCESS: Color = Color::Rgb(158, 206, 106); // #9ece6a  green  (done, connected)
-    pub const WARNING: Color = Color::Rgb(255, 158, 100); // #ff9e64  orange (deferred)
-    pub const ERROR: Color = Color::Rgb(247, 118, 142); // #f7768e  red    (failed, offline)
-    pub const MUTED: Color = Color::Rgb(86, 95, 137); // #565f89  muted text
-    pub const BORDER: Color = Color::Rgb(65, 72, 104); // #414868  inactive border
-    pub const CURSOR_BG: Color = Color::Rgb(26, 27, 38); // #1a1b26  cursor bg
+
+    pub const FG: Color = Color::Rgb(192, 202, 245);
+    pub const FG_DIM: Color = Color::Rgb(169, 177, 214);
+    pub const PRIMARY: Color = Color::Rgb(122, 162, 247);
+    pub const CYAN: Color = Color::Rgb(125, 207, 255);
+    pub const ACCENT: Color = Color::Rgb(187, 154, 247);
+    pub const SUCCESS: Color = Color::Rgb(158, 206, 106);
+    pub const WARNING: Color = Color::Rgb(255, 158, 100);
+    pub const ERROR: Color = Color::Rgb(247, 118, 142);
+    pub const MUTED: Color = Color::Rgb(86, 95, 137);
+    pub const BORDER: Color = Color::Rgb(65, 72, 104);
+    pub const CURSOR_BG: Color = Color::Rgb(26, 27, 38);
 }
 
-const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-// ── Top-level render ──────────────────────────────────────────────────────────
+const SPINNER: &[&str] = &["o", "O", "0", "O"];
 
 pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
-    if app.mode == super::app::AppMode::LlamaManager {
+    if app.mode == AppMode::LlamaManager {
         render_llama_manager(f, app);
         return;
     }
 
     let area = f.area();
-    let [main, input] = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).areas(area);
+    let [header, body, input] =
+        Layout::vertical([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
+            .areas(area);
 
-    render_main(f, main, app);
+    render_header(f, header, app);
+    render_workstation(f, body, app);
     render_input(f, input, app);
 }
 
-// ── Llama Manager ─────────────────────────────────────────────────────────────
+fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let (dot, dot_color, status) = match app.connection_status {
+        ConnectionStatus::Connected => ("●", colors::SUCCESS, "connected"),
+        ConnectionStatus::Degraded => ("◐", colors::WARNING, "degraded"),
+        ConnectionStatus::Offline => ("○", colors::ERROR, "offline"),
+        ConnectionStatus::Unknown => ("◌", colors::MUTED, "unknown"),
+    };
+
+    let active_task = app
+        .active_task_id
+        .map(|id| id.to_string()[..6].to_string())
+        .unwrap_or_else(|| "idle".to_string());
+    let backend = app.active_backend.as_deref().unwrap_or("agent-pipeline");
+
+    let header = Line::from(vec![
+        Span::styled(" neoland ", Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled("  ", Style::default()),
+        Span::styled(dot, Style::default().fg(dot_color).add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}  ", status), Style::default().fg(colors::FG_DIM)),
+        Span::styled("backend ", Style::default().fg(colors::MUTED)),
+        Span::styled(format!("{}  ", backend), Style::default().fg(colors::FG)),
+        Span::styled("task ", Style::default().fg(colors::MUTED)),
+        Span::styled(format!("{}  ", active_task), Style::default().fg(colors::ACCENT)),
+        Span::styled("latency ", Style::default().fg(colors::MUTED)),
+        Span::styled(format!("{}ms  ", app.last_latency_ms), Style::default().fg(colors::FG)),
+        Span::styled("tokens ", Style::default().fg(colors::MUTED)),
+        Span::styled(app.session_tokens.to_string(), Style::default().fg(colors::FG)),
+    ]);
+
+    f.render_widget(
+        Paragraph::new(header).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(colors::BORDER)),
+        ),
+        area,
+    );
+}
+
+fn render_workstation(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
+    let [left, center, right] = Layout::horizontal([
+        Constraint::Length(32),
+        Constraint::Min(44),
+        Constraint::Min(40),
+    ])
+    .areas(area);
+
+    let [tasks_area, obs_area] =
+        Layout::vertical([Constraint::Percentage(58), Constraint::Percentage(42)]).areas(left);
+    let [pipeline_area, tools_area] =
+        Layout::vertical([Constraint::Percentage(74), Constraint::Percentage(26)]).areas(center);
+
+    render_tasks_panel(f, tasks_area, app);
+    render_observability_panel(f, obs_area, app);
+    render_pipeline_panel(f, pipeline_area, app);
+    render_tools_panel(f, tools_area, app);
+    render_output_panel(f, right, app);
+}
 
 fn render_llama_manager(f: &mut Frame<'_>, app: &mut AppState) {
     let area = f.area();
@@ -74,11 +132,7 @@ fn render_llama_manager(f: &mut Frame<'_>, app: &mut AppState) {
         lines.push(Line::from(Span::styled(format!("{}{}", prefix, model), style)));
     }
 
-    let status_str = if app.llama_state.is_running {
-        "RUNNING"
-    } else {
-        "STOPPED"
-    };
+    let status_str = if app.llama_state.is_running { "RUNNING" } else { "STOPPED" };
     let status_color = if app.llama_state.is_running {
         colors::SUCCESS
     } else {
@@ -108,68 +162,320 @@ fn render_llama_manager(f: &mut Frame<'_>, app: &mut AppState) {
             log_lines.push(Line::from(Span::raw(log.clone())));
         }
     }
-    // Reverse again so newest is at the bottom
     log_lines.reverse();
 
     f.render_widget(Paragraph::new(log_lines).block(log_block), logs);
 }
 
-// ── Main panel ────────────────────────────────────────────────────────────────
+fn render_tasks_panel(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
+    let (queued, running, done, failed) = app.task_counts();
+    let mut lines = Vec::new();
 
-fn render_main(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppState) {
+    lines.push(Line::from(vec![
+        Span::styled("q ", Style::default().fg(colors::MUTED)),
+        Span::styled(queued.to_string(), Style::default().fg(colors::FG).add_modifier(Modifier::BOLD)),
+        Span::styled("  r ", Style::default().fg(colors::MUTED)),
+        Span::styled(running.to_string(), Style::default().fg(colors::ACCENT).add_modifier(Modifier::BOLD)),
+        Span::styled("  ok ", Style::default().fg(colors::MUTED)),
+        Span::styled(done.to_string(), Style::default().fg(colors::SUCCESS).add_modifier(Modifier::BOLD)),
+        Span::styled("  fail ", Style::default().fg(colors::MUTED)),
+        Span::styled(failed.to_string(), Style::default().fg(colors::ERROR).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(""));
+
+    if app.tasks.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No tasks yet.\nDescribe a task below and press Enter.",
+            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for task in app.tasks.iter().rev().take(area.height.saturating_sub(4) as usize) {
+            let (icon, color, status) = match task.status {
+                TaskStatus::Queued => ("○", colors::MUTED, "queued"),
+                TaskStatus::Running => (spin, colors::ACCENT, "running"),
+                TaskStatus::Done => ("✓", colors::SUCCESS, "done"),
+                TaskStatus::Failed => ("✗", colors::ERROR, "failed"),
+            };
+            let desc: String = task.description.chars().take(24).collect();
+            let active = app.active_task_id == Some(task.id);
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", icon),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("[{}] ", &task.id.to_string()[..6]),
+                    Style::default().fg(if active { colors::PRIMARY } else { colors::FG_DIM }),
+                ),
+                Span::styled(desc, Style::default().fg(colors::FG)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(status, Style::default().fg(color)),
+                Span::styled("  s:", Style::default().fg(colors::BORDER)),
+                Span::styled(
+                    task.session_id.to_string()[..6].to_string(),
+                    Style::default().fg(colors::FG_DIM),
+                ),
+            ]));
+            lines.push(Line::from(""));
+        }
+    }
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(" Tasks ", app.focused_panel == Panel::Tasks, colors::PRIMARY))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn render_observability_panel(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let (dot, dot_color, status) = match app.connection_status {
+        ConnectionStatus::Connected => ("●", colors::SUCCESS, "connected"),
+        ConnectionStatus::Degraded => ("◐", colors::WARNING, "degraded"),
+        ConnectionStatus::Offline => ("○", colors::ERROR, "offline"),
+        ConnectionStatus::Unknown => ("◌", colors::MUTED, "unknown"),
+    };
+
+    let backend = app.active_backend.as_deref().unwrap_or("agent-pipeline");
+    let active_task = app
+        .active_task_id
+        .map(|id| id.to_string()[..6].to_string())
+        .unwrap_or_else(|| "idle".to_string());
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(dot, Style::default().fg(dot_color).add_modifier(Modifier::BOLD)),
+            Span::styled(format!(" {}", status), Style::default().fg(colors::FG)),
+        ]),
+        Line::from(vec![
+            Span::styled("backend ", Style::default().fg(colors::MUTED)),
+            Span::styled(backend, Style::default().fg(colors::FG)),
+        ]),
+        Line::from(vec![
+            Span::styled("session ", Style::default().fg(colors::MUTED)),
+            Span::styled(
+                app.active_session.to_string()[..8].to_string(),
+                Style::default().fg(colors::FG_DIM),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("active  ", Style::default().fg(colors::MUTED)),
+            Span::styled(active_task, Style::default().fg(colors::ACCENT)),
+        ]),
+        Line::from(vec![
+            Span::styled("latency ", Style::default().fg(colors::MUTED)),
+            Span::styled(format!("{}ms", app.last_latency_ms), Style::default().fg(colors::FG)),
+        ]),
+        Line::from(vec![
+            Span::styled("tokens  ", Style::default().fg(colors::MUTED)),
+            Span::styled(app.session_tokens.to_string(), Style::default().fg(colors::FG)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Tab cycles panels. Enter steers active work. Ctrl+Enter queues follow-up work.",
+            Style::default().fg(colors::FG_DIM).add_modifier(Modifier::DIM),
+        )),
+    ];
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(
+                " Observability ",
+                app.focused_panel == Panel::Observability,
+                colors::CYAN,
+            ))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn render_pipeline_panel(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
+    let mut lines = Vec::new();
+
+    if app.pipeline_stages.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No active pipeline.\nSubmit a task to populate stage progress here.",
+            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for stage in &app.pipeline_stages {
+            let (icon, icon_color): (&str, ratatui::style::Color) = match &stage.status {
+                StageStatus::Done { .. } => ("✓", colors::SUCCESS),
+                StageStatus::Running => (spin, colors::ACCENT),
+                StageStatus::Skipped => ("○", colors::MUTED),
+                StageStatus::Failed => ("✗", colors::ERROR),
+                StageStatus::Pending => ("·", colors::BORDER),
+            };
+
+            let confidence = stage
+                .confidence
+                .map(|value| format!("{:.2}", value))
+                .unwrap_or_else(|| "--".to_string());
+
+            let timing = match &stage.status {
+                StageStatus::Done { latency_ms } => format!("{}ms", latency_ms),
+                StageStatus::Running => "running".to_string(),
+                StageStatus::Skipped => "skipped".to_string(),
+                StageStatus::Failed => "failed".to_string(),
+                StageStatus::Pending => "pending".to_string(),
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", icon),
+                    Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!("{:<14}", stage.name), Style::default().fg(colors::FG)),
+                Span::styled(format!("{:<6}", confidence), Style::default().fg(colors::FG_DIM)),
+                Span::styled(timing, Style::default().fg(colors::MUTED)),
+            ]));
+
+            if let Some(output) = &stage.output {
+                for text in output.lines().take(3) {
+                    let truncated: String =
+                        text.chars().take(area.width.saturating_sub(8) as usize).collect();
+                    lines.push(Line::from(vec![
+                        Span::styled("  | ", Style::default().fg(colors::BORDER)),
+                        Span::styled(
+                            truncated,
+                            Style::default().fg(colors::MUTED).add_modifier(Modifier::DIM),
+                        ),
+                    ]));
+                }
+            }
+
+            lines.push(Line::from(""));
+        }
+    }
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(
+                " Pipeline Live View ",
+                app.focused_panel == Panel::Pipeline,
+                colors::ACCENT,
+            ))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn render_tools_panel(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
+    let mut lines = Vec::new();
+
+    if app.tool_calls.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No tool calls yet.",
+            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for tool in app
+            .tool_calls
+            .iter()
+            .rev()
+            .take(area.height.saturating_sub(2) as usize)
+        {
+            let (icon, icon_color): (&str, ratatui::style::Color) = match &tool.status {
+                ToolStatus::Done { .. } => ("✓", colors::SUCCESS),
+                ToolStatus::Running => (spin, colors::ACCENT),
+                ToolStatus::Failed => ("✗", colors::ERROR),
+            };
+            let duration = match &tool.status {
+                ToolStatus::Done { duration_ms } => format!("{}ms", duration_ms),
+                ToolStatus::Running => "running".to_string(),
+                ToolStatus::Failed => "failed".to_string(),
+            };
+            let args: String = tool.args_summary.chars().take(28).collect();
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", icon),
+                    Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!("{:<16}", tool.name), Style::default().fg(colors::FG)),
+                Span::styled(duration, Style::default().fg(colors::FG_DIM)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                format!("  {}", args),
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::DIM),
+            )));
+        }
+    }
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(" Tool Telemetry ", false, colors::CYAN))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn render_output_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
     let inner_w = area.width.saturating_sub(2);
     let inner_h = area.height.saturating_sub(2);
+    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
+    let mut lines = Vec::new();
 
-    let lines = build_main_lines(app);
+    if let (Some(status), Some(title)) = (&app.adr_status, &app.adr_title) {
+        let color = match status.as_str() {
+            "approve" | "accepted" => colors::SUCCESS,
+            "reject" | "rejected" => colors::ERROR,
+            "escalate" => colors::ACCENT,
+            _ => colors::WARNING,
+        };
+        lines.push(Line::from(vec![
+            Span::styled("decision ", Style::default().fg(colors::MUTED)),
+            Span::styled(status.clone(), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(Span::styled(
+            title.clone(),
+            Style::default().fg(colors::FG).add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+    }
+
+    if app.output_text.is_empty() && app.active_task_id.is_some() {
+        lines.push(Line::from(vec![
+            Span::styled(spin, Style::default().fg(colors::ACCENT)),
+            Span::styled(
+                " waiting for final rationale...",
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+            ),
+        ]));
+    } else if app.output_text.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "Output will show final rationale, ADR state, and steering feedback.",
+            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for text_line in app.output_text.lines() {
+            lines.push(Line::from(Span::styled(
+                text_line.to_string(),
+                Style::default().fg(colors::FG_DIM),
+            )));
+        }
+    }
+
     let total = count_visual_lines(&lines, inner_w);
-
     if app.auto_scroll {
         app.scroll_offset = total.saturating_sub(inner_h as usize) as u16;
     }
     app.scroll_offset = app.scroll_offset.min(total.saturating_sub(inner_h as usize) as u16);
 
-    // Status bar — waybar pill style
-    let (dot, dot_color) = match app.connection_status {
-        ConnectionStatus::Connected => ("●", colors::SUCCESS),
-        ConnectionStatus::Degraded => ("◐", colors::WARNING),
-        ConnectionStatus::Offline => ("○", colors::ERROR),
-        ConnectionStatus::Unknown => ("◌", colors::MUTED),
-    };
-
-    let mut status: Vec<Span> = vec![Span::styled(
-        format!(" {} ", dot),
-        Style::default().fg(dot_color).add_modifier(Modifier::BOLD),
-    )];
-    if app.last_latency_ms > 0 {
-        status.push(Span::styled(" · ", Style::default().fg(colors::BORDER)));
-        status.push(Span::styled(
-            format!("{}ms ", app.last_latency_ms),
-            Style::default().fg(colors::MUTED),
-        ));
-    }
-
-    let scroll_hint = if app.auto_scroll {
-        Line::from(Span::styled(" ↓ end ", Style::default().fg(colors::BORDER)))
+    let hint = if app.auto_scroll {
+        " auto "
     } else {
-        Line::from(vec![
-            Span::styled(" ↑↓ ", Style::default().fg(colors::PRIMARY)),
-            Span::styled("scroll  g:end ", Style::default().fg(colors::MUTED)),
-        ])
+        " shift+up/down scroll "
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(colors::BORDER))
-        .title(
-            Line::from(Span::styled(
-                " ◆ neoland ",
-                Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD),
-            ))
-            .left_aligned(),
-        )
-        .title(Line::from(status).right_aligned())
-        .title_bottom(scroll_hint.right_aligned());
+    let block = panel_block(" Output ", app.focused_panel == Panel::Output, colors::PRIMARY)
+        .title_bottom(Line::from(Span::styled(hint, Style::default().fg(colors::MUTED))).right_aligned());
 
     f.render_widget(
         Paragraph::new(lines)
@@ -180,243 +486,15 @@ fn render_main(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &mut AppStat
     );
 }
 
-fn build_main_lines(app: &AppState) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
-
-    // ── TASKS ─────────────────────────────────────────────────────────
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled("TASKS", Style::default().fg(colors::MUTED).add_modifier(Modifier::BOLD)),
-    ]));
-    lines.push(Line::from(""));
-
-    if app.tasks.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "  no tasks yet — type a description and press Enter",
-            Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-        )));
-    } else {
-        for task in &app.tasks {
-            let (bullet, bullet_color) = match task.status {
-                TaskStatus::Running => (spin, colors::ACCENT),
-                TaskStatus::Done => ("✓", colors::SUCCESS),
-                TaskStatus::Failed => ("✗", colors::ERROR),
-                TaskStatus::Queued => ("○", colors::MUTED),
-            };
-            let status_label = match task.status {
-                TaskStatus::Running => "running",
-                TaskStatus::Done => "done   ",
-                TaskStatus::Failed => "failed ",
-                TaskStatus::Queued => "queued ",
-            };
-            let id_short = task.id.to_string()[..6].to_string();
-            let desc = task.description.chars().take(45).collect::<String>();
-            let padding = " ".repeat(47usize.saturating_sub(desc.chars().count()));
-
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    bullet.to_string(),
-                    Style::default().fg(bullet_color).add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(" "),
-                Span::styled(format!("[{}]", id_short), Style::default().fg(colors::MUTED)),
-                Span::raw(" "),
-                Span::styled(desc, Style::default().fg(colors::FG)),
-                Span::raw(padding),
-                Span::styled(status_label.to_string(), Style::default().fg(bullet_color)),
-            ]));
-        }
-    }
-
-    // ── Divider ───────────────────────────────────────────────────────
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────────────────────────────",
-        Style::default().fg(colors::BORDER),
-    )));
-    lines.push(Line::from(""));
-
-    // ── PIPELINE ──────────────────────────────────────────────────────
-    if app.pipeline_visible || !app.pipeline_stages.is_empty() {
-        let active_id = app
-            .active_task_id
-            .map(|id| format!("  [{}]", &id.to_string()[..6]))
-            .unwrap_or_default();
-
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                "▸ pipeline",
-                Style::default().fg(colors::ACCENT).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(active_id, Style::default().fg(colors::MUTED)),
-        ]));
-        lines.push(Line::from(""));
-
-        if app.pipeline_stages.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "    no pipeline running",
-                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-            )));
-        } else {
-            for stage in &app.pipeline_stages {
-                let (icon, icon_color): (&str, ratatui::style::Color) = match &stage.status {
-                    StageStatus::Done { .. } => ("✓", colors::SUCCESS),
-                    StageStatus::Running => (spin, colors::ACCENT),
-                    StageStatus::Skipped => ("○", colors::MUTED),
-                    StageStatus::Failed => ("✗", colors::ERROR),
-                    StageStatus::Pending => ("·", colors::BORDER),
-                };
-
-                let conf_str = stage
-                    .confidence
-                    .map(|c| format!("{:.2}", c))
-                    .unwrap_or_else(|| "    ".to_string());
-
-                let latency_str = match &stage.status {
-                    StageStatus::Done { latency_ms } => format!("{}ms", latency_ms),
-                    StageStatus::Running => "running...".to_string(),
-                    StageStatus::Skipped => "skipped".to_string(),
-                    StageStatus::Failed => "failed".to_string(),
-                    StageStatus::Pending => String::new(),
-                };
-
-                lines.push(Line::from(vec![
-                    Span::raw("    "),
-                    Span::styled(
-                        icon.to_string(),
-                        Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("  "),
-                    Span::styled(format!("{:<14}", stage.name), Style::default().fg(colors::FG)),
-                    Span::styled(format!("{:<8}", conf_str), Style::default().fg(colors::MUTED)),
-                    Span::styled(latency_str, Style::default().fg(colors::MUTED)),
-                ]));
-
-                // Transparent thinking — show first 2 lines of agent output
-                if let Some(output) = &stage.output {
-                    for text in output.lines().take(2) {
-                        let truncated: String = text.chars().take(72).collect();
-                        lines.push(Line::from(vec![
-                            Span::raw("      "),
-                            Span::styled("┊ ", Style::default().fg(colors::BORDER)),
-                            Span::styled(
-                                truncated,
-                                Style::default().fg(colors::MUTED).add_modifier(Modifier::DIM),
-                            ),
-                        ]));
-                    }
-                }
-            }
-        }
-        lines.push(Line::from(""));
-    }
-
-    // ── TOOLS ─────────────────────────────────────────────────────────
-    if !app.tool_calls.is_empty() {
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("▸ tools", Style::default().fg(colors::CYAN).add_modifier(Modifier::BOLD)),
-        ]));
-        lines.push(Line::from(""));
-
-        for tool in &app.tool_calls {
-            let (icon, icon_color): (&str, ratatui::style::Color) = match &tool.status {
-                ToolStatus::Done { .. } => ("✓", colors::SUCCESS),
-                ToolStatus::Running => (spin, colors::ACCENT),
-                ToolStatus::Failed => ("✗", colors::ERROR),
-            };
-            let duration_str = match &tool.status {
-                ToolStatus::Done { duration_ms } => format!("{}ms", duration_ms),
-                ToolStatus::Running => "running...".to_string(),
-                ToolStatus::Failed => "failed".to_string(),
-            };
-            let args = tool.args_summary.chars().take(22).collect::<String>();
-
-            lines.push(Line::from(vec![
-                Span::raw("    "),
-                Span::styled(
-                    icon.to_string(),
-                    Style::default().fg(icon_color).add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("  "),
-                Span::styled(format!("{:<18}", tool.name), Style::default().fg(colors::FG)),
-                Span::styled(format!("{:<24}", args), Style::default().fg(colors::MUTED)),
-                Span::styled(duration_str, Style::default().fg(colors::MUTED)),
-            ]));
-        }
-        lines.push(Line::from(""));
-    }
-
-    // ── OUTPUT ────────────────────────────────────────────────────────
-    {
-        let active_id = app
-            .active_task_id
-            .map(|id| format!("  [{}]", &id.to_string()[..6]))
-            .unwrap_or_default();
-
-        let adr_suffix = match (&app.adr_status, &app.adr_title) {
-            (Some(status), Some(title)) => {
-                let color = match status.as_str() {
-                    "accepted" => colors::SUCCESS,
-                    "rejected" => colors::ERROR,
-                    _ => colors::WARNING,
-                };
-                Some((format!("  {} — {}", status, title), color))
-            },
-            _ => None,
-        };
-
-        let mut header = vec![
-            Span::raw("  "),
-            Span::styled(
-                "▸ output",
-                Style::default().fg(colors::PRIMARY).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(active_id, Style::default().fg(colors::MUTED)),
-        ];
-        if let Some((label, color)) = adr_suffix {
-            header.push(Span::styled(label, Style::default().fg(color)));
-        }
-        lines.push(Line::from(header));
-        lines.push(Line::from(""));
-
-        if app.output_text.is_empty() && app.active_task_id.is_some() {
-            lines.push(Line::from(vec![
-                Span::raw("    "),
-                Span::styled(spin.to_string(), Style::default().fg(colors::ACCENT)),
-                Span::styled(
-                    " pipeline running...",
-                    Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-                ),
-            ]));
-        } else if app.output_text.is_empty() && app.tasks.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "    submit a task above to see the pipeline output here",
-                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
-            )));
-        } else {
-            for text_line in app.output_text.lines() {
-                lines.push(Line::from(Span::styled(
-                    format!("    {}", text_line),
-                    Style::default().fg(colors::FG_DIM),
-                )));
-            }
-        }
-    }
-
-    lines.push(Line::from(""));
-    lines
-}
-
-// ── Input bar ─────────────────────────────────────────────────────────────────
-
-fn render_input(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) {
+fn render_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     let preset = preset_name(&app.config);
     let busy = app.active_task_id.is_some();
+
+    let bottom_hint = if busy {
+        " enter steer  ctrl+enter queue  shift+enter newline  tab focus "
+    } else {
+        " enter task  ctrl+enter queue  shift+enter newline  tab focus "
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -433,26 +511,31 @@ fn render_input(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) 
             ))
             .left_aligned(),
         )
-        .title_bottom(
-            Line::from(Span::styled(
-                " ↵ task  ^p pipeline  ^m matrix  ^x cancel  ^c quit ",
-                Style::default().fg(colors::MUTED),
-            ))
-            .right_aligned(),
-        );
+        .title_bottom(Line::from(Span::styled(bottom_hint, Style::default().fg(colors::MUTED))).right_aligned());
 
-    f.render_widget(
-        Paragraph::new(build_input_line(&app.input_buffer, app.cursor_pos, busy)).block(block),
-        area,
-    );
+    f.render_widget(Paragraph::new(build_input_line(app)).block(block), area);
 }
 
-fn build_input_line(buf: &str, cursor: usize, busy: bool) -> Line<'static> {
-    if busy {
+fn build_input_line(app: &AppState) -> Line<'static> {
+    let buf = &app.input_buffer;
+    let cursor = app.cursor_pos;
+    let busy = app.active_task_id.is_some();
+
+    if buf.is_empty() && busy {
         return Line::from(vec![
             Span::raw(" "),
             Span::styled(
-                "pipeline running — ^x to cancel",
+                "steer the active run or press Ctrl+Enter to queue a new task",
+                Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
+            ),
+        ]);
+    }
+
+    if buf.is_empty() {
+        return Line::from(vec![
+            Span::raw(" "),
+            Span::styled(
+                "describe a task for the agent workstation",
                 Style::default().fg(colors::MUTED).add_modifier(Modifier::ITALIC),
             ),
         ]);
@@ -477,7 +560,18 @@ fn build_input_line(buf: &str, cursor: usize, busy: bool) -> Line<'static> {
     Line::from(vec![Span::raw(" "), Span::raw(before), cursor_span, Span::raw(after)])
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+fn panel_block<'a>(title: &'a str, focused: bool, accent: ratatui::style::Color) -> Block<'a> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(if focused { accent } else { colors::BORDER }))
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(if focused { accent } else { colors::FG_DIM })
+                .add_modifier(Modifier::BOLD),
+        ))
+}
 
 fn count_visual_lines(lines: &[Line<'_>], width: u16) -> usize {
     if width == 0 {
@@ -486,8 +580,8 @@ fn count_visual_lines(lines: &[Line<'_>], width: u16) -> usize {
     let w = width as usize;
     lines
         .iter()
-        .map(|l| {
-            let len: usize = l.spans.iter().map(|s| s.content.chars().count()).sum();
+        .map(|line| {
+            let len: usize = line.spans.iter().map(|span| span.content.chars().count()).sum();
             if len == 0 {
                 1
             } else {

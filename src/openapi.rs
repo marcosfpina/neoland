@@ -7,7 +7,7 @@
 //! Add new schemas to `NeolandApi::components` and handlers to the
 //! `#[openapi(paths(...))]` list when you add endpoints.
 
-use axum::{routing::get, Json, Router};
+use axum::Router;
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,
@@ -249,10 +249,6 @@ pub struct NeolandApi;
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-async fn openapi_json() -> Json<utoipa::openapi::OpenApi> {
-    Json(NeolandApi::openapi())
-}
-
 /// Returns axum Router with GET /openapi.json and GET /swagger-ui/* mounted.
 ///
 /// Generic over state so it can be merged into any typed Router without
@@ -261,9 +257,10 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", NeolandApi::openapi()))
-        .route("/openapi.json", get(openapi_json))
+    // `SwaggerUi::url("/openapi.json", ...)` already mounts the spec route.
+    // Adding an explicit `.route("/openapi.json", ...)` duplicates the GET
+    // handler and panics at router construction time in axum 0.7.
+    Router::new().merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", NeolandApi::openapi()))
 }
 
 #[cfg(test)]

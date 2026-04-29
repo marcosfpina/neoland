@@ -4,10 +4,13 @@ pub enum Action {
     Quit,
     Send(String),       // legacy LLM chat path (kept for fallback)
     SubmitTask(String), // agent workstation: POST /v1/agents/task
+    QueueTask(String),  // queue a follow-up task while another is running
     SteerTask(String),  // agent workstation: POST /v1/agents/session/:id/steer
     TogglePipeline,     // ^p
     OpenMatrix,         // ^m
     CancelTask,         // ^x
+    FocusNextPanel,     // tab
+    FocusPrevPanel,     // shift+tab
     ToggleLlamaManager, // ^l
     LlamaManagerRun,    // r or enter
     LlamaManagerStop,   // s or ctrl+c

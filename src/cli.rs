@@ -32,7 +32,7 @@ pub enum Commands {
         #[arg(long, default_value = "http://[::1]:50051")]
         server_url: String,
 
-        /// URL do endpoint OpenAI-compatible (ml-offload-api ou llama.cpp)
+        /// URL do endpoint OpenAI-compatible principal (SecureLLM Bridge API)
         #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
     },
@@ -69,7 +69,7 @@ pub enum Commands {
         #[arg(long, default_value = "http://localhost:3001")]
         server_url: String,
 
-        /// URL do endpoint ml-offload para verificar
+        /// URL do gateway LLM principal para verificar
         #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
 
@@ -81,7 +81,21 @@ pub enum Commands {
 
 impl Cli {
     pub fn parse_args() -> Self {
-        Self::parse()
+        let mut args: Vec<String> = std::env::args().collect();
+
+        if should_default_to_server(&args) {
+            args.insert(1, "server".to_string());
+        }
+
+        Self::parse_from(args)
+    }
+}
+
+fn should_default_to_server(args: &[String]) -> bool {
+    match args.get(1).map(String::as_str) {
+        None => true,
+        Some(arg) if arg.starts_with('-') => true,
+        _ => false,
     }
 }
 
@@ -171,5 +185,40 @@ mod tests {
             _ => panic!("expected client command"),
         }
         assert_eq!(cli.log_level, "trace");
+    }
+
+    #[test]
+    fn defaults_to_server_when_no_subcommand_is_provided() {
+        let args = vec!["neoland".to_string()];
+        assert!(should_default_to_server(&args));
+    }
+
+    #[test]
+    fn defaults_to_server_when_only_global_flags_are_provided() {
+        let args = vec![
+            "neoland".to_string(),
+            "--log-level".to_string(),
+            "debug".to_string(),
+        ];
+        assert!(should_default_to_server(&args));
+
+        let mut with_default = args.clone();
+        with_default.insert(1, "server".to_string());
+        let cli = Cli::try_parse_from(with_default).expect("server parses with global flags");
+
+        match cli.command {
+            Commands::Server { grpc_port, rest_port } => {
+                assert_eq!(grpc_port, 50051);
+                assert_eq!(rest_port, 3001);
+            },
+            _ => panic!("expected server command"),
+        }
+        assert_eq!(cli.log_level, "debug");
+    }
+
+    #[test]
+    fn does_not_default_when_subcommand_is_explicit() {
+        let args = vec!["neoland".to_string(), "doctor".to_string()];
+        assert!(!should_default_to_server(&args));
     }
 }

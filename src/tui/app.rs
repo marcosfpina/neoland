@@ -23,6 +23,7 @@ pub enum TaskStatus {
 #[derive(Clone)]
 pub struct Task {
     pub id: Uuid,
+    pub session_id: Uuid,
     pub description: String,
     pub status: TaskStatus,
     pub created_at: DateTime<Utc>,
@@ -62,6 +63,7 @@ pub struct ToolCall {
 #[derive(Clone, PartialEq)]
 pub enum Panel {
     Tasks,
+    Observability,
     Pipeline,
     Output,
 }
@@ -162,20 +164,23 @@ impl AppState {
 
     // ── Agent workstation methods ─────────────────────────────────────
 
-    pub fn enqueue_task(&mut self, description: String) -> Uuid {
+    pub fn enqueue_task(&mut self, description: String) -> (Uuid, Uuid) {
         let id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
         self.tasks.push(Task {
             id,
+            session_id,
             description,
             status: TaskStatus::Queued,
             created_at: Utc::now(),
         });
-        id
+        (id, session_id)
     }
 
     pub fn start_task(&mut self, id: Uuid) {
         if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
             t.status = TaskStatus::Running;
+            self.active_session = t.session_id;
         }
         self.active_task_id = Some(id);
         self.pipeline_stages = vec![
@@ -284,6 +289,49 @@ impl AppState {
         if self.active_task_id == Some(id) {
             self.active_task_id = None;
         }
+    }
+
+    pub fn focus_next_panel(&mut self) {
+        self.focused_panel = match self.focused_panel {
+            Panel::Tasks => Panel::Observability,
+            Panel::Observability => Panel::Pipeline,
+            Panel::Pipeline => Panel::Output,
+            Panel::Output => Panel::Tasks,
+        };
+    }
+
+    pub fn focus_prev_panel(&mut self) {
+        self.focused_panel = match self.focused_panel {
+            Panel::Tasks => Panel::Output,
+            Panel::Observability => Panel::Tasks,
+            Panel::Pipeline => Panel::Observability,
+            Panel::Output => Panel::Pipeline,
+        };
+    }
+
+    pub fn next_queued_task(&self) -> Option<(Uuid, Uuid, String)> {
+        self.tasks
+            .iter()
+            .find(|t| t.status == TaskStatus::Queued)
+            .map(|t| (t.id, t.session_id, t.description.clone()))
+    }
+
+    pub fn task_counts(&self) -> (usize, usize, usize, usize) {
+        let mut queued = 0;
+        let mut running = 0;
+        let mut done = 0;
+        let mut failed = 0;
+
+        for task in &self.tasks {
+            match task.status {
+                TaskStatus::Queued => queued += 1,
+                TaskStatus::Running => running += 1,
+                TaskStatus::Done => done += 1,
+                TaskStatus::Failed => failed += 1,
+            }
+        }
+
+        (queued, running, done, failed)
     }
 
     pub fn add_tool_call(&mut self, name: String, args_summary: String) {
