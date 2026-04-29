@@ -3,6 +3,7 @@ export type RiskLevel = "low" | "medium" | "high"
 export type AgentDecision = "approve" | "reject" | "defer" | "escalate"
 export type HealthStatus = "healthy" | "degraded" | "unhealthy"
 export type ServiceStatus = "up" | "degraded" | "down" | "stub"
+export type StreamStatus = "idle" | "connecting" | "live" | "degraded"
 
 export interface JuniorOutput {
   hypothesis: string
@@ -46,6 +47,77 @@ export interface PipelineResult {
   tech_leader: TechLeaderOutput
   checkpoint_path: string
 }
+
+export type AgentStreamEvent =
+  | {
+      type: "pipeline_started"
+      session_id: string
+      task_preview: string
+    }
+  | {
+      type: "stage_started"
+      session_id: string
+      stage: AgentStage
+    }
+  | {
+      type: "stage_done"
+      session_id: string
+      stage: AgentStage
+      confidence?: number | null
+      risk_level?: number | null
+      latency_ms: number
+    }
+  | {
+      type: "stage_skipped"
+      session_id: string
+      stage: AgentStage
+    }
+  | {
+      type: "tool_call_started"
+      session_id: string
+      tool: string
+      args_summary: string
+    }
+  | {
+      type: "tool_call_done"
+      session_id: string
+      tool: string
+      duration_ms: number
+    }
+  | {
+      type: "tool_call_failed"
+      session_id: string
+      tool: string
+      error: string
+    }
+  | {
+      type: "adr_checkpoint"
+      session_id: string
+      adr_id: string
+      status: string
+      title: string
+    }
+  | {
+      type: "pipeline_done"
+      session_id: string
+      latency_ms: number
+    }
+  | {
+      type: "pipeline_error"
+      session_id: string
+      error: string
+    }
+  | {
+      type: "stage_output"
+      session_id: string
+      stage: AgentStage
+      content: string
+    }
+  | {
+      type: "steering_received"
+      session_id: string
+      message: string
+    }
 
 export interface SessionDecisionSnapshot {
   decision?: AgentDecision

@@ -161,6 +161,21 @@ export async function getSessionById(sessionId: string) {
   }
 }
 
+export async function getSessions(limit = 24) {
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit) || 24))
+
+  try {
+    return await fetchJson<SessionState[]>(
+      `${controlPlaneUrl()}/v1/agents/sessions?limit=${safeLimit}`,
+      {
+        headers: authHeaders(),
+      },
+    )
+  } catch {
+    return []
+  }
+}
+
 export async function runPipelineTask(input: PipelineRunInput) {
   return fetchJson<PipelineResult>(`${controlPlaneUrl()}/v1/agents/task`, {
     method: "POST",
@@ -261,7 +276,7 @@ export const getServicesSnapshot = cache(async (): Promise<ServiceNode[]> => {
     {
       id: "ui",
       name: "Neoland UI",
-      endpoint: "matrix/apps/frontend",
+      endpoint: "matrix/frontend",
       status: "up",
       detail: "current operator surface",
       group: "ui",

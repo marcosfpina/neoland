@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState } from "react"
 import { AlertCircle, ArrowRight, LoaderCircle, Waypoints } from "lucide-react"
 
 import { PipelineLiveView } from "@/components/pipeline/pipeline-live"
@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import type { PipelineResult, ServiceStatus } from "@/lib/neoland/types"
+import type {
+  AgentStreamEvent,
+  PipelineResult,
+  ServiceStatus,
+  StreamStatus,
+} from "@/lib/neoland/types"
 
 export function PipelineRunner({
   pipelineStatus,
@@ -17,15 +22,51 @@ export function PipelineRunner({
 }) {
   const [task, setTask] = useState("")
   const [sessionId, setSessionId] = useState("")
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [result, setResult] = useState<PipelineResult | null>(null)
+  const [liveEvents, setLiveEvents] = useState<AgentStreamEvent[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [isRunning, setIsRunning] = useState(false)
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle")
+
+  useEffect(() => {
+    if (!activeSessionId || !isRunning) {
+      return
+    }
+
+    setStreamStatus("connecting")
+    const source = new EventSource(`/api/neoland/events/${activeSessionId}`)
+
+    source.onopen = () => {
+      setStreamStatus("live")
+    }
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as AgentStreamEvent
+        setLiveEvents((current) => {
+          const next = [...current, payload]
+          return next.length > 80 ? next.slice(-80) : next
+        })
+      } catch {
+        // Keep the stream alive when an event payload is malformed.
+      }
+    }
+
+    source.onerror = () => {
+      setStreamStatus("degraded")
+      source.close()
+    }
+
+    return () => source.close()
+  }, [activeSessionId, isRunning])
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const trimmedTask = task.trim()
     const trimmedSessionId = sessionId.trim()
+    const requestSessionId = trimmedSessionId || crypto.randomUUID()
 
     if (!trimmedTask) {
       setError("Task is required.")
@@ -34,8 +75,13 @@ export function PipelineRunner({
 
     setError(null)
     setResult(null)
+    setSessionId(requestSessionId)
+    setActiveSessionId(requestSessionId)
+    setLiveEvents([])
+    setStreamStatus("connecting")
+    setIsRunning(true)
 
-    startTransition(async () => {
+    void (async () => {
       try {
         const response = await fetch("/api/neoland/pipeline/run", {
           method: "POST",
@@ -44,22 +90,27 @@ export function PipelineRunner({
           },
           body: JSON.stringify({
             task: trimmedTask,
-            session_id: trimmedSessionId || undefined,
+            session_id: requestSessionId,
           }),
         })
 
         const payload = (await response.json()) as PipelineResult | { error?: string }
 
         if (!response.ok) {
-          throw new Error("error" in payload ? payload.error || "Pipeline run failed." : "Pipeline run failed.")
+          throw new Error(
+            "error" in payload ? payload.error || "Pipeline run failed." : "Pipeline run failed.",
+          )
         }
 
         setResult(payload as PipelineResult)
         setSessionId((payload as PipelineResult).session_id)
+        setActiveSessionId((payload as PipelineResult).session_id)
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : "Pipeline run failed.")
+      } finally {
+        setIsRunning(false)
       }
-    })
+    })()
   }
 
   return (
@@ -106,12 +157,14 @@ export function PipelineRunner({
                     className="h-11 rounded-[1.1rem] border-border/70 bg-background/40"
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    The verified backend accepts only `task` and an optional `session_id`.
+                    Reuse a session to keep live events, decision history, and ADR continuity in the
+                    same operational thread.
                   </p>
                 </div>
                 <div className="rounded-[1.2rem] border border-dashed border-border/70 bg-background/30 p-4 text-sm leading-6 text-muted-foreground">
-                  No provider override or synthetic stage controls are exposed here, because the
-                  current control-plane contract does not accept them.
+                  The workbench now opens a live SSE relay for the chosen session id before the final
+                  pipeline payload lands, so progress, checkpointing, and follow-up inspection stay
+                  joined.
                 </div>
               </div>
             </div>
@@ -126,9 +179,13 @@ export function PipelineRunner({
             ) : null}
 
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" size="lg" disabled={isPending}>
-                {isPending ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-                {isPending ? "Running control-plane task" : "Run pipeline"}
+              <Button type="submit" size="lg" disabled={isRunning}>
+                {isRunning ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="size-4" />
+                )}
+                {isRunning ? "Running control-plane task" : "Run pipeline"}
               </Button>
               <span className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
                 real POST /v1/agents/task
@@ -139,10 +196,13 @@ export function PipelineRunner({
       </Card>
 
       <PipelineLiveView
-        mode={isPending ? "running" : result ? "complete" : "idle"}
+        mode={isRunning ? "running" : result ? "complete" : "idle"}
         currentTask={task.trim() || undefined}
+        activeSessionId={activeSessionId || undefined}
+        liveEvents={liveEvents}
         result={result}
         pipelineStatus={pipelineStatus}
+        streamStatus={streamStatus}
       />
     </div>
   )

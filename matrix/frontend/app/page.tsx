@@ -24,9 +24,10 @@ import { getAllAgents, getActiveAgents } from "@/lib/agents/registry"
 
 interface NeolandStats {
   total: number
-  accepted: number
+  approve_count: number
   avg_latency_ms: number
   avg_score: number
+  telemetry_source: string
 }
 
 export default function MissionControl() {
@@ -157,9 +158,9 @@ export default function MissionControl() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-foreground">
-                    {neolandStats?.accepted ?? "—"}
+                    {neolandStats?.approve_count ?? "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">Accepted</div>
+                  <div className="text-xs text-muted-foreground">Approved</div>
                 </div>
               </div>
             </CardContent>
@@ -191,7 +192,7 @@ export default function MissionControl() {
                   <div className="text-2xl font-bold text-foreground">
                     {neolandStats ? `${neolandStats.avg_score}%` : "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">Avg Score</div>
+                  <div className="text-xs text-muted-foreground">Matrix Score</div>
                 </div>
               </div>
             </CardContent>

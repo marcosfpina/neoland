@@ -5,7 +5,7 @@ import type {
   ServiceStatus,
 } from "./types"
 
-export type StageCardState = "idle" | "queued" | "complete" | "skipped"
+export type StageCardState = "idle" | "queued" | "running" | "complete" | "skipped"
 
 export const stageSequence: AgentStage[] = [
   "junior",
@@ -127,8 +127,10 @@ export function confidencePercent(value: number) {
 
 export function stageStateLabel(state: StageCardState) {
   switch (state) {
+    case "running":
+      return "Running"
     case "queued":
-      return "Awaiting result"
+      return "Queued"
     case "complete":
       return "Complete"
     case "skipped":
