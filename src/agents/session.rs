@@ -86,4 +86,33 @@ impl SessionManager {
         .context("Failed to update session after pipeline")?;
         Ok(())
     }
+
+    #[instrument(skip(self))]
+    #[allow(clippy::type_complexity)]
+    pub async fn list_recent(&self, limit: i64) -> Result<Vec<SessionState>> {
+        let rows: Vec<(Uuid, i32, DateTime<Utc>, Option<serde_json::Value>, bool)> =
+            sqlx::query_as(
+                r#"
+                SELECT session_id, task_count, last_activity, last_decision, active
+                FROM agent_session_metadata
+                ORDER BY last_activity DESC
+                LIMIT $1
+                "#,
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to list sessions")?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| SessionState {
+                session_id: row.0,
+                task_count: row.1,
+                last_activity: row.2,
+                last_decision: row.3,
+                active: row.4,
+            })
+            .collect())
+    }
 }
