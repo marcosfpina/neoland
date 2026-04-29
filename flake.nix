@@ -5,6 +5,18 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
+    securellmBridge = {
+      url = "git+file:../securellm-bridge";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-overlay.follows = "rust-overlay";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+    mlOpsApi = {
+      url = "git+file:../ml-ops-api";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-overlay.follows = "rust-overlay";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   outputs =
@@ -13,8 +25,42 @@
       nixpkgs,
       rust-overlay,
       flake-utils,
+      securellmBridge,
+      mlOpsApi,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    let
+      moduleInputs = {
+        inherit securellmBridge mlOpsApi;
+      };
+
+      neolandModule = import ./modules/applications/neoland.nix;
+      securellmBridgeApiModule = import ./modules/applications/securellm-bridge-api.nix {
+        inputs = moduleInputs;
+      };
+      mlOpsApiModule = import ./modules/applications/ml-ops-api.nix {
+        inputs = moduleInputs;
+      };
+      neolandLlmSuiteModule = import ./modules/applications/neoland-llm-suite.nix;
+    in
+    {
+      nixosModules = {
+        default =
+          { ... }:
+          {
+            imports = [
+              neolandModule
+              securellmBridgeApiModule
+              mlOpsApiModule
+              neolandLlmSuiteModule
+            ];
+          };
+        neoland = neolandModule;
+        securellmBridgeApi = securellmBridgeApiModule;
+        mlOpsApi = mlOpsApiModule;
+        llmSuite = neolandLlmSuiteModule;
+      };
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         overlays = [ (import rust-overlay) ];
@@ -335,6 +381,10 @@
             export NEOLAND_FRONTEND_PORT="''${NEOLAND_FRONTEND_PORT:-3006}"
             export NEOLAND_FRONTEND_URL="''${NEOLAND_FRONTEND_URL:-http://$NEOLAND_FRONTEND_HOST:$NEOLAND_FRONTEND_PORT}"
             export NEOLAND_CONTROL_PLANE_URL="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
+            export NEOLAND_ML_API_URL="''${NEOLAND_ML_API_URL:-http://127.0.0.1:8080}"
+            export ML_OPS_API_URL="''${ML_OPS_API_URL:-http://127.0.0.1:8083}"
+            export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:5001}"
+            export VLLM_URL="''${VLLM_URL:-}"
             export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
             export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$NEOLAND_CONTROL_PLANE_URL}"
 
@@ -392,6 +442,11 @@
               echo "  frontend-health          # Query /api/health for the frontend"
               echo "  frontend-stack           # Check frontend + control plane + DSPy reachability"
               echo "  nfdev / nfbuild / nflint / nfhealth / nfclean"
+              echo ""
+              echo "🧠 LLM Runtime:"
+              echo "  services.securellm-bridge-api via nixosModules.securellmBridgeApi"
+              echo "  services.ml-ops-api via nixosModules.mlOpsApi"
+              echo "  LLAMACPP_URL=$LLAMACPP_URL"
               echo ""
               echo "🔐 Secrets:"
               echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
