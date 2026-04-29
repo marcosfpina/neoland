@@ -35,6 +35,9 @@ Enquanto ainda houver bugs relevantes em TUI, fluxo principal e superfícies cen
 Há também uma trilha explícita de `DX verification`: não basta termos componentes, precisamos provar que eles funcionam conforme prometido nas docs e superfícies.  
 Ver: [`docs/DX_ROADMAP.md`](/home/kernelcore/master/neoland/docs/DX_ROADMAP.md)
 
+Há agora também uma trilha explícita de `LLM runtime alignment`, porque a stack de inferência precisa de uma topologia oficial e health correto entre `Neoland`, `securellm-bridge`, `ml-ops-api` e `llama.cpp/vLLM`.
+Ver: [`docs/LLM_RUNTIME_ROADMAP.md`](/home/kernelcore/master/neoland/docs/LLM_RUNTIME_ROADMAP.md)
+
 ---
 
 ## Estado Integral Atual
@@ -102,6 +105,7 @@ Base pronta para beta operacional single-host. O trabalho restante aqui é mais 
 - falta checklist de release única e verificável
 - falta validação rotineira de restore, rollback e smoke de deploy
 - falta convergir serviço Rust, pipeline Python, frontend e runtime dirs em um fluxo de operação simples
+- falta convergir a topologia de inferência em uma única leitura operacional
 
 ### 5. Segurança e Governança — **80%**
 
@@ -157,6 +161,13 @@ Impacto:
 Impacto:
 - projeto parece mais pronto do que realmente está para operação contínua
 - ambiente de dev e ambiente de release ainda não estão fechando em um único ritual simples
+
+### P2.5. Runtime de inferência ainda tem naming e health ambíguos
+
+Impacto:
+- difícil saber se o target principal do Neoland é `securellm-bridge`, `ml-ops-api` ou `llama.cpp`
+- `doctor` pode acusar erro no endpoint errado
+- troubleshooting fica lento e sujeito a falsas conclusões
 
 ### P3. Documentação inflada e desalinhada
 
@@ -249,6 +260,7 @@ Impacto:
 **Status**: `planned`  
 **Objetivo**: transformar a stack atual em serviço operável sem improviso, depois da estabilização do produto principal.
 
+- [ ] fechar topologia oficial de inferência e gateway
 - [ ] fechar runtime dirs, envs e secrets para Rust + Python + frontend
 - [ ] validar smoke de boot completo
 - [ ] validar backup e restore de sessão/checkpoints
@@ -321,6 +333,12 @@ Isto **não** deve bloquear o primeiro corte de produção:
 | P10 | Session listing ou alternativa oficial | Planned | Média |
 | P11 | Integrar Fase B do mmap no fluxo real | Planned | Média |
 | P12 | Separar backlog enterprise do primeiro corte | In progress | Média |
+| LLM-1 | Congelar topologia `Neoland -> SecureLLM Bridge -> ml-ops-api -> llama.cpp/vLLM` | In progress | Alta |
+| LLM-2 | Corrigir semântica de `ml_api_url` no Neoland | Next | Alta |
+| LLM-3 | Ajustar `doctor` para health do gateway real | Next | Alta |
+| LLM-4 | Subir `securellm-api-server` com `ml-ops` habilitado | Next | Alta |
+| LLM-5 | Fixar `LLAMACPP_URL` e forwarding no `ml-ops-api` | Next | Alta |
+| LLM-6 | Validar E2E completo com task real | Planned | Alta |
 
 ---
 
@@ -355,7 +373,8 @@ Ordem sugerida para o próximo ciclo curto:
 1. P-1 — estabilizar TUI e fluxo principal
 2. P1 — SSE real no frontend
 3. P3 — limpar dependência ambígua de Matrix na home e stats
-4. P2 — fechar navegação entre pipeline, sessão e ADR
-5. P4/P5 — ritual de deploy, restore e rollback
+4. LLM-1/LLM-3 — fechar topologia e health do runtime de inferência
+5. P2 — fechar navegação entre pipeline, sessão e ADR
+6. P4/P5 — ritual de deploy, restore e rollback
 
 Se fizermos isso, Neoland sai de “tecnicamente impressionante, mas ainda instável na superfície principal” para “workbench control-plane estável e pronto para fechamento operacional de release”.

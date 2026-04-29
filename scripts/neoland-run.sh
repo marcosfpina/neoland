@@ -24,11 +24,6 @@ load_sops_env() {
 }
 
 main() {
-    if [[ $# -eq 0 ]]; then
-        echo "Usage: scripts/neoland-run.sh <neoland args...>" >&2
-        exit 1
-    fi
-
     local sops_env_file="${NEOLAND_SOPS_ENV_FILE:-$DEFAULT_SOPS_ENV_FILE}"
     if [[ -f "$sops_env_file" ]]; then
         load_sops_env "$sops_env_file"

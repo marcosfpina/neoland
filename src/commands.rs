@@ -329,32 +329,86 @@ pub async fn collect_doctor_report(
         },
     }
 
-    // 4. ml-offload Connectivity
-    let ml_health_url = format!("{}/health", ml_api_url.trim_end_matches('/'));
-    match runtime.http_get_status(&ml_health_url).await {
-        Ok(status) if (200..300).contains(&status) => {
+    // 4. LLM Gateway Connectivity (SecureLLM Bridge API)
+    let gateway_candidates = build_health_candidates(ml_api_url, true);
+    match probe_http_candidates(runtime, &gateway_candidates).await {
+        ProbeResult::Ok { url, status } => {
             checks.push(CheckResult::ok(
-                "ml-offload",
-                format!("ml-offload reachable at {} (status {})", ml_api_url, status),
+                "LLM Gateway",
+                format!("SecureLLM API reachable at {} via {} (status {})", ml_api_url, url, status),
             ));
         },
-        Ok(status) => {
-            checks.push(CheckResult::warning(
-                "ml-offload",
-                format!("ml-offload returned status {}", status),
-                "This is optional. The server can fall back to local or SecureLLM providers.",
+        ProbeResult::Status { url, status } => {
+            checks.push(CheckResult::error(
+                "LLM Gateway",
+                format!("SecureLLM API returned status {} at {}", status, url),
+                "Check if `securellm-api-server` is running and exposing `/api/health`.",
             ));
         },
-        Err(err) => {
-            checks.push(CheckResult::warning(
-                "ml-offload",
-                format!("ml-offload not reachable at {}", ml_api_url),
-                format!("Optional dependency; fallback remains available ({err})"),
+        ProbeResult::Err { url, error } => {
+            checks.push(CheckResult::error(
+                "LLM Gateway",
+                format!("SecureLLM API not reachable at {}", ml_api_url),
+                format!("Expected health at {} ({error})", url),
             ));
         },
     }
 
-    // 5. Vault Connectivity
+    // 5. Inference bridge (optional, but diagnosed when declared)
+    if let Some(ml_ops_url) = runtime.env_var("ML_OPS_API_URL") {
+        let ml_ops_candidates = build_health_candidates(&ml_ops_url, false);
+        match probe_http_candidates(runtime, &ml_ops_candidates).await {
+            ProbeResult::Ok { url, status } => {
+                checks.push(CheckResult::ok(
+                    "Inference Bridge",
+                    format!("ml-ops-api reachable at {} via {} (status {})", ml_ops_url, url, status),
+                ));
+            },
+            ProbeResult::Status { url, status } => {
+                checks.push(CheckResult::warning(
+                    "Inference Bridge",
+                    format!("ml-ops-api returned status {} at {}", status, url),
+                    "Check if `ml-ops-api` is running and exposing `/health`.",
+                ));
+            },
+            ProbeResult::Err { url, error } => {
+                checks.push(CheckResult::warning(
+                    "Inference Bridge",
+                    format!("ml-ops-api not reachable at {}", ml_ops_url),
+                    format!("Expected health at {} ({error})", url),
+                ));
+            },
+        }
+    }
+
+    // 6. Local backend (optional, but diagnosed when declared)
+    if let Some(llamacpp_url) = runtime.env_var("LLAMACPP_URL") {
+        let llamacpp_candidates = build_health_candidates(&llamacpp_url, false);
+        match probe_http_candidates(runtime, &llamacpp_candidates).await {
+            ProbeResult::Ok { url, status } => {
+                checks.push(CheckResult::ok(
+                    "llama.cpp",
+                    format!("llama.cpp reachable at {} via {} (status {})", llamacpp_url, url, status),
+                ));
+            },
+            ProbeResult::Status { url, status } => {
+                checks.push(CheckResult::warning(
+                    "llama.cpp",
+                    format!("llama.cpp returned status {} at {}", status, url),
+                    "Check if `llama-server` is running on the configured upstream port.",
+                ));
+            },
+            ProbeResult::Err { url, error } => {
+                checks.push(CheckResult::warning(
+                    "llama.cpp",
+                    format!("llama.cpp not reachable at {}", llamacpp_url),
+                    format!("Expected health at {} ({error})", url),
+                ));
+            },
+        }
+    }
+
+    // 7. Vault Connectivity
     let vault_addr = runtime.env_var("VAULT_ADDR").unwrap_or_else(|| config.vault.addr.clone());
     let vault_health_url = format!("{}/v1/sys/health", vault_addr.trim_end_matches('/'));
     match runtime.http_get_status(&vault_health_url).await {
@@ -379,7 +433,7 @@ pub async fn collect_doctor_report(
         },
     }
 
-    // 6. PostgreSQL / pgvector Connectivity
+    // 8. PostgreSQL / pgvector Connectivity
     let db_url = runtime.env_var("DATABASE_URL").or_else(|| {
         if config.database.url.is_empty() {
             None
@@ -409,7 +463,7 @@ pub async fn collect_doctor_report(
         ));
     }
 
-    // 7. Environment & Config
+    // 9. Environment & Config
     if let Some(value) = runtime.env_var("RUST_LOG") {
         checks.push(CheckResult::ok("RUST_LOG", format!("Using {}", value)));
     } else {
@@ -433,6 +487,58 @@ pub async fn collect_doctor_report(
     }
 
     DoctorReport::from_checks(checks)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProbeResult {
+    Ok { url: String, status: u16 },
+    Status { url: String, status: u16 },
+    Err { url: String, error: String },
+}
+
+fn build_health_candidates(base_url: &str, prefer_api_prefix: bool) -> Vec<String> {
+    let base_url = base_url.trim_end_matches('/');
+    let mut candidates = Vec::with_capacity(2);
+
+    if prefer_api_prefix {
+        candidates.push(format!("{base_url}/api/health"));
+        candidates.push(format!("{base_url}/health"));
+    } else {
+        candidates.push(format!("{base_url}/health"));
+        candidates.push(format!("{base_url}/api/health"));
+    }
+
+    candidates
+}
+
+async fn probe_http_candidates(
+    runtime: &impl CommandRuntime,
+    candidates: &[String],
+) -> ProbeResult {
+    let mut fallback: Option<ProbeResult> = None;
+
+    for url in candidates {
+        match runtime.http_get_status(url).await {
+            Ok(status) if (200..300).contains(&status) => {
+                return ProbeResult::Ok { url: url.clone(), status };
+            },
+            Ok(status) => {
+                if fallback.is_none() {
+                    fallback = Some(ProbeResult::Status { url: url.clone(), status });
+                }
+            },
+            Err(error) => {
+                if fallback.is_none() {
+                    fallback = Some(ProbeResult::Err { url: url.clone(), error });
+                }
+            },
+        }
+    }
+
+    fallback.unwrap_or_else(|| ProbeResult::Err {
+        url: "<no-candidates>".to_string(),
+        error: "no health candidates configured".to_string(),
+    })
 }
 
 pub async fn restart_server(
@@ -675,11 +781,15 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
     }
 
     #[tokio::test]
-    async fn doctor_report_marks_server_error_and_ml_offload_warning() {
+    async fn doctor_report_marks_server_error_and_gateway_error() {
         let runtime = MockRuntime {
             http_statuses: HashMap::from([
                 (
                     "http://localhost:3001/health".to_string(),
+                    Err("connection refused".to_string()),
+                ),
+                (
+                    "http://localhost:8080/api/health".to_string(),
                     Err("connection refused".to_string()),
                 ),
                 (
@@ -710,12 +820,12 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
         assert!(report.has_errors());
         assert_eq!(find_check(&report.checks, "Server (REST)").state, CheckState::Error);
         assert_eq!(find_check(&report.checks, "Server (gRPC)").state, CheckState::Warning);
-        assert_eq!(find_check(&report.checks, "ml-offload").state, CheckState::Warning);
+        assert_eq!(find_check(&report.checks, "LLM Gateway").state, CheckState::Error);
         assert_eq!(find_check(&report.checks, "Vault").state, CheckState::Warning);
     }
 
     #[tokio::test]
-    async fn doctor_report_detects_nix_shell_and_config_file() {
+    async fn doctor_report_detects_nix_shell_and_internal_llm_layers() {
         let temp_dir = TempDir::new().expect("temp dir");
         let config_path = temp_dir.path().join("config.toml");
         fs::write(&config_path, "[server]\ngrpc_port = 50051\n").expect("config file");
@@ -723,7 +833,9 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
         let runtime = MockRuntime {
             http_statuses: HashMap::from([
                 ("http://localhost:3001/health".to_string(), Ok(200)),
-                ("http://localhost:8080/health".to_string(), Ok(200)),
+                ("http://localhost:8080/api/health".to_string(), Ok(200)),
+                ("http://localhost:8083/health".to_string(), Ok(200)),
+                ("http://localhost:5001/health".to_string(), Ok(200)),
                 ("http://localhost:8200/v1/sys/health".to_string(), Ok(200)),
             ]),
             grpc_statuses: HashMap::from([("http://[::1]:50051".to_string(), Ok(()))]),
@@ -731,6 +843,8 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
                 ("IN_NIX_SHELL".to_string(), "1".to_string()),
                 ("VAULT_ADDR".to_string(), "http://localhost:8200".to_string()),
                 ("RUST_LOG".to_string(), "debug".to_string()),
+                ("ML_OPS_API_URL".to_string(), "http://localhost:8083".to_string()),
+                ("LLAMACPP_URL".to_string(), "http://localhost:5001".to_string()),
             ]),
             config_paths: vec![config_path.clone()],
             ..Default::default()
@@ -748,6 +862,9 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
         assert_eq!(find_check(&report.checks, "Nix shell").state, CheckState::Ok);
         assert_eq!(find_check(&report.checks, "Server (REST)").state, CheckState::Ok);
         assert_eq!(find_check(&report.checks, "Server (gRPC)").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "LLM Gateway").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "Inference Bridge").state, CheckState::Ok);
+        assert_eq!(find_check(&report.checks, "llama.cpp").state, CheckState::Ok);
         assert_eq!(find_check(&report.checks, "Vault").state, CheckState::Ok);
         assert_eq!(
             find_check(&report.checks, "Config file").detail,

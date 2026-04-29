@@ -118,12 +118,14 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                         if let Some(id) = app.active_task_id {
                             app.complete_task(id, true);
                         }
+                        spawn_next_queued_task(&mut app, &agent_tx, &api_key);
                     }
                     AgentStreamEvent::PipelineError { error } => {
                         app.output_text = format!("error: {}", error);
                         if let Some(id) = app.active_task_id {
                             app.complete_task(id, false);
                         }
+                        spawn_next_queued_task(&mut app, &agent_tx, &api_key);
                     }
                     AgentStreamEvent::FinalResult { rationale, adr_title, adr_status } => {
                         app.output_text = rationale;
@@ -189,15 +191,25 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                             Action::Quit => break,
 
                             Action::SubmitTask(task) => {
-                                let task_id = app.enqueue_task(task.clone());
+                                let (task_id, session_id) = app.enqueue_task(task.clone());
                                 app.start_task(task_id);
                                 let tx = agent_tx.clone();
                                 let srv = app.server_url.clone();
                                 let key = api_key.clone();
-                                let session = app.active_session;
                                 tokio::spawn(async move {
-                                    run_agent_task(task, session, srv, key, tx).await;
+                                    run_agent_task(task, session_id, srv, key, tx).await;
                                 });
+                            }
+
+                            Action::QueueTask(task) => {
+                                let (task_id, _) = app.enqueue_task(task);
+                                let task_short = task_id.to_string()[..6].to_string();
+                                app.output_text = if app.output_text.is_empty() {
+                                    format!("[queue] task {} queued and waiting for dispatch.", task_short)
+                                } else {
+                                    format!("{}\n\n[queue] task {} queued and waiting for dispatch.", app.output_text, task_short)
+                                };
+                                app.auto_scroll = true;
                             }
 
                             Action::SteerTask(msg) => {
@@ -223,6 +235,14 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
 
                             Action::TogglePipeline => {
                                 app.pipeline_visible = !app.pipeline_visible;
+                            }
+
+                            Action::FocusNextPanel => {
+                                app.focus_next_panel();
+                            }
+
+                            Action::FocusPrevPanel => {
+                                app.focus_prev_panel();
                             }
 
                             Action::OpenMatrix => {
@@ -331,6 +351,12 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         },
 
         // ── Submit task ───────────────────────────────────────────────
+        (KeyCode::Enter, KeyModifiers::CONTROL) if !app.input_buffer.is_empty() => {
+            let msg = std::mem::take(&mut app.input_buffer);
+            app.cursor_pos = 0;
+            app.history_commit(msg.clone());
+            return Action::QueueTask(msg);
+        },
         (KeyCode::Enter, _) if !app.input_buffer.is_empty() => {
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
@@ -362,8 +388,11 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         (KeyCode::Char('4'), KeyModifiers::CONTROL) => app.apply_preset("research"),
         (KeyCode::Char('5'), KeyModifiers::CONTROL) => app.apply_preset("safe"),
 
-        // ── Sidebar / Esc ─────────────────────────────────────────────
-        (KeyCode::Tab, _) => app.sidebar_visible = !app.sidebar_visible,
+        // ── Focus / Esc ───────────────────────────────────────────────
+        (KeyCode::Tab, KeyModifiers::SHIFT) | (KeyCode::BackTab, _) => {
+            return Action::FocusPrevPanel;
+        },
+        (KeyCode::Tab, _) => return Action::FocusNextPanel,
         (KeyCode::Esc, _) if !app.input_buffer.is_empty() => {
             app.input_buffer.clear();
             app.cursor_pos = 0;
@@ -479,6 +508,30 @@ async fn run_agent_task(
             tx.send(AgentStreamEvent::PipelineError { error: e.to_string() }).await.ok();
         },
     }
+}
+
+fn spawn_next_queued_task(
+    app: &mut AppState,
+    agent_tx: &mpsc::Sender<AgentStreamEvent>,
+    api_key: &str,
+) {
+    if app.active_task_id.is_some() {
+        return;
+    }
+
+    let Some((task_id, session_id, task)) = app.next_queued_task() else {
+        return;
+    };
+
+    app.start_task(task_id);
+
+    let tx = agent_tx.clone();
+    let srv = app.server_url.clone();
+    let key = api_key.to_string();
+
+    tokio::spawn(async move {
+        run_agent_task(task, session_id, srv, key, tx).await;
+    });
 }
 
 async fn post_agent_steer(

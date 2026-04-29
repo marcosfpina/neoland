@@ -1,6 +1,6 @@
 # LLM Providers Configuration
 
-NEOLAND supports multiple LLM providers through the SecureLLM Bridge. This document explains how to configure and use each provider.
+NEOLAND supports multiple LLM providers through the SecureLLM Bridge. In the default runtime topology, `Neoland -> SecureLLM Bridge API -> ml-ops-api -> llama.cpp/vLLM`. This document explains how to configure and use each provider within that stack.
 
 ## Supported Providers
 

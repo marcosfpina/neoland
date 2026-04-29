@@ -154,7 +154,7 @@ nix develop
 # Inside the dev shell
 neoland-secrets
 neoland-server
-neoland-client --ml-api-url http://localhost:9000
+neoland-client --ml-api-url http://localhost:8080
 neoland-doctor --json
 
 # Or run one-shot commands without opening a shell
@@ -165,7 +165,7 @@ nix develop --command neoland-test --json
 cargo build --bin neoland --release
 
 # Run TUI client
-./target/release/neoland client --ml-api-url http://localhost:9000
+./target/release/neoland client --ml-api-url http://localhost:8080
 ```
 
 ### NixOS Integration
@@ -285,11 +285,11 @@ All major architectural decisions are documented in [**Architecture Decision Rec
 
 **Primary** → **Secondary** → **Tertiary**
 
-1. **ml-offload-api** (Port 9000): GPU-accelerated, multi-backend orchestrator
+1. **SecureLLM Bridge API** (Port 8080): OpenAI-compatible gateway consumed by Neoland
 2. **gRPC Internal**: Local Qwen 1.8B (CPU fallback)
-3. **SecureLLM Proxy**: External providers (DeepSeek/Claude) with audit logs
+3. **SecureLLM providers / upstreams**: `ml-ops-api`, cloud providers, and local backends behind the gateway
 
-**Configuration**: `--ml-api-url` flag makes endpoint configurable.
+**Configuration**: `--ml-api-url` points to the primary OpenAI-compatible gateway endpoint.
 
 ### 3. Module Refactoring
 
@@ -326,25 +326,24 @@ pub struct AppState {
 
 ## 🔌 Integrations
 
-### ml-offload-api
-
-External service providing:
-
-- Backend routing (Ollama/vLLM/llama.cpp)
-- GPU acceleration
-- OpenAI-compatible API
-
-**Usage**: Pass `--ml-api-url` to client.
-
 ### securellm-bridge
 
-Security layer for external LLM providers:
+Primary LLM gateway consumed by Neoland:
 
-- Rate limiting
-- Audit logging
-- API key rotation
+- OpenAI-compatible API for the TUI/runtime
+- Audit, rate limiting and provider routing
+- Can proxy to `ml-ops-api` for local inference
 
-**Path dependency**: `../securellm-bridge/crates/core`
+**Usage**: `--ml-api-url` should point here in the default topology.
+
+### ml-ops-api
+
+Inference bridge behind the gateway:
+
+- Backend routing (`llama.cpp`, `vLLM`, other local engines)
+- GPU/local acceleration
+- OpenAI-compatible upstream for the gateway
+**Typical role**: upstream internal service, not the primary Neoland client endpoint.
 
 ### intelagent-core (Phantom)
 
