@@ -6,16 +6,12 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
     securellmBridge = {
-      url = "git+file:../securellm-bridge";
+      url = "git+ssh://git@github.com/VoidNxSEC/securellm-bridge";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
     };
     mlOpsApi = {
-      url = "git+file:../ml-ops-api";
+      url = "git+ssh://git@github.com/VoidNxSEC/ml-ops-api";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
     };
   };
 
@@ -25,12 +21,11 @@
       nixpkgs,
       rust-overlay,
       flake-utils,
-      securellmBridge,
-      mlOpsApi,
-    }:
+      ...
+    }@inputs:
     let
       moduleInputs = {
-        inherit securellmBridge mlOpsApi;
+        inherit (inputs) securellmBridge mlOpsApi;
       };
 
       neolandModule = import ./modules/applications/neoland.nix;
