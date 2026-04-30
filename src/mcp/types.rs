@@ -30,6 +30,7 @@ pub struct JsonRpcError {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[derive(Serialize)]
 pub struct Tool {
     pub name: String,
     pub description: String,
@@ -40,6 +41,7 @@ pub struct CallToolRequest {
     pub arguments: Value,
 }
 
+#[derive(Serialize)]
 pub struct CallToolResult {
     pub text: String,
     pub is_error: bool,
