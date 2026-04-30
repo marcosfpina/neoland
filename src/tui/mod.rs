@@ -218,9 +218,10 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                             Action::ResolveBreakpoint { resolution, instruction } => {
                                 let srv = app.server_url.clone();
                                 let session = app.active_session;
+                                let key = api_key.clone();
                                 app.pending_breakpoint = None; // Hide UI instantly
                                 tokio::spawn(async move {
-                                    if let Err(e) = post_breakpoint_resolve(&srv, session, &resolution, instruction.as_deref()).await {
+                                    if let Err(e) = post_breakpoint_resolve(&srv, &key, session, &resolution, instruction.as_deref()).await {
                                         eprintln!("Failed to resolve breakpoint: {}", e);
                                     }
                                 });
@@ -613,6 +614,7 @@ async fn post_agent_task(
 
 async fn post_breakpoint_resolve(
     server_url: &str,
+    api_key: &str,
     session_id: uuid::Uuid,
     resolution: &str,
     instruction: Option<&str>,
@@ -620,6 +622,7 @@ async fn post_breakpoint_resolve(
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/v1/agents/session/{}/breakpoint/resolve", server_url, session_id))
+        .header("X-API-Key", api_key)
         .json(&serde_json::json!({"resolution": resolution, "instruction": instruction}))
         .send()
         .await?;
