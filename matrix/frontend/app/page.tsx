@@ -84,16 +84,6 @@ export default function MissionControl() {
       agent: "HEALTH",
       status: "ready",
     },
-    {
-      id: "pipeline-history",
-      title: "Pipeline History",
-      description: "All neoland pipeline runs — latency, confidence, ADR decisions over time",
-      icon: BarChart2,
-      color: "from-amber-500 to-orange-600",
-      href: "/pipeline-history",
-      agent: "MATRIX",
-      status: "ready",
-    },
   ]
 
   return (
@@ -192,7 +182,7 @@ export default function MissionControl() {
                   <div className="text-2xl font-bold text-foreground">
                     {neolandStats ? `${neolandStats.avg_score}%` : "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">Matrix Score</div>
+                  <div className="text-xs text-muted-foreground">Confidence Score</div>
                 </div>
               </div>
             </CardContent>
