@@ -1,0 +1,11 @@
+--- agents/neoland_agents/tools.py
++++ agents/neoland_agents/tools.py
+@@ -10,7 +10,8 @@
+     Função genérica que envia a requisição de tool pro Rust e trava o Python
+     até o humano aprovar na TUI (Breakpoint).
+     """
+     try:
++        print(f"🚀 CALLING RUST TOOL {tool_name} FOR SESSION {session_id}")
+         response = httpx.post(
+             f"{RUST_SERVER_URL}/v1/agents/tools/call",
+             headers={"X-API-Key": API_KEY},

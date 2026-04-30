@@ -32,7 +32,7 @@ class AgentOrchestrator:
 
     async def run(self, request: TaskRequest) -> PipelineResult:
         # 1. Junior — sempre executa
-        jr = self.junior(task=request.task, context=request.rag_context)
+        jr = self.junior(task=request.task, context=request.rag_context, session_id=str(request.session_id))
         junior_out = JuniorOutput(
             hypothesis=jr.hypothesis,
             confidence=float(jr.confidence),

@@ -33,7 +33,7 @@ pub enum Commands {
         server_url: String,
 
         /// URL do endpoint OpenAI-compatible principal (SecureLLM Bridge API)
-        #[arg(long, default_value = "http://localhost:8081")]
+        #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
     },
 
@@ -70,7 +70,7 @@ pub enum Commands {
         server_url: String,
 
         /// URL do gateway LLM principal para verificar
-        #[arg(long, default_value = "http://localhost:8081")]
+        #[arg(long, default_value = "http://localhost:8080")]
         ml_api_url: String,
 
         /// Renderiza o relatório em JSON para automação
@@ -180,7 +180,7 @@ mod tests {
         match cli.command {
             Commands::Client { server_url, ml_api_url } => {
                 assert_eq!(server_url, "http://[::1]:50051");
-                assert_eq!(ml_api_url, "http://localhost:8081");
+                assert_eq!(ml_api_url, "http://localhost:8080");
             },
             _ => panic!("expected client command"),
         }

@@ -163,7 +163,7 @@
             echo "🚀 Launching Neoland Full Stack (God Mode)..."
             tmux new-session -d -s neoland-stack "neoland server"
             tmux split-window -h "cd agents && poetry run uvicorn neoland_agents.app:app --port 8001"
-            tmux select-pane -t 0
+            tmux select-pane -t neoland-stack:0.0
             tmux split-window -v "sleep 2 && neoland client"
             tmux -2 attach-session -t neoland-stack
           '';
