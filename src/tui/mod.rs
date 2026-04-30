@@ -32,6 +32,7 @@ enum AgentStreamEvent {
     ToolCallStarted { tool: String, args_summary: String },
     ToolCallDone { tool: String, duration_ms: u64 },
     ToolCallFailed { tool: String },
+    BreakpointHit { tool: String, args_summary: String },
     AdrCheckpoint { status: String, title: String },
     PipelineDone { latency_ms: u64 },
     PipelineError { error: String },
@@ -105,6 +106,9 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                     }
                     AgentStreamEvent::ToolCallDone { tool, duration_ms } => {
                         app.finish_tool_call(&tool, duration_ms);
+                    }
+                    AgentStreamEvent::BreakpointHit { tool, args_summary } => {
+                        app.trigger_breakpoint(tool, args_summary);
                     }
                     AgentStreamEvent::ToolCallFailed { tool } => {
                         app.fail_tool_call(&tool);
@@ -210,6 +214,16 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                     format!("{}\n\n[queue] task {} queued and waiting for dispatch.", app.output_text, task_short)
                                 };
                                 app.auto_scroll = true;
+                            }
+                            Action::ResolveBreakpoint { resolution, instruction } => {
+                                let srv = app.server_url.clone();
+                                let session = app.active_session;
+                                app.pending_breakpoint = None; // Hide UI instantly
+                                tokio::spawn(async move {
+                                    if let Err(e) = post_breakpoint_resolve(&srv, session, &resolution, instruction.as_deref()).await {
+                                        eprintln!("Failed to resolve breakpoint: {}", e);
+                                    }
+                                });
                             }
 
                             Action::SteerTask(msg) => {
@@ -351,6 +365,22 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         },
 
         // ── Submit task ───────────────────────────────────────────────
+        (KeyCode::Enter, _) if app.pending_breakpoint.is_some() => {
+            let msg = std::mem::take(&mut app.input_buffer);
+            app.cursor_pos = 0;
+            if msg.trim().is_empty() {
+                return Action::ResolveBreakpoint { resolution: "approve".to_string(), instruction: None };
+            } else {
+                app.history_commit(msg.clone());
+                return Action::ResolveBreakpoint { resolution: "steer".to_string(), instruction: Some(msg) };
+            }
+        },
+        (KeyCode::Esc, _) if app.pending_breakpoint.is_some() => {
+            app.input_buffer.clear();
+            app.cursor_pos = 0;
+            return Action::ResolveBreakpoint { resolution: "reject".to_string(), instruction: None };
+        },
+
         (KeyCode::Enter, KeyModifiers::CONTROL) if !app.input_buffer.is_empty() => {
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
@@ -581,6 +611,22 @@ async fn post_agent_task(
     Ok(resp.json::<serde_json::Value>().await?)
 }
 
+async fn post_breakpoint_resolve(
+    server_url: &str,
+    session_id: uuid::Uuid,
+    resolution: &str,
+    instruction: Option<&str>,
+) -> anyhow::Result<()> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/v1/agents/session/{}/breakpoint/resolve", server_url, session_id))
+        .json(&serde_json::json!({"resolution": resolution, "instruction": instruction}))
+        .send()
+        .await?;
+    if !resp.status().is_success() { anyhow::bail!("server returned {}", resp.status()); }
+    Ok(())
+}
+
 // ── SSE subscriber ────────────────────────────────────────────────────
 
 async fn subscribe_sse(url: String, api_key: String, tx: mpsc::Sender<AgentStreamEvent>) {
@@ -641,6 +687,10 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
         "tool_call_failed" => {
             Some(AgentStreamEvent::ToolCallFailed { tool: val["tool"].as_str()?.to_string() })
         },
+        "breakpoint_hit" => Some(AgentStreamEvent::BreakpointHit {
+            tool: val["tool"].as_str()?.to_string(),
+            args_summary: val["args_summary"].as_str().unwrap_or("").to_string(),
+        }),
         "adr_checkpoint" => Some(AgentStreamEvent::AdrCheckpoint {
             status: val["status"].as_str().unwrap_or("").to_string(),
             title: val["title"].as_str().unwrap_or("").to_string(),

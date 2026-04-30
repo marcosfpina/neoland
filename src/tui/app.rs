@@ -18,6 +18,7 @@ pub enum TaskStatus {
     Running,
     Done,
     Failed,
+    WaitingForBreakpoint,
 }
 
 #[derive(Clone)]
@@ -104,6 +105,7 @@ pub struct AppState {
     pub pipeline_visible: bool,
     pub focused_panel: Panel,
     pub adr_title: Option<String>,
+    pub pending_breakpoint: Option<(String, String)>,
     pub adr_status: Option<String>,
     pub active_session: Uuid,
     pub input_history: Vec<String>,
@@ -153,6 +155,7 @@ impl AppState {
             pipeline_visible: true,
             focused_panel: Panel::Output,
             adr_title: None,
+            pending_breakpoint: None,
             adr_status: None,
             active_session: Uuid::new_v4(),
             input_history: Vec::new(),
@@ -328,6 +331,7 @@ impl AppState {
                 TaskStatus::Running => running += 1,
                 TaskStatus::Done => done += 1,
                 TaskStatus::Failed => failed += 1,
+                TaskStatus::WaitingForBreakpoint => running += 1,
             }
         }
 
@@ -451,6 +455,18 @@ impl AppState {
         };
         self.input_buffer.drain(new_pos..self.cursor_pos);
         self.cursor_pos = new_pos;
+    }
+
+    pub fn trigger_breakpoint(&mut self, tool: String, args: String) {
+        self.pending_breakpoint = Some((tool, args));
+        if let Some(id) = self.active_task_id {
+            if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+                t.status = TaskStatus::WaitingForBreakpoint;
+            }
+        }
+        // Clear input to prepare for [Y/N] or Steer
+        self.input_buffer.clear();
+        self.cursor_pos = 0;
     }
 }
 
