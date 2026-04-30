@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import httpx
+from typing import Any
+import os
+
+RUST_SERVER_URL = os.getenv("NEOLAND_SERVER_URL", "http://localhost:3001")
+API_KEY = os.getenv("NEOLAND_API_KEY", "neoland_admin_53352f54e22da11f63edc17380c7bb48aef08811c0872caa")
+
+def call_rust_tool(session_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
+    """
+    Função genérica que envia a requisição de tool pro Rust e trava o Python
+    até o humano aprovar na TUI (Breakpoint).
+    """
+    try:
+        print(f"🚀 CALLING RUST TOOL {tool_name} FOR SESSION {session_id}")
+        response = httpx.post(
+            f"{RUST_SERVER_URL}/v1/agents/tools/call",
+            headers={"X-API-Key": API_KEY},
+            json={
+                "session_id": session_id,
+                "name": tool_name,
+                "arguments": arguments,
+            },
+            timeout=86400.0, # Timeout gigantesco porque o humano pode ir tomar café antes de clicar [Enter] na TUI
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        # O Rust retorna { "text": "...", "is_error": bool }
+        if data.get("is_error", False):
+            # Se você negou (Reject) ou deu (Steer), o Rust mandou um erro!
+            return f"ERROR: {data.get('text', 'Tool execution failed or was rejected')}"
+            
+        return data.get("text", "Success but no output")
+    except Exception as e:
+        return f"CRITICAL ERROR CALLING RUST: {str(e)}"
+
+
+# Aqui nós definimos a assinatura em Python para o DSPy ler,
+# mas por trás dos panos, ela chama a nossa ponte HTTP acima!
+def run_shell_command(command: str, session_id: str = "debug-session") -> str:
+    """
+    Executes a bash command safely via the Rust Host.
+    Use this to read files (cat/ls), explore the system, or modify files.
+    """
+    return call_rust_tool(session_id, "run_shell_command", {"command": command})
