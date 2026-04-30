@@ -132,6 +132,7 @@ fn render_canvas(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                 TaskStatus::Done => ("󰄬", colors::SUCCESS),
                 TaskStatus::Failed => ("󰅖", colors::ERROR),
                 TaskStatus::Queued => ("󰔟", colors::MUTED),
+                TaskStatus::WaitingForBreakpoint => ("󰂖", colors::WARNING),
             };
 
             lines.push(Line::from(vec![
@@ -147,7 +148,7 @@ fn render_canvas(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                 Span::styled(
                     &task.description,
                     Style::default()
-                        .fg(if task.status == TaskStatus::Running {
+                        .fg(if task.status == TaskStatus::Running || task.status == TaskStatus::WaitingForBreakpoint {
                             colors::FG
                         } else {
                             colors::FG_DIM
@@ -346,7 +347,7 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(if busy { colors::ACCENT } else { colors::MUTED }))
+        .border_style(Style::default().fg(if app.pending_breakpoint.is_some() { colors::WARNING } else if busy { colors::ACCENT } else { colors::MUTED }))
         .style(Style::default().bg(colors::GLASS_BG_DIM));
 
     f.render_widget(Paragraph::new(Line::from(spans)).block(block), padded_area);

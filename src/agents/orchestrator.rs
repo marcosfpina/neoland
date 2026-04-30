@@ -9,6 +9,7 @@ use std::{
 use anyhow::Result;
 use serde_json::json;
 use sqlx::PgPool;
+use crate::mcp::server::{NativeMcpServer, BreakpointResolution, BreakpointRequest, NativeTool};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -36,6 +37,8 @@ pub struct AgentOrchestrator {
     matrix: Option<Arc<MatrixClient>>,
     steering_channels:
         tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::mpsc::Sender<String>>>,
+    pub native_mcp: Option<Arc<NativeMcpServer>>,
+    pending_breakpoints: tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::oneshot::Sender<BreakpointResolution>>>,
 }
 
 impl AgentOrchestrator {
@@ -56,11 +59,18 @@ impl AgentOrchestrator {
             mcp: None,
             matrix: None,
             steering_channels: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            native_mcp: None,
+            pending_breakpoints: tokio::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
 
     /// Attach a NATS publisher. Called after async NATS connection is
     /// established.
+    pub fn with_native_mcp(mut self, mcp: NativeMcpServer) -> Self {
+        self.native_mcp = Some(Arc::new(mcp));
+        self
+    }
+
     pub fn with_nats(mut self, publisher: NatsPublisher) -> Self {
         self.nats = Some(publisher);
         self
@@ -84,7 +94,7 @@ impl AgentOrchestrator {
         self
     }
 
-    fn publish(&self, event: AgentEvent) {
+    pub fn publish(&self, event: AgentEvent) {
         if let Some(tx) = &self.event_bus {
             let _ = tx.send(event);
         }
@@ -448,5 +458,25 @@ impl AgentOrchestrator {
     #[instrument(skip(self))]
     pub async fn health_check(&self) -> Result<bool> {
         self.client.health_check().await
+    }
+
+    pub async fn register_breakpoint(
+        &self,
+        session_id: Uuid,
+        resolve_tx: tokio::sync::oneshot::Sender<BreakpointResolution>,
+    ) {
+        self.pending_breakpoints.lock().await.insert(session_id, resolve_tx);
+    }
+
+    pub async fn resolve_breakpoint(
+        &self,
+        session_id: Uuid,
+        resolution: BreakpointResolution,
+    ) -> Result<()> {
+        let mut lock = self.pending_breakpoints.lock().await;
+        if let Some(tx) = lock.remove(&session_id) {
+            let _ = tx.send(resolution);
+        }
+        Ok(())
     }
 }

@@ -1,6 +1,7 @@
 pub mod client;
 pub mod registry;
 pub mod types;
+pub mod server;
 
 pub use client::McpClient;
 pub use registry::McpRegistry;

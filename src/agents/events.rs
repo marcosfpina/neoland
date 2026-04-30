@@ -38,6 +38,16 @@ pub enum AgentEvent {
         tool: String,
         error: String,
     },
+    BreakpointHit {
+        session_id: Uuid,
+        tool: String,
+        args_summary: String,
+    },
+    BreakpointResolved {
+        session_id: Uuid,
+        tool: String,
+        resolution: String, // Approve, Reject, Steer
+    },
     AdrCheckpoint {
         session_id: Uuid,
         adr_id: String,
@@ -75,6 +85,8 @@ impl AgentEvent {
             | Self::ToolCallStarted { session_id, .. }
             | Self::ToolCallDone { session_id, .. }
             | Self::ToolCallFailed { session_id, .. }
+            | Self::BreakpointHit { session_id, .. }
+            | Self::BreakpointResolved { session_id, .. }
             | Self::AdrCheckpoint { session_id, .. }
             | Self::PipelineDone { session_id, .. }
             | Self::PipelineError { session_id, .. }

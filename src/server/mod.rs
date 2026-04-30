@@ -35,6 +35,7 @@ use tokio_stream::{
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 use tracing::Instrument; // Phase 4.2: For span instrumentation
 
+use crate::mcp::server::{NativeMcpServer, BreakpointResolution};
 use crate::{
     agents::{events::AgentEvent, orchestrator::AgentOrchestrator},
     audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
@@ -1076,6 +1077,40 @@ async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
     }
 }
 
+#[derive(Deserialize)]
+pub struct BreakpointResolvePayload {
+    pub resolution: String, // "approve", "reject", "steer"
+    pub instruction: Option<String>,
+}
+
+/// POST /v1/agents/session/:id/breakpoint/resolve
+#[utoipa::path(
+    post,
+    path = "/v1/agents/session/{id}/breakpoint/resolve",
+    tag = "agents",
+    params(("id" = uuid::Uuid, Path, description = "Session UUID")),
+    request_body = BreakpointResolvePayload,
+)]
+pub async fn resolve_agent_breakpoint(
+    State(state): State<Arc<AppState>>,
+    Path(session_id): Path<uuid::Uuid>,
+    Json(payload): Json<BreakpointResolvePayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    
+    let resolution = match payload.resolution.as_str() {
+        "approve" => BreakpointResolution::Approve,
+        "steer" => BreakpointResolution::Steer(payload.instruction.unwrap_or_default()),
+        _ => BreakpointResolution::Reject,
+    };
+
+    if orch.resolve_breakpoint(session_id, resolution).await.is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(Json(serde_json::json!({ "status": "resolved" })))
+}
+
 /// GET /v1/agents/events — global SSE stream of all agent pipeline events.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
 async fn agent_events_handler(
@@ -1272,6 +1307,17 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                         let cfg = crate::config::Config::load();
                         match AgentOrchestrator::new(pool, &cfg.agents) {
                             Ok(orch) => {
+                                // Initialize Native MCP Server and Background Task
+                                let (bp_tx, mut bp_rx) = tokio::sync::mpsc::channel(100);
+                                let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> = vec![
+                                    Box::new(crate::tools::shell::RunShellCommand),
+                                ];
+                                let native_mcp = NativeMcpServer::new(tools, bp_tx);
+                                
+                                // We will attach the task listener later, for now we just attach the MCP
+                                // to the orchestrator
+                                let orch = orch.with_native_mcp(native_mcp);
+
                                 // Optionally attach NATS publisher (Ciclo 1 — Fase B)
                                 let orch = if cfg.nats.enabled {
                                     use crate::agents::nats::NatsPublisher;
@@ -1327,7 +1373,15 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                     dspy_url = %cfg.agents.dspy_url,
                                     "🤖 Agent orchestrator initialized"
                                 );
-                                Some(Arc::new(orch))
+                                let orch_arc = Arc::new(orch);
+                                let orch_clone = orch_arc.clone();
+                                tokio::spawn(async move {
+                                    while let Some(req) = bp_rx.recv().await {
+                                        orch_clone.register_breakpoint(req.session_id, req.resolve_tx).await;
+                                        orch_clone.publish(AgentEvent::BreakpointHit { session_id: req.session_id, tool: req.tool_name, args_summary: req.args_summary });
+                                    }
+                                });
+                                Some(orch_arc)
                             },
                             Err(e) => {
                                 tracing::warn!(error = %e, "AgentOrchestrator init failed");
@@ -1377,6 +1431,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         .route("/v1/agents/sessions", get(list_agent_sessions))
         .route("/v1/agents/session/:id", get(get_agent_session))
         .route("/v1/agents/session/:id/steer", post(steer_agent_task))
+        .route("/v1/agents/session/:id/breakpoint/resolve", post(resolve_agent_breakpoint))
         .route("/v1/agents/events", get(agent_events_handler))
         .route("/v1/agents/events/:session", get(agent_events_session_handler))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware))

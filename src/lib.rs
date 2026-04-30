@@ -13,6 +13,7 @@ pub mod llm;
 pub mod logging; // Phase 4.2: Structured Logging
 pub mod matrix;
 pub mod mcp;
+pub mod tools;
 pub mod metrics; // Phase 4.1: Prometheus Metrics
 pub mod ml_offload;
 pub mod nlp;
