@@ -180,7 +180,7 @@
             sleep 2
             
             # Launch TUI in the foreground (takes over the screen)
-            neoland client
+            NEOLAND_API_KEY="neoland_admin_53352f54e22da11f63edc17380c7bb48aef08811c0872caa" neoland client
             
             # When TUI exits, the trap won't catch it cleanly unless we kill manually
             echo "🛑 Shutting down backend services..."
