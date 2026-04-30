@@ -1,51 +1,27 @@
-import { Activity, Cpu, Shield } from "lucide-react"
+import { Zap } from "lucide-react"
 
-import { EcosystemMap } from "@/components/services/ecosystem-map"
-import { MetricCard } from "@/components/shared/metric-card"
-import { PageHeader } from "@/components/shared/page-header"
-import { getServicesSnapshot } from "@/lib/neoland/server"
-
-export const dynamic = "force-dynamic"
-
-export default async function ServicesPage() {
-  const services = await getServicesSnapshot()
-  const upCount = services.filter((service) => service.status === "up").length
-  const degradedCount = services.filter((service) => service.status === "degraded").length
-  const stubCount = services.filter((service) => service.status === "stub").length
-
+export default function ServicesPage() {
   return (
-    <div className="space-y-8">
-      <PageHeader
-        eyebrow="Services"
-        title="Ecosystem map"
-        description="This page aggregates live health probes from the control plane and configured ecosystem services. Stub is a first-class state for services not bound yet."
-      />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard
-          label="Live services"
-          value={upCount}
-          detail="Services currently reporting healthy or reachable."
-          icon={<Activity className="size-5" />}
-          tone="approve"
-        />
-        <MetricCard
-          label="Degraded"
-          value={degradedCount}
-          detail="Surfaces that answer, but not in a fully healthy state."
-          icon={<Cpu className="size-5" />}
-          tone="warning"
-        />
-        <MetricCard
-          label="Stub services"
-          value={stubCount}
-          detail="Known surfaces intentionally not wired into the environment yet."
-          icon={<Shield className="size-5" />}
-          tone="accent"
-        />
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="p-3 bg-pink-500/10 border border-pink-500/20 rounded-xl">
+          <Zap className="w-6 h-6 text-pink-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Service Health</h1>
+          <p className="text-muted-foreground">Ecosystem status and control-plane health</p>
+        </div>
       </div>
 
-      <EcosystemMap services={services} />
+      <div className="rounded-xl border border-border/70 bg-card/50 p-12 text-center border-dashed">
+        <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+        </div>
+        <h3 className="text-lg font-medium text-foreground mb-2">Connecting to Control Plane</h3>
+        <p className="text-muted-foreground max-w-sm mx-auto">
+          Waiting to establish connection with the Neoland Core API on port 3001 to fetch active system topology.
+        </p>
+      </div>
     </div>
   )
 }

@@ -1,48 +1,27 @@
-import Link from "next/link"
-import { BookCopy, History, Radar } from "lucide-react"
+import { Terminal } from "lucide-react"
 
-import { PipelineRunner } from "@/components/pipeline/pipeline-runner"
-import { PageHeader } from "@/components/shared/page-header"
-import { Button } from "@/components/ui/button"
-import { getServicesSnapshot } from "@/lib/neoland/server"
-
-export const dynamic = "force-dynamic"
-
-export default async function PipelinePage() {
-  const services = await getServicesSnapshot()
-  const pipelineStatus = services.find((service) => service.id === "pipeline")?.status || "stub"
-
+export default function PipelinePage() {
   return (
-    <div className="space-y-8">
-      <PageHeader
-        eyebrow="Pipeline"
-        title="Run the Neoland multi-agent flow"
-        description="This surface dispatches real tasks to the control plane and renders the final pipeline payload without inventing extra steps or browser-side mock stages."
-        actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/services">
-                <Radar className="size-4" />
-                Check services
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/adr">
-                <BookCopy className="size-4" />
-                Open vault
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/pipeline-history">
-                <History className="size-4" />
-                History
-              </Link>
-            </Button>
-          </>
-        }
-      />
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+          <Terminal className="w-6 h-6 text-emerald-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Pipeline Live View</h1>
+          <p className="text-muted-foreground">Execution tracking and agent progression</p>
+        </div>
+      </div>
 
-      <PipelineRunner pipelineStatus={pipelineStatus} />
+      <div className="rounded-xl border border-border/70 bg-card/50 p-12 text-center border-dashed">
+        <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
+          <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+        </div>
+        <h3 className="text-lg font-medium text-foreground mb-2">Awaiting Backend Contract</h3>
+        <p className="text-muted-foreground max-w-sm mx-auto">
+          The pipeline execution view is currently in degraded state while the Neoland backend orchestrator completes its API integration.
+        </p>
+      </div>
     </div>
   )
 }

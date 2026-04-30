@@ -54,25 +54,4 @@ export const neolandNavigation: NeolandNavigationItem[] = [
     description: "Monitor the ecosystem map and service health.",
     icon: Radar,
   },
-  {
-    href: "/agents",
-    label: "Agents",
-    shortLabel: "Agents",
-    description: "Stage metrics derived from real ADR history.",
-    icon: Cpu,
-  },
-  {
-    href: "/phantom",
-    label: "Phantom",
-    shortLabel: "Phantom",
-    description: "Inspect the security-service seam for future scans.",
-    icon: Shield,
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    shortLabel: "Settings",
-    description: "Review current control-plane bindings and secrets posture.",
-    icon: SlidersHorizontal,
-  },
 ]

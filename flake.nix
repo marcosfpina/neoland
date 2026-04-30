@@ -78,28 +78,28 @@
               coreutils
               gitMinimal
               sops
+              socat
               rustToolchain
             ];
-            text =
-              ''
-                project_root="''${NEOLAND_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-                script="$project_root/scripts/neoland-run.sh"
+            text = ''
+              project_root="''${NEOLAND_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+              script="$project_root/scripts/neoland-run.sh"
 
-                if [ ! -f "$script" ]; then
-                  echo "neoland wrapper could not find $script" >&2
-                  exit 1
-                fi
-              ''
-              + (
-                if subcommand == null then
-                  ''
-                    exec ${pkgs.bash}/bin/bash "$script" "$@"
-                  ''
-                else
-                  ''
-                    exec ${pkgs.bash}/bin/bash "$script" ${pkgs.lib.escapeShellArg subcommand} "$@"
-                  ''
-              );
+              if [ ! -f "$script" ]; then
+                echo "neoland wrapper could not find $script" >&2
+                exit 1
+              fi
+            ''
+            + (
+              if subcommand == null then
+                ''
+                  exec ${pkgs.bash}/bin/bash "$script" "$@"
+                ''
+              else
+                ''
+                  exec ${pkgs.bash}/bin/bash "$script" ${pkgs.lib.escapeShellArg subcommand} "$@"
+                ''
+            );
           };
 
         neolandCmd = mkNeolandCommand {
@@ -155,7 +155,22 @@
           '';
         };
 
+
+        neolandGodModeCmd = pkgs.writeShellApplication {
+          name = "neoland-up";
+          runtimeInputs = [ pkgs.tmux ];
+          text = ''
+            echo "🚀 Launching Neoland Full Stack (God Mode)..."
+            tmux new-session -d -s neoland-stack "neoland server"
+            tmux split-window -h "cd agents && poetry run uvicorn neoland_agents.app:app --port 8001"
+            tmux select-pane -t 0
+            tmux split-window -v "sleep 2 && neoland client"
+            tmux -2 attach-session -t neoland-stack
+          '';
+        };
+
         neolandCommandPackages = [
+          neolandGodModeCmd
           neolandCmd
           neolandServerCmd
           neolandClientCmd
@@ -255,7 +270,10 @@
 
         frontendHealthCmd = pkgs.writeShellApplication {
           name = "frontend-health";
-          runtimeInputs = with pkgs; [ curl jq ];
+          runtimeInputs = with pkgs; [
+            curl
+            jq
+          ];
           text = ''
             frontend_url="''${NEOLAND_FRONTEND_URL:-http://''${NEOLAND_FRONTEND_HOST:-127.0.0.1}:''${NEOLAND_FRONTEND_PORT:-3006}}"
             curl -fsS "$frontend_url/api/health" | jq . || {
@@ -352,19 +370,23 @@
             protobuf # Necessário para gRPC/Prost
           ];
 
-          buildInputs = with pkgs; [
-            rustToolchain
-            cargo-audit   # supply-chain CVE scanning — `cargo audit` no CI e local
-            openssl
-            sops
-            age
-            bun
-            curl
-            jq
-            nodejs_24
-            python313
-            poetry
-          ] ++ frontendCommandPackages ++ neolandCommandPackages;
+          buildInputs =
+            with pkgs;
+            [
+              rustToolchain
+              cargo-audit # supply-chain CVE scanning — `cargo audit` no CI e local
+              openssl
+              sops
+              age
+              bun
+              curl
+              jq
+              nodejs_24
+              python313
+              poetry
+            ]
+            ++ frontendCommandPackages
+            ++ neolandCommandPackages;
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
