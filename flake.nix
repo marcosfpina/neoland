@@ -156,16 +156,36 @@
         };
 
 
+        
         neolandGodModeCmd = pkgs.writeShellApplication {
           name = "neoland-up";
-          runtimeInputs = [ pkgs.tmux ];
           text = ''
             echo "🚀 Launching Neoland Full Stack (God Mode)..."
-            tmux new-session -d -s neoland-stack "neoland server"
-            tmux split-window -h "cd agents && poetry run uvicorn neoland_agents.app:app --port 8001"
-            tmux select-pane -t neoland-stack:0.0
-            tmux split-window -v "sleep 2 && neoland client"
-            tmux -2 attach-session -t neoland-stack
+            
+            # Trap SIGINT to kill background processes gracefully
+            trap 'echo "🛑 Shutting down Neoland..."; kill $(jobs -p) 2>/dev/null; exit' SIGINT SIGTERM
+            
+            # Start Server in background
+            echo "📡 Starting Control Plane (Port 3001/50051)..."
+            neoland server &
+            SERVER_PID=$!
+            
+            # Start DSPy Python Agents in background
+            echo "🧠 Starting DSPy Agents (Port 8001)..."
+            (cd agents && poetry run uvicorn neoland_agents.app:app --port 8001) > /dev/null 2>&1 &
+            AGENTS_PID=$!
+            
+            # Wait for ports to bind before starting the TUI
+            echo "⏳ Waiting for services to become healthy..."
+            sleep 2
+            
+            # Launch TUI in the foreground (takes over the screen)
+            neoland client
+            
+            # When TUI exits, the trap won't catch it cleanly unless we kill manually
+            echo "🛑 Shutting down backend services..."
+            kill $SERVER_PID 2>/dev/null || true
+            kill $AGENTS_PID 2>/dev/null || true
           '';
         };
 
