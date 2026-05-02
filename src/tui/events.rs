@@ -11,8 +11,5 @@ pub enum Action {
     CancelTask,         // ^x
     FocusNextPanel,     // tab
     FocusPrevPanel,     // shift+tab
-    ToggleLlamaManager, // ^l
-    LlamaManagerRun,    // r or enter
-    LlamaManagerStop,   // s or ctrl+c
     ResolveBreakpoint { resolution: String, instruction: Option<String> }, // Enter/Esc during Breakpoint
 }

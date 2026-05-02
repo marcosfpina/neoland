@@ -121,109 +121,6 @@ pub struct AgentHealthResponse {
     pub pipeline: String,
 }
 
-// ─── Handler doc stubs (no-op — real handlers live in server/mod.rs) ─────────
-
-/// POST /v1/agents/task
-///
-/// Submit a task to the multi-agent DSPy ADR pipeline.
-/// Runs Junior → Senior → (Architect?) → TechLeader and returns the full result
-/// plus an ADR checkpoint written to disk.
-#[utoipa::path(
-    post,
-    path = "/v1/agents/task",
-    tag = "agents",
-    security(("api_key" = [])),
-    request_body = AgentTaskRequest,
-    responses(
-        (status = 200, description = "Pipeline completed", body = PipelineResult),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
-        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
-    )
-)]
-pub fn _doc_submit_agent_task() {}
-
-/// GET /v1/agents/session/{id}
-///
-/// Retrieve session state (task count, last decision, active flag).
-#[utoipa::path(
-    get,
-    path = "/v1/agents/session/{id}",
-    tag = "agents",
-    security(("api_key" = [])),
-    params(
-        ("id" = String, Path, description = "Session UUID", format = "uuid")
-    ),
-    responses(
-        (status = 200, description = "Session found", body = SessionState),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
-        (status = 404, description = "Session not found", body = ErrorResponse),
-    )
-)]
-pub fn _doc_get_agent_session() {}
-
-/// GET /v1/agents/sessions
-///
-/// Retrieve recent sessions ordered by latest activity.
-#[utoipa::path(
-    get,
-    path = "/v1/agents/sessions",
-    tag = "agents",
-    security(("api_key" = [])),
-    params(
-        ("limit" = Option<u32>, Query, description = "Maximum number of sessions to return")
-    ),
-    responses(
-        (status = 200, description = "Recent sessions", body = [SessionState]),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
-        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
-    )
-)]
-pub fn _doc_list_agent_sessions() {}
-
-/// GET /v1/agents/health
-///
-/// Health check for the DSPy Python pipeline (no auth required).
-#[utoipa::path(
-    get,
-    path = "/v1/agents/health",
-    tag = "agents",
-    responses(
-        (status = 200, description = "Pipeline up", body = AgentHealthResponse),
-        (status = 503, description = "Pipeline down or disabled", body = AgentHealthResponse),
-    )
-)]
-pub fn _doc_agent_health() {}
-
-/// GET /health
-///
-/// Service health (no auth required). Returns component status map.
-#[utoipa::path(
-    get,
-    path = "/health",
-    tag = "system",
-    responses(
-        (status = 200, description = "Service healthy"),
-        (status = 503, description = "Service degraded or unhealthy"),
-    )
-)]
-pub fn _doc_health() {}
-
-/// GET /metrics
-///
-/// Prometheus metrics endpoint (no auth required).
-#[utoipa::path(
-    get,
-    path = "/metrics",
-    tag = "system",
-    responses(
-        (status = 200, description = "Prometheus text format metrics"),
-    )
-)]
-pub fn _doc_metrics() {}
-
-// ─── Security modifier
-// ────────────────────────────────────────────────────────
-
 struct ApiKeyAuth;
 
 impl Modify for ApiKeyAuth {
@@ -237,9 +134,6 @@ impl Modify for ApiKeyAuth {
     }
 }
 
-// ─── OpenAPI document
-// ─────────────────────────────────────────────────────────
-
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -250,12 +144,12 @@ impl Modify for ApiKeyAuth {
         license(name = "Proprietary")
     ),
     paths(
-        _doc_submit_agent_task,
-        _doc_list_agent_sessions,
-        _doc_get_agent_session,
-        _doc_agent_health,
-        _doc_health,
-        _doc_metrics,
+        crate::server::submit_agent_task,
+        crate::server::list_agent_sessions,
+        crate::server::get_agent_session,
+        crate::server::agent_health_handler,
+        crate::server::health_handler,
+        crate::server::metrics_handler,
     ),
     components(schemas(
         AgentTaskRequest,

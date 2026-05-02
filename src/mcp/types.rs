@@ -29,8 +29,7 @@ pub struct JsonRpcError {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[derive(Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tool {
     pub name: String,
     pub description: String,

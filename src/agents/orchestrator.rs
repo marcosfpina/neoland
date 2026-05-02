@@ -9,7 +9,6 @@ use std::{
 use anyhow::Result;
 use serde_json::json;
 use sqlx::PgPool;
-use crate::mcp::server::{NativeMcpServer, BreakpointResolution, BreakpointRequest, NativeTool};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -23,7 +22,10 @@ use crate::{
     },
     config::AgentsConfig,
     matrix::{AgentRunMetrics, MatrixClient, PipelineAgents, PipelineMetricsPayload},
-    mcp::McpRegistry,
+    mcp::{
+        server::{BreakpointResolution, NativeMcpServer},
+        McpRegistry,
+    },
     metrics::utils as metrics,
 };
 
@@ -38,7 +40,9 @@ pub struct AgentOrchestrator {
     steering_channels:
         tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::mpsc::Sender<String>>>,
     pub native_mcp: Option<Arc<NativeMcpServer>>,
-    pending_breakpoints: tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::oneshot::Sender<BreakpointResolution>>>,
+    pending_breakpoints: tokio::sync::Mutex<
+        std::collections::HashMap<Uuid, tokio::sync::oneshot::Sender<BreakpointResolution>>,
+    >,
 }
 
 impl AgentOrchestrator {
