@@ -1,0 +1,16 @@
+{
+  "editor.formatOnSave": true,
+  "editor.rulers": [100],
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.linkedProjects": ["Cargo.toml"],
+  "files.exclude": {
+    "target/**": true,
+  },
+  "files.watcherExclude": {
+    "target/**": true,
+  },
+  "search.exclude": {
+    "target/**": true,
+  },
+}
