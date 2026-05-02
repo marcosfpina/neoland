@@ -1,0 +1,194 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build (release)",
+      "type": "shell",
+      "command": "cargo build --release",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$rustc"],
+      "detail": "Build the project in release mode"
+    },
+    {
+      "label": "Build (debug)",
+      "type": "shell",
+      "command": "cargo build",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$rustc"],
+      "detail": "Build the project in debug mode"
+    },
+    {
+      "label": "Check (cargo check)",
+      "type": "shell",
+      "command": "cargo check --lib",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$rustc"],
+      "detail": "Check code compiles without producing artifacts"
+    },
+    {
+      "label": "Lint (clippy)",
+      "type": "shell",
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$rustc"],
+      "detail": "Run clippy lints with deny-level warnings"
+    },
+    {
+      "label": "Format (rustfmt)",
+      "type": "shell",
+      "command": "cargo fmt",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Format all Rust source files"
+    },
+    {
+      "label": "Format check",
+      "type": "shell",
+      "command": "cargo fmt -- --check",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Check formatting without modifying files"
+    },
+    {
+      "label": "Test (lib)",
+      "type": "shell",
+      "command": "cargo test --lib",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Run all library unit tests"
+    },
+    {
+      "label": "Test (all)",
+      "type": "shell",
+      "command": "cargo test",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Run all tests including integration tests"
+    },
+    {
+      "label": "Test (CLI)",
+      "type": "shell",
+      "command": "cargo test cli::tests",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Run CLI-specific unit tests"
+    },
+    {
+      "label": "Run server",
+      "type": "shell",
+      "command": "cargo run -- server",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "detail": "Start the Neoland gRPC/REST server"
+    },
+    {
+      "label": "Run client (TUI)",
+      "type": "shell",
+      "command": "cargo run -- client",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "detail": "Launch the Neoland TUI client"
+    },
+    {
+      "label": "Run doctor",
+      "type": "shell",
+      "command": "cargo run -- doctor --json",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Run environment diagnostics with JSON output"
+    },
+    {
+      "label": "Clean",
+      "type": "shell",
+      "command": "cargo clean",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Remove build artifacts"
+    },
+    {
+      "label": "Audit (cargo audit)",
+      "type": "shell",
+      "command": "cargo audit",
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "detail": "Check dependencies for known security vulnerabilities"
+    }
+  ]
+}

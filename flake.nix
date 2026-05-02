@@ -155,33 +155,31 @@
           '';
         };
 
-
-        
         neolandGodModeCmd = pkgs.writeShellApplication {
           name = "neoland-up";
           text = ''
             echo "🚀 Launching Neoland Full Stack (God Mode)..."
-            
+
             # Trap SIGINT to kill background processes gracefully
             trap 'echo "🛑 Shutting down Neoland..."; kill $(jobs -p) 2>/dev/null; exit' SIGINT SIGTERM
-            
+
             # Start Server in background
             echo "📡 Starting Control Plane (Port 3001/50051)..."
             neoland server &
             SERVER_PID=$!
-            
+
             # Start DSPy Python Agents in background
             echo "🧠 Starting DSPy Agents (Port 8001)..."
             (cd agents && poetry run uvicorn neoland_agents.app:app --port 8001) > /dev/null 2>&1 &
             AGENTS_PID=$!
-            
+
             # Wait for ports to bind before starting the TUI
             echo "⏳ Waiting for services to become healthy..."
             sleep 2
-            
+
             # Launch TUI in the foreground (takes over the screen)
             NEOLAND_API_KEY="neoland_admin_53352f54e22da11f63edc17380c7bb48aef08811c0872caa" neoland client
-            
+
             # When TUI exits, the trap won't catch it cleanly unless we kill manually
             echo "🛑 Shutting down backend services..."
             kill $SERVER_PID 2>/dev/null || true
@@ -388,6 +386,8 @@
           nativeBuildInputs = with pkgs; [
             pkg-config
             protobuf # Necessário para gRPC/Prost
+            just
+            direnv
           ];
 
           buildInputs =
@@ -453,51 +453,24 @@
             if [[ $- == *i* ]]; then
               echo ""
               echo "┌─────────────────────────────────────────────────────────────────┐"
-              echo "│  🚀 Neoland Development Environment (v0.1.0)                   │"
-              echo "│  AI Agent Platform | Security-First Architecture             │"
+              echo "│  🚀  Neoland Dev Shell (v0.1.0)                               │"
+              echo "│  just → list all commands                                      │"
               echo "└─────────────────────────────────────────────────────────────────┘"
               echo ""
-              echo "📦 Quick Commands:"
-              echo "  cargo check              # Validate compilation"
-              echo "  cargo build --release    # Build optimized binary"
-              echo "  cargo test               # Run test suite"
+              echo -e "  \033[1mjust\033[0m  check     cargo check --lib (fast)"
+              echo -e "  \033[1mjust\033[0m  clippy    cargo clippy --all-targets -- -D warnings"
+              echo -e "  \033[1mjust\033[0m  test      cargo test --lib"
+              echo -e "  \033[1mjust\033[0m  build     cargo build --release"
+              echo -e "  \033[1mjust\033[0m  server    cargo run -- server"
+              echo -e "  \033[1mjust\033[0m  client    cargo run -- client"
+              echo -e "  \033[1mjust\033[0m  doctor    cargo run -- doctor --json"
+              echo -e "  \033[1mjust\033[0m  setup-all setup hooks + direnv"
+              echo -e "  \033[1mjust\033[0m  validate  production readiness check"
+              echo "  Run \`just\` for the full list"
               echo ""
-              echo "🔧 Development:"
-              echo "  neoland server           # Unified CLI wrapper in the dev shell"
-              echo "  neoland-server           # Start gRPC + REST server"
-              echo "  neoland-client           # Launch TUI client"
-              echo "  neoland-test / doctor / restart"
-              echo "  nsrv / ncli              # Short server/client shortcuts"
-              echo ""
-              echo "🌐 Frontend:"
-              echo "  frontend-install         # Install matrix/apps/frontend dependencies"
-              echo "  frontend-dev             # Run Next.js on $NEOLAND_FRONTEND_URL"
-              echo "  frontend-build           # Production build for the Neoland web surface"
-              echo "  frontend-start           # Start production Next.js server"
-              echo "  frontend-lint            # Lint current frontend scope"
-              echo "  frontend-clean           # Remove .next when Next dev cache gets stuck"
-              echo "  frontend-health          # Query /api/health for the frontend"
-              echo "  frontend-stack           # Check frontend + control plane + DSPy reachability"
-              echo "  nfdev / nfbuild / nflint / nfhealth / nfclean"
-              echo ""
-              echo "🧠 LLM Runtime:"
-              echo "  services.securellm-bridge-api via nixosModules.securellmBridgeApi"
-              echo "  services.ml-ops-api via nixosModules.mlOpsApi"
-              echo "  LLAMACPP_URL=$LLAMACPP_URL"
-              echo ""
-              echo "🔐 Secrets:"
-              echo "  neoland-secrets          # Edit secrets/neoland.sops.env with SOPS"
-              echo "  NEOLAND_SOPS_ENV_FILE    # Override the default encrypted dotenv path"
-              echo ""
-              echo "📊 Validation:"
-              echo "  nix flake check          # Validate flake"
-              echo "  cargo clippy             # Linter checks"
-              echo ""
-              echo "📚 Documentation:"
-              echo "  docs/ADR.md              # Architecture Decision Records"
-              echo "  README.md                # Project overview + roadmap"
-              echo ""
-              echo "🤖 Agents (DSPy pipeline):"
+              echo "🔧 Legacy shortcuts also available:"
+              echo "  neoland-server / neoland-client / neoland-test / neoland-doctor"
+              echo "  nsrv / ncli  # short server/client"
               echo "  agents-start             # Start DSPy pipeline (:8001)"
               echo "  agents-test-contract     # Run schema tests (sem LLM)"
               echo "  agents-test-integration  # Run integration tests (requer LLM_API_KEY)"
