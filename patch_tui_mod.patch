@@ -1,0 +1,96 @@
+--- src/tui/mod.rs
++++ src/tui/mod.rs
+@@ -19,8 +19,6 @@
+ use anyhow::Result;
+ 
+ pub mod app;
+ pub mod events;
+ pub mod presets;
+ pub mod ui;
+ 
+@@ -69,9 +67,6 @@
+     let mut tick = tokio::time::interval(Duration::from_millis(80));
+     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+ 
+-    let models = llama_manager_logic::scan_models().await;
+-    app.llama_state.available_models = models;
+-
+     loop {
+         tokio::select! {
+             _ = tick.tick() => {
+@@ -266,43 +261,6 @@
+                                 app.focus_prev_panel();
+                             }
+ 
+-                            Action::ToggleLlamaManager => {
+-                                app.mode = match app.mode {
+-                                    app::AppMode::Workstation => app::AppMode::LlamaManager,
+-                                    app::AppMode::LlamaManager => app::AppMode::Workstation,
+-                                };
+-                            }
+-
+-                            Action::LlamaManagerRun => {
+-                                if app.mode == app::AppMode::LlamaManager && !app.llama_state.is_running {
+-                                    let index = app.llama_state.selected_index;
+-                                    if index < app.llama_state.available_models.len() {
+-                                        let model = app.llama_state.available_models[index].clone();
+-                                        app.llama_state.is_running = true;
+-                                        let flags = app.llama_state.flags.clone();
+-                                        let logs = app.llama_state.logs.clone();
+-                                        let child_process = app.llama_state.child_process.clone();
+-                                        tokio::spawn(async move {
+-                                            if let Err(e) = llama_manager_logic::run_llama_server(model, flags, logs, child_process).await {
+-                                                eprintln!("Failed to run llama server: {}", e);
+-                                            }
+-                                        });
+-                                    }
+-                                }
+-                            }
+-
+-                            Action::LlamaManagerStop => {
+-                                if app.mode == app::AppMode::LlamaManager && app.llama_state.is_running {
+-                                    app.llama_state.is_running = false;
+-                                    let logs = app.llama_state.logs.clone();
+-                                    let child_process = app.llama_state.child_process.clone();
+-                                    tokio::spawn(async move {
+-                                        if let Err(e) = llama_manager_logic::stop_llama_server(child_process, logs).await {
+-                                            eprintln!("Failed to stop llama server: {}", e);
+-                                        }
+-                                    });
+-                                }
+-                            }
+-
+                             Action::CancelTask => {
+                                 if let Some(id) = app.active_task_id {
+                                     app.complete_task(id, false);
+@@ -374,32 +332,6 @@
+         },
+ 
+-        // ── Llama Manager ─────────────────────────────────────────────
+-        (KeyCode::Char('l'), KeyModifiers::ALT) => return Action::ToggleLlamaManager,
+-        (KeyCode::Esc, _) => return Action::ToggleLlamaManager,
+-        (KeyCode::Char('r'), _) | (KeyCode::Enter, _) => return Action::LlamaManagerRun,
+-        (KeyCode::Char('s'), _) | (KeyCode::Char('c'), _) => return Action::LlamaManagerStop,
+-        (KeyCode::Up, _) => {
+-            if app.llama_state.selected_index > 0 {
+-                app.llama_state.selected_index -= 1;
+-            }
+-            return Action::None;
+-        },
+-        (KeyCode::Down, _) => {
+-            if app.llama_state.selected_index + 1 < app.llama_state.available_models.len() {
+-                app.llama_state.selected_index += 1;
+-            }
+-            return Action::None;
+-        },
+-
+         // ── Send message ──────────────────────────────────────────────
+         (KeyCode::Char('s'), KeyModifiers::CONTROL) if !app.input_buffer.is_empty() => {
+             let msg = std::mem::take(&mut app.input_buffer);
+@@ -432,7 +364,6 @@
+         (KeyCode::Char('p'), KeyModifiers::CONTROL) => return Action::TogglePipeline,
+         (KeyCode::Char('m'), KeyModifiers::CONTROL) => return Action::OpenMatrix,
+         (KeyCode::Char('x'), KeyModifiers::CONTROL) => return Action::CancelTask,
+-        (KeyCode::Char('l'), KeyModifiers::ALT) => return Action::ToggleLlamaManager,
+ 
+         // ── Clear ─────────────────────────────────────────────────────

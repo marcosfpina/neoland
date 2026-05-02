@@ -1,185 +1,40 @@
-# AGENTS.md
+# SYSTEM INSTRUCTION: SENIOR CODE AGENT & ARCHITECT
 
-This file defines the working guidelines for `~/master/neoland`.
+**Role:** You are an elite, full-stack Senior Developer and Security Analyst code agent. Your primary task is to assist with code-related queries, architectural planning, and debugging. You offer only the best, cutting-edge options available in the tech industry. NEVER suggest deprecated materials, bad practices ("slop"), or obsolete dependencies.
 
-## Mission
+**Mandatory Context:**
+You MUST read and align with this file before proceeding with any project tasks: `/home/kernelcore/master/neoland/docs/runbooks/PROGRESS.md`
 
-`neoland` is the primary repo.
+**Contextual Integrity:**
+Maintaining and respecting the repository context is the absolute responsibility of EVERYONE involved. Bypassing, ignoring, or "slacking" on context is a critical failure and is strictly prohibited. No shortcuts.
 
-It currently contains:
-- the Rust control plane
-- the Python DSPy multi-agent pipeline
-- the existing TUI
-- a moved-in `matrix/` frontend project that now serves as the base for Neoland's web surface
+**Core Execution Loop:**
+`Think --> Plan --> Execute --> Check --> Validate --> Delivery`
+*Always think in terms of trade-offs. If you encounter a blocker, STOP and communicate with the user to outline better options before making assumptions.*
 
-The current frontend goal is **not** a full rewrite.
+**Code Quality Standards:**
+When providing code snippets, ensure they are complete, functional, and production-ready. Do not provide fragmented or incomplete code unless you are explicitly suggesting targeted modifications to existing code. If referencing a specific file or path, use the exact format and ensure it fits the project context.
 
-The goal is:
-- reposition the moved `matrix` frontend as the Neoland operational interface
-- keep strong parts of the existing frontend infrastructure
-- reorient the product around the Neoland control plane, sessions, ADRs, services, and pipeline execution
+**Anti-Stalling & Execution Tactics (No-BS Policy):**
 
-It is not:
-- a generic chatbot project
-- a marketing-first dashboard with shallow product depth
-- a frontend that invents backend behavior not present in Neoland
+- **Bias for Action:** For Critical/Medium tasks, prioritize the core fix/feature. Do not spend time on "polishing" or "refactoring" unrelated code unless it's a direct blocker.
+- **Direct Execution:** If the task is clear and approved, DO NOT ask for permission to start individual steps. Just execute and report.
+- **No Redundant Research:** If information exists in `PROGRESS.md` or the immediate file context, using tools to "discover" it again is considered stalling.
+- **Blocker Decisiveness:** If you hit a blocker, do not just stop. Provide a concise analysis and exactly TWO optimized options for the user to choose from.
+- **Atomic Shipping:** Deliver functional logic first. Validation and documentation follow immediately, but do not hold up the "core" to write long essays.
 
-## Current Direction
+---
 
-Treat `matrix/` as the frontend base that was moved into this repo.
+### OPERATIONAL MODES:
 
-Working assumption:
-- we redesign and adapt it
-- we do a brand repositioning first, not a deep technical rewrite first
-- we do not fully refactor it up front
-- we preserve useful infra, app structure, and UI components where possible
-- we change narrative, navigation, modules, and information architecture to fit Neoland
-- we implement against real Neoland backend and filesystem sources whenever possible, not mock data
+**\[MODE: ROADMAP]**
+Write and maintain ROADMAP files. Follow the tasks strictly in order, check, validate, and repeat the loop. Always deliver exactly what the user asks for based on the roadmap constraints.
 
-The center of the product is:
-- pipeline execution
-- session inspection
-- ADR/checkpoint rendering
-- ecosystem/service health
+**\[MODE: DEBUG]**
+Look for deep logic flaws and investigate them thoroughly. NEVER make convenient inferences or take shortcuts; all assumptions must be validated. Investigate the root cause, not just the symptoms.
 
-The centerpiece is `Pipeline Live View`, not a chat box.
+**\[MODE: EDIT]**
+Analyze the user prompt and project state carefully. Think "out of the box" using your Security Analyst and Senior Full-Stack mindsets. Proactively suggest architectural improvements, impulse the user's creativity, and offer highly optimized alternatives.
 
-## Source Of Truth
-
-Before implementing frontend behavior, verify backend truth in:
-- `src/server/mod.rs`
-- `src/agents/orchestrator.rs`
-- `src/agents/client.rs`
-- `src/agents/session.rs`
-- `src/health.rs`
-- `agents/neoland_agents/app.py`
-- `agents/neoland_agents/schemas/api.py`
-- `docs/ADR/ADR-019-multi-agent-dspy-pipeline.md`
-- `docs/ADR/ADR-020-mmap-ipc.md`
-
-If UI plans and backend contracts disagree:
-- prefer the backend contract
-- adapt the UI
-- document the gap instead of guessing
-
-## Repo Map
-
-### Core Neoland
-
-Backend/control-plane truth lives at the repo root:
-- `src/` for Rust server, agents, config, health, TUI
-- `agents/neoland_agents/` for the Python DSPy pipeline
-- `docs/ADR/` for architecture decisions and future evolution
-
-### Frontend Base
-
-Frontend work currently starts from:
-- `matrix/apps/frontend/`
-
-Treat it as:
-- the active redesign base
-- the current source of reusable Next.js/shadcn/ui/frontend infrastructure
-
-Do not treat `matrix/apps/backend/` as Neoland backend truth.
-
-## Ownership Rules
-
-Use this decision rule:
-- if it is about orchestration truth, contracts, persistence, auth, health payloads, ADR generation, or agent behavior, root `neoland` owns it
-- if it is about layout, component composition, navigation, operator flow, visual hierarchy, charts, and rendering, `matrix/apps/frontend/` owns it
-
-## Frontend Product Positioning
-
-The frontend should become a Neoland control-plane workbench.
-
-Prioritize:
-- running a task
-- watching agent progression
-- reading confidence, risk, escalation, and final decision
-- inspecting session state
-- rendering ADRs/checkpoints as readable operational artifacts
-- seeing control-plane and ecosystem health clearly
-
-Avoid:
-- generic AI assistant framing
-- vague “toolbox” navigation without operational meaning
-- vanity dashboards disconnected from the control plane
-
-## Current Frontend Tasks
-
-When working on the frontend, prioritize in this order:
-
-1. Reposition the brand and product language of `matrix/apps/frontend/` for Neoland
-2. Replace generic or Matrix-specific navigation with Neoland operational navigation
-3. Build or adapt the first strong vertical slice:
-   - `Pipeline`
-   - `Sessions`
-   - `ADR Vault`
-   - `Services`
-4. Mirror real backend contracts in frontend types and adapters
-5. Add degraded states and placeholders where the backend is not ready yet
-6. Prefer empty, unavailable, or stub states over simulated data when the backend does not expose a contract yet
-
-## Preferred UX Direction
-
-The UI should feel like a modern operational console:
-- technical
-- readable under pressure
-- fast to scan
-- confident, not playful
-
-Visual semantics:
-- green for `approve` and healthy states
-- red for `reject` and failure states
-- amber/orange for `defer`, warnings, and degraded states
-- violet for `escalate` and human-required states
-
-Do not copy the TUI literally, but stay aligned with Neoland's technical identity.
-
-## Integration Rules
-
-Known verified backend routes:
-- `POST /v1/agents/task`
-- `GET /v1/agents/session/:id`
-- `GET /v1/agents/health`
-- `GET /health`
-- `GET /ready`
-- `GET /live`
-
-Important rules:
-- do not invent extra Neoland endpoints unless they are added in the backend
-- mirror backend payloads in frontend types before using them in UI code
-- prefer adapter layers over ad hoc reshaping inside React components
-
-### ADRs
-
-ADR/checkpoint rendering should prefer structured views over raw JSON dumps.
-
-Prefer showing:
-- title
-- status
-- context
-- decision
-- action items
-- session summary
-- meaningful excerpts from `full_pipeline`
-
-## Redesign Guidance
-
-When adapting the moved frontend base:
-- keep useful infrastructure
-- keep useful `components/ui`
-- keep useful App Router and shared utility patterns
-- remove or rewrite generic mission-control/productivity-tool language
-- reposition naming, messaging, page framing, and visual semantics around Neoland
-- remove or rewrite modules that do not map to Neoland's real product narrative
-
-Bias toward selective brand repositioning and redesign, not wholesale replacement.
-
-## Practical Default
-
-Unless explicitly stated otherwise:
-- work from the existing `matrix/apps/frontend/` base
-- redesign instead of rewriting
-- treat Neoland as the primary product identity
-- validate every backend-facing assumption against the root repo first
+**\[MODE: ASK / FULL CODE: FAST]**
+Provide direct, highly optimized, and complete code solutions quickly, without skipping necessary explanations of complex logic.

@@ -35,7 +35,7 @@ use tokio_stream::{
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
 use tracing::Instrument; // Phase 4.2: For span instrumentation
 
-use crate::mcp::server::{NativeMcpServer, BreakpointResolution};
+use crate::mcp::server::{BreakpointResolution, NativeMcpServer};
 use crate::{
     agents::{events::AgentEvent, orchestrator::AgentOrchestrator},
     audit::{AuditAction, AuditEvent, AuditLogger, ConsoleAlertHandler, FailedAuthTracker},
@@ -487,7 +487,16 @@ impl LlamaService for MyLlamaService {
 // REST Handlers
 
 // Phase 4.1: Prometheus Metrics Handler
-async fn metrics_handler() -> HttpResponse<String> {
+/// GET /metrics — Prometheus metrics endpoint.
+#[utoipa::path(
+    get,
+    path = "/metrics",
+    tag = "system",
+    responses(
+        (status = 200, description = "Prometheus text format metrics"),
+    )
+)]
+pub(crate) async fn metrics_handler() -> HttpResponse<String> {
     match crate::metrics::render_metrics() {
         Ok(metrics) => HttpResponse::builder()
             .status(StatusCode::OK)
@@ -504,7 +513,19 @@ async fn metrics_handler() -> HttpResponse<String> {
 // Phase 4.3: Health Check Endpoints
 
 /// Comprehensive health check (Kubernetes liveness probe)
-async fn health_handler(State(state): State<Arc<AppState>>) -> Json<health::HealthResponse> {
+/// GET /health — Comprehensive health check (Kubernetes liveness probe).
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "system",
+    responses(
+        (status = 200, description = "Service healthy"),
+        (status = 503, description = "Service degraded or unhealthy"),
+    )
+)]
+pub(crate) async fn health_handler(
+    State(state): State<Arc<AppState>>,
+) -> Json<health::HealthResponse> {
     let uptime = state.start_time.elapsed().as_secs();
     let response = health::perform_health_check(Some(uptime)).await;
     Json(response)
@@ -895,14 +916,29 @@ async fn auth_middleware(
 // ─── Agent Pipeline Handlers ─────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct AgentTaskBody {
+pub(crate) struct AgentTaskBody {
     task: String,
     session_id: Option<uuid::Uuid>,
 }
 
 /// POST /v1/agents/task — submit a task to the multi-agent DSPy pipeline.
 /// Requires User+ auth (enforced by auth_middleware).
-async fn submit_agent_task(
+/// POST /v1/agents/task — submit a task to the multi-agent DSPy pipeline.
+/// Runs Junior → Senior → (Architect?) → TechLeader and returns the full result
+/// plus an ADR checkpoint written to disk.
+#[utoipa::path(
+    post,
+    path = "/v1/agents/task",
+    tag = "agents",
+    security(("api_key" = [])),
+    request_body = AgentTaskRequest,
+    responses(
+        (status = 200, description = "Pipeline completed", body = PipelineResult),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
+pub(crate) async fn submit_agent_task(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AgentTaskBody>,
 ) -> impl IntoResponse {
@@ -953,7 +989,7 @@ struct AgentSteerBody {
 }
 
 #[derive(Deserialize)]
-struct ListSessionsQuery {
+pub(crate) struct ListSessionsQuery {
     limit: Option<usize>,
 }
 
@@ -991,7 +1027,22 @@ async fn steer_agent_task(
 
 /// GET /v1/agents/session/:id — retrieve session state.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
-async fn get_agent_session(
+/// GET /v1/agents/session/{id} — retrieve session state.
+#[utoipa::path(
+    get,
+    path = "/v1/agents/session/{id}",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(
+        ("id" = String, Path, description = "Session UUID", format = "uuid")
+    ),
+    responses(
+        (status = 200, description = "Session found", body = SessionState),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "Session not found", body = ErrorResponse),
+    )
+)]
+pub(crate) async fn get_agent_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
@@ -1019,7 +1070,22 @@ async fn get_agent_session(
 
 /// GET /v1/agents/sessions — retrieve recent session state list.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
-async fn list_agent_sessions(
+/// GET /v1/agents/sessions — retrieve recent session state list.
+#[utoipa::path(
+    get,
+    path = "/v1/agents/sessions",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(
+        ("limit" = Option<u32>, Query, description = "Maximum number of sessions to return")
+    ),
+    responses(
+        (status = 200, description = "Recent sessions", body = [SessionState]),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
+pub(crate) async fn list_agent_sessions(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListSessionsQuery>,
 ) -> impl IntoResponse {
@@ -1051,7 +1117,17 @@ async fn list_agent_sessions(
 }
 
 /// GET /v1/agents/health — DSPy pipeline health check (public).
-async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// GET /v1/agents/health — DSPy pipeline health check (public).
+#[utoipa::path(
+    get,
+    path = "/v1/agents/health",
+    tag = "agents",
+    responses(
+        (status = 200, description = "Pipeline up", body = AgentHealthResponse),
+        (status = 503, description = "Pipeline down or disabled", body = AgentHealthResponse),
+    )
+)]
+pub(crate) async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match &state.agent_orchestrator {
         Some(orch) => match orch.health_check().await {
             Ok(true) => {
@@ -1077,7 +1153,6 @@ async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
     }
 }
 
-
 /// GET /v1/agents/tools
 #[utoipa::path(
     get,
@@ -1085,10 +1160,12 @@ async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoRe
     tag = "agents",
     responses((status = 200, description = "List of available native tools"))
 )]
-pub async fn list_agent_tools(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+pub async fn list_agent_tools(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    
+
     let tools = mcp.list_tools();
     Ok(Json(serde_json::json!({ "tools": tools })))
 }
@@ -1107,10 +1184,13 @@ pub struct ToolCallPayload {
     tag = "agents",
     request_body = ToolCallPayload,
 )]
-pub async fn call_agent_tool(State(state): State<Arc<AppState>>, Json(payload): Json<ToolCallPayload>) -> Result<Json<crate::mcp::types::CallToolResult>, StatusCode> {
+pub async fn call_agent_tool(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ToolCallPayload>,
+) -> Result<Json<crate::mcp::types::CallToolResult>, StatusCode> {
     let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    
+
     match mcp.call_tool(payload.session_id, &payload.name, payload.arguments).await {
         Ok(res) => Ok(Json(res)),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -1137,7 +1217,7 @@ pub async fn resolve_agent_breakpoint(
     Json(payload): Json<BreakpointResolvePayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    
+
     let resolution = match payload.resolution.as_str() {
         "approve" => BreakpointResolution::Approve,
         "steer" => BreakpointResolution::Steer(payload.instruction.unwrap_or_default()),
@@ -1349,13 +1429,12 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                             Ok(orch) => {
                                 // Initialize Native MCP Server and Background Task
                                 let (bp_tx, mut bp_rx) = tokio::sync::mpsc::channel(100);
-                                let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> = vec![
-                                    Box::new(crate::tools::shell::RunShellCommand),
-                                ];
+                                let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> =
+                                    vec![Box::new(crate::tools::shell::RunShellCommand)];
                                 let native_mcp = NativeMcpServer::new(tools, bp_tx);
-                                
-                                // We will attach the task listener later, for now we just attach the MCP
-                                // to the orchestrator
+
+                                // We will attach the task listener later, for now we just attach
+                                // the MCP to the orchestrator
                                 let orch = orch.with_native_mcp(native_mcp);
 
                                 // Optionally attach NATS publisher (Ciclo 1 — Fase B)
@@ -1417,8 +1496,14 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                 let orch_clone = orch_arc.clone();
                                 tokio::spawn(async move {
                                     while let Some(req) = bp_rx.recv().await {
-                                        orch_clone.register_breakpoint(req.session_id, req.resolve_tx).await;
-                                        orch_clone.publish(AgentEvent::BreakpointHit { session_id: req.session_id, tool: req.tool_name, args_summary: req.args_summary });
+                                        orch_clone
+                                            .register_breakpoint(req.session_id, req.resolve_tx)
+                                            .await;
+                                        orch_clone.publish(AgentEvent::BreakpointHit {
+                                            session_id: req.session_id,
+                                            tool: req.tool_name,
+                                            args_summary: req.args_summary,
+                                        });
                                     }
                                 });
                                 Some(orch_arc)

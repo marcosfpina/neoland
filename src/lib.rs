@@ -13,13 +13,13 @@ pub mod llm;
 pub mod logging; // Phase 4.2: Structured Logging
 pub mod matrix;
 pub mod mcp;
-pub mod tools;
 pub mod metrics; // Phase 4.1: Prometheus Metrics
 pub mod ml_offload;
 pub mod nlp;
 pub mod openapi; // Ciclo 3: OpenAPI spec + Swagger UI
 pub mod secrets;
 pub mod storage; // Phase 4.7: Persistent Vector Store
+pub mod tools;
 pub mod tui;
 pub mod validation;
 

@@ -179,7 +179,7 @@ mod tests {
 
         match cli.command {
             Commands::Client { server_url, ml_api_url } => {
-                assert_eq!(server_url, "http://[::1]:50051");
+                assert_eq!(server_url, "http://localhost:3001");
                 assert_eq!(ml_api_url, "http://localhost:8080");
             },
             _ => panic!("expected client command"),

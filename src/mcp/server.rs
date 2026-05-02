@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::{mpsc, oneshot, RwLock};
-use serde_json::Value;
-use anyhow::{Result, bail};
+use std::{collections::HashMap, sync::Arc};
 
-use super::types::{Tool, CallToolResult};
+use anyhow::Result;
+use serde_json::Value;
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
+
+use super::types::{CallToolResult, Tool};
 
 #[derive(Debug)]
 pub enum BreakpointResolution {
@@ -27,7 +27,7 @@ pub trait NativeTool: Send + Sync {
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
     fn input_schema(&self) -> Value;
-    
+
     /// The core execution logic of the tool
     async fn execute(&self, args: Value) -> Result<String>;
 }
@@ -41,31 +41,38 @@ pub struct NativeMcpServer {
 }
 
 impl NativeMcpServer {
-    pub fn new(tools: Vec<Box<dyn NativeTool>>, breakpoint_tx: mpsc::Sender<BreakpointRequest>) -> Self {
+    pub fn new(
+        tools: Vec<Box<dyn NativeTool>>,
+        breakpoint_tx: mpsc::Sender<BreakpointRequest>,
+    ) -> Self {
         let mut map = HashMap::new();
         for t in tools {
             map.insert(t.name().to_string(), t);
         }
-        Self {
-            tools: Arc::new(map),
-            breakpoint_tx,
-        }
+        Self { tools: Arc::new(map), breakpoint_tx }
     }
 
     pub fn list_tools(&self) -> Vec<Tool> {
-        self.tools.values().map(|t| Tool {
-            name: t.name().to_string(),
-            description: t.description().to_string(),
-            
-        }).collect()
+        self.tools
+            .values()
+            .map(|t| Tool { name: t.name().to_string(), description: t.description().to_string() })
+            .collect()
     }
 
-    pub async fn call_tool(&self, session_id: Uuid, name: &str, args: Value) -> Result<CallToolResult> {
-        let tool = self.tools.get(name).ok_or_else(|| anyhow::anyhow!("Tool not found: {}", name))?;
-        
+    pub async fn call_tool(
+        &self,
+        session_id: Uuid,
+        name: &str,
+        args: Value,
+    ) -> Result<CallToolResult> {
+        let tool = self
+            .tools
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("Tool not found: {}", name))?;
+
         let args_summary = args.to_string();
         let (resolve_tx, resolve_rx) = oneshot::channel();
-        
+
         let req = BreakpointRequest {
             session_id,
             tool_name: name.to_string(),
@@ -92,18 +99,17 @@ impl NativeMcpServer {
                     Err(e) => Ok(CallToolResult { text: e.to_string(), is_error: true }),
                 }
             },
-            BreakpointResolution::Reject => {
-                Ok(CallToolResult {
-                    text: "Execution rejected by human operator.".to_string(),
-                    is_error: true,
-                })
-            },
-            BreakpointResolution::Steer(instruction) => {
-                Ok(CallToolResult {
-                    text: format!("Execution rejected by human operator. Follow this instruction instead: {}", instruction),
-                    is_error: true,
-                })
-            }
+            BreakpointResolution::Reject => Ok(CallToolResult {
+                text: "Execution rejected by human operator.".to_string(),
+                is_error: true,
+            }),
+            BreakpointResolution::Steer(instruction) => Ok(CallToolResult {
+                text: format!(
+                    "Execution rejected by human operator. Follow this instruction instead: {}",
+                    instruction
+                ),
+                is_error: true,
+            }),
         }
     }
 }

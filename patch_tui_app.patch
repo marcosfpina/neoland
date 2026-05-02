@@ -1,0 +1,50 @@
+--- src/tui/app.rs
++++ src/tui/app.rs
+@@ -1,13 +1,6 @@
+ use chrono::{DateTime, Utc};
+ use uuid::Uuid;
+ 
+-use super::{llama_manager::LlamaManagerState, presets::QueryConfig};
+-
+-#[derive(Clone, PartialEq)]
+-pub enum AppMode {
+-    Workstation,
+-    LlamaManager,
+-}
++use super::presets::QueryConfig;
+ 
+ // ── Agent workstation types
+@@ -69,7 +62,6 @@
+ 
+ #[derive(Clone)]
+ pub struct AppState {
+-    pub mode: AppMode,
+     // ── Legacy chat fields (kept for fallback) ────────────────────────
+     pub messages: Vec<ChatMessage>,
+     pub pending_message: Option<String>,
+@@ -95,8 +87,6 @@
+     pub pipeline_stages: Vec<PipelineStage>,
+     pub output_text: String,
+     pub tool_calls: Vec<ToolCall>,
+-    // ── Llama Manager ─────────────────────────────────────────────────
+-    pub llama_state: LlamaManagerState,
+     pub adr_status: Option<String>,
+     pub adr_title: Option<String>,
+     pub pending_breakpoint: Option<(String, String)>,
+@@ -104,7 +94,6 @@
+ 
+ impl AppState {
+     pub fn new(server_url: String, ml_api_url: String) -> Self {
+         Self {
+-            mode: AppMode::Workstation,
+             messages: Vec::new(),
+             pending_message: None,
+             input_buffer: String::new(),
+@@ -124,7 +113,6 @@
+             pipeline_stages: Vec::new(),
+             output_text: String::new(),
+             tool_calls: Vec::new(),
+-            llama_state: LlamaManagerState::new(),
+             adr_status: None,
+             adr_title: None,
+             pending_breakpoint: None,
