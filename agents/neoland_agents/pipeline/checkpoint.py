@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -93,6 +94,32 @@ class CheckpointManager:
                 result.timestamp,
                 json.dumps(result.tech_leader.model_dump()),
             )
+
+    async def list_by_session(self, session_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Retorna os checkpoints de uma sessão ordenados do mais recente para o mais antigo."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT task_id, task, final_decision, checkpoint_path, completed_at
+                FROM agent_sessions
+                WHERE session_id = $1
+                ORDER BY completed_at DESC
+                LIMIT $2
+                """,
+                UUID(session_id),
+                limit,
+            )
+            return [
+                {
+                    "task_id": str(row["task_id"]),
+                    "task": row["task"],
+                    "decision": row["final_decision"],
+                    "checkpoint_path": row["checkpoint_path"],
+                    "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+                }
+                for row in rows
+            ]
 
     async def close(self) -> None:
         if self._pool:
