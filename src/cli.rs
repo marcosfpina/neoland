@@ -32,9 +32,9 @@ pub enum Commands {
         #[arg(long, default_value = "http://localhost:3001")]
         server_url: String,
 
-        /// URL do endpoint OpenAI-compatible principal (SecureLLM Bridge API)
-        #[arg(long, default_value = "http://localhost:8080")]
-        ml_api_url: String,
+        /// URL do gateway LLM principal (SecureLLM Bridge API)
+        #[arg(long = "neoland-gateway-url", default_value = "http://localhost:8080")]
+        neoland_gateway_url: String,
     },
 
     /// Executa health checks no servidor
@@ -70,8 +70,8 @@ pub enum Commands {
         server_url: String,
 
         /// URL do gateway LLM principal para verificar
-        #[arg(long, default_value = "http://localhost:8080")]
-        ml_api_url: String,
+        #[arg(long = "neoland-gateway-url", default_value = "http://localhost:8080")]
+        neoland_gateway_url: String,
 
         /// Renderiza o relatório em JSON para automação
         #[arg(long)]
@@ -162,9 +162,9 @@ mod tests {
         .expect("doctor parses");
 
         match cli.command {
-            Commands::Doctor { server_url, ml_api_url, json } => {
+            Commands::Doctor { server_url, neoland_gateway_url, json } => {
                 assert_eq!(server_url, "http://localhost:4000");
-                assert_eq!(ml_api_url, "http://localhost:9000");
+                assert_eq!(neoland_gateway_url, "http://localhost:9000");
                 assert!(json);
             },
             _ => panic!("expected doctor command"),
@@ -178,9 +178,9 @@ mod tests {
             .expect("client parses");
 
         match cli.command {
-            Commands::Client { server_url, ml_api_url } => {
+            Commands::Client { server_url, neoland_gateway_url } => {
                 assert_eq!(server_url, "http://localhost:3001");
-                assert_eq!(ml_api_url, "http://localhost:8080");
+                assert_eq!(neoland_gateway_url, "http://localhost:8080");
             },
             _ => panic!("expected client command"),
         }

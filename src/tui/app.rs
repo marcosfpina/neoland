@@ -81,7 +81,7 @@ pub struct AppState {
     pub config: QueryConfig,
     pub sidebar_visible: bool,
     pub server_url: String,
-    pub ml_api_url: String,
+    pub neoland_gateway_url: String,
     pub scroll_offset: u16,
     pub auto_scroll: bool,
     pub is_thinking: bool,
@@ -121,7 +121,7 @@ pub enum MessageRole {
 }
 
 impl AppState {
-    pub fn new(server_url: String, ml_api_url: String) -> Self {
+    pub fn new(server_url: String, neoland_gateway_url: String) -> Self {
         Self {
             messages: Vec::new(),
             pending_message: None,
@@ -130,7 +130,7 @@ impl AppState {
             config: QueryConfig::default(),
             sidebar_visible: false,
             server_url,
-            ml_api_url,
+            neoland_gateway_url,
             scroll_offset: 0,
             auto_scroll: true,
             is_thinking: false,

@@ -266,7 +266,7 @@ pub async fn collect_doctor_report(
     runtime: &impl CommandRuntime,
     config: &Config,
     server_url: &str,
-    ml_api_url: &str,
+    neoland_gateway_url: &str,
 ) -> DoctorReport {
     let mut checks = Vec::new();
 
@@ -330,14 +330,14 @@ pub async fn collect_doctor_report(
     }
 
     // 4. LLM Gateway Connectivity (SecureLLM Bridge API)
-    let gateway_candidates = build_health_candidates(ml_api_url, true);
+    let gateway_candidates = build_health_candidates(neoland_gateway_url, true);
     match probe_http_candidates(runtime, &gateway_candidates).await {
         ProbeResult::Ok { url, status } => {
             checks.push(CheckResult::ok(
                 "LLM Gateway",
                 format!(
                     "SecureLLM API reachable at {} via {} (status {})",
-                    ml_api_url, url, status
+                    neoland_gateway_url, url, status
                 ),
             ));
         },
@@ -351,7 +351,7 @@ pub async fn collect_doctor_report(
         ProbeResult::Err { url, error } => {
             checks.push(CheckResult::error(
                 "LLM Gateway",
-                format!("SecureLLM API not reachable at {}", ml_api_url),
+                format!("SecureLLM API not reachable at {}", neoland_gateway_url),
                 format!("Expected health at {} ({error})", url),
             ));
         },

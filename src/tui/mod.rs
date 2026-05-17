@@ -50,7 +50,7 @@ enum LlmEvent {
 
 // ── Entry point ───────────────────────────────────────────────────────
 
-pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
+pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
@@ -70,7 +70,7 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
     });
 
     let api_key = std::env::var("NEOLAND_API_KEY").unwrap_or_default();
-    let mut app = AppState::new(server_url.to_string(), ml_api_url.to_string());
+    let mut app = AppState::new(server_url.to_string(), neoland_gateway_url.to_string());
     check_server_health(&mut app).await;
 
     let mut tick = tokio::time::interval(Duration::from_millis(80));
@@ -257,7 +257,7 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                 app.is_thinking = true;
                                 app.auto_scroll = true;
                                 let tx = llm_tx.clone();
-                                let ml_url = app.ml_api_url.clone();
+                                let ml_url = app.neoland_gateway_url.clone();
                                 let srv_url = app.server_url.clone();
                                 let cfg = app.config.clone();
                                 tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, tx));
@@ -695,7 +695,7 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
 async fn run_llm(
     message: String,
     config: presets::QueryConfig,
-    ml_api_url: String,
+    neoland_gateway_url: String,
     server_url: String,
     tx: mpsc::Sender<LlmEvent>,
 ) {
@@ -715,7 +715,7 @@ async fn run_llm(
     });
 
     let client = match crate::llm::UnifiedLLMClient::new_local_first(
-        ml_api_url,
+        neoland_gateway_url,
         secrets,
         securellm_provider,
     )

@@ -33,7 +33,8 @@ pub struct ServerConfig {
 #[serde(default)]
 pub struct ClientConfig {
     pub server_url: String,
-    pub ml_api_url: String,
+    /// URL of the SecureLLM Bridge gateway (primary inference backend)
+    pub neoland_gateway_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +68,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             server_url: "http://[::1]:50051".to_string(),
-            ml_api_url: "http://localhost:8080".to_string(),
+            neoland_gateway_url: "http://localhost:8080".to_string(),
         }
     }
 }
@@ -231,8 +232,12 @@ impl Config {
         if let Some(v) = get_env("NEOLAND_SERVER_URL") {
             self.client.server_url = v;
         }
+        if let Some(v) = get_env("NEOLAND_GATEWAY_URL") {
+            self.client.neoland_gateway_url = v;
+        }
+        // Backward compatibility: NEOLAND_ML_API_URL still works
         if let Some(v) = get_env("NEOLAND_ML_API_URL") {
-            self.client.ml_api_url = v;
+            self.client.neoland_gateway_url = v;
         }
         if let Some(v) = get_env("NEOLAND_INFERENCE_PROVIDER") {
             self.inference.provider = v;
@@ -328,7 +333,7 @@ mod tests {
         assert_eq!(cfg.server.grpc_port, 50051);
         assert_eq!(cfg.server.rest_port, 3001);
         assert_eq!(cfg.client.server_url, "http://[::1]:50051");
-        assert_eq!(cfg.client.ml_api_url, "http://localhost:8080");
+        assert_eq!(cfg.client.neoland_gateway_url, "http://localhost:8080");
         assert_eq!(cfg.inference.provider, "local");
         assert!((cfg.inference.temperature - 0.7).abs() < f32::EPSILON);
         assert_eq!(cfg.inference.max_tokens, 2048);
