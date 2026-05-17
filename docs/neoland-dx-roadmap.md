@@ -58,8 +58,8 @@ Para:
 Fontes prioritárias:
 
 - [`README.md`](/home/kernelcore/master/neoland/README.md)
-- [`QUICKSTART.md`](/home/kernelcore/master/neoland/QUICKSTART.md)
-- [`ROADMAP.md`](/home/kernelcore/master/neoland/ROADMAP.md)
+- [`docs/neoland-quickstart.md`](/home/kernelcore/master/neoland/docs/neoland-quickstart.md)
+- [`docs/neoland-roadmap.md`](/home/kernelcore/master/neoland/docs/neoland-roadmap.md)
 - help da CLI
 - telas do TUI
 - páginas centrais do frontend
