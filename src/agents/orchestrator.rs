@@ -244,9 +244,13 @@ impl AgentOrchestrator {
         };
 
         let total_ms = (duration_secs * 1000.0) as u64;
-        let junior_ms = total_ms / 3;
-        let senior_ms = total_ms / 3;
-        let leader_ms = total_ms - junior_ms - senior_ms;
+        let junior_ms = result.stage_latencies_ms.get("junior").copied().unwrap_or(total_ms / 4);
+        let senior_ms = result.stage_latencies_ms.get("senior").copied().unwrap_or(total_ms / 4);
+        let architect_ms = result.stage_latencies_ms.get("architect").copied();
+        let leader_ms =
+            result.stage_latencies_ms.get("tech_leader").copied().unwrap_or(
+                total_ms.saturating_sub(junior_ms + senior_ms + architect_ms.unwrap_or(0)),
+            );
 
         self.publish(AgentEvent::StageDone {
             session_id,
@@ -280,6 +284,27 @@ impl AgentOrchestrator {
                 result.senior.refined_hypothesis, result.senior.risk_assessment
             ),
         });
+        if let Some(arch) = &result.architect {
+            self.publish(AgentEvent::StageStarted { session_id, stage: "architect" });
+            self.publish(AgentEvent::StageDone {
+                session_id,
+                stage: "architect",
+                confidence: Some(arch.composability_score as f32),
+                risk_level: None,
+                latency_ms: architect_ms.unwrap_or(0),
+            });
+            self.publish(AgentEvent::StageOutput {
+                session_id,
+                stage: "architect",
+                content: format!(
+                    "{}\n\nBlockers: {}",
+                    arch.recommended_structure,
+                    arch.blockers.join(", ")
+                ),
+            });
+        } else {
+            self.publish(AgentEvent::StageSkipped { session_id, stage: "architect" });
+        }
         self.publish(AgentEvent::StageStarted { session_id, stage: "tech_leader" });
         self.publish(AgentEvent::StageDone {
             session_id,
@@ -472,15 +497,19 @@ impl AgentOrchestrator {
         self.pending_breakpoints.lock().await.insert(session_id, resolve_tx);
     }
 
+    /// Returns `Ok(true)` if a breakpoint was found and resolved, `Ok(false)`
+    /// if none was pending.
     pub async fn resolve_breakpoint(
         &self,
         session_id: Uuid,
         resolution: BreakpointResolution,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut lock = self.pending_breakpoints.lock().await;
         if let Some(tx) = lock.remove(&session_id) {
             let _ = tx.send(resolution);
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        Ok(())
     }
 }

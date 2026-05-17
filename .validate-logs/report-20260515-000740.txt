@@ -1,0 +1,5 @@
+Timestamp : 20260515-000740
+Passou    : 5
+Falhou    : 2
+Ignorado  : 3
+Logs      : /home/kernelcore/master/neoland/.validate-logs

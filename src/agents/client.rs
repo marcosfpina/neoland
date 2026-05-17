@@ -4,7 +4,7 @@
 //! agents/neoland_agents/schemas/api.py. Any change to the Python schemas must
 //! be reflected here.
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -91,12 +91,16 @@ pub struct TechLeaderOutput {
 pub struct PipelineResult {
     pub task_id: Uuid,
     pub session_id: Uuid,
+    #[serde(default)]
+    pub task: String,
     pub timestamp: DateTime<Utc>,
     pub junior: JuniorOutput,
     pub senior: SeniorOutput,
     pub architect: Option<ArchitectOutput>,
     pub tech_leader: TechLeaderOutput,
     pub checkpoint_path: String,
+    #[serde(default)]
+    pub stage_latencies_ms: HashMap<String, u64>,
 }
 
 // ─── HTTP Client ─────────────────────────────────────────────────────────────

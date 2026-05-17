@@ -62,7 +62,7 @@ in
 
     llamacppUrl = lib.mkOption {
       type = lib.types.str;
-      default = "http://127.0.0.1:5001";
+      default = "http://127.0.0.1:8081";
       description = "Base URL of the upstream `llama.cpp` server.";
     };
 

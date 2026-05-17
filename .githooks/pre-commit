@@ -88,6 +88,7 @@ fi
 # Gather staged files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 RUST_STAGED=$(echo "$STAGED_FILES" | grep -E '\.rs$' || true)
+NIX_STAGED=$(echo "$STAGED_FILES" | grep -E '\.nix$' || true)
 
 if [ -z "$STAGED_FILES" ]; then
     skip "No staged files — nothing to check"
@@ -102,27 +103,37 @@ if should_skip_all; then
     exit 0
 fi
 
-# ─── 1. Format check (staged Rust files only) ───────────────────────────
+# ─── 1. Auto-format staged Nix files ────────────────────────────────────
+
+if [ -n "$NIX_STAGED" ]; then
+    if command -v nixfmt-rfc-style &>/dev/null; then
+        step "Auto-formatting Nix files..."
+        while IFS= read -r file; do
+            full_path="$PROJECT_ROOT/$file"
+            if [ -f "$full_path" ]; then
+                nixfmt-rfc-style "$full_path"
+                git add "$full_path"
+            fi
+        done <<< "$NIX_STAGED"
+        ok "Nix files formatted and re-staged"
+    else
+        skip "nixfmt-rfc-style not in PATH — skipping (run inside nix develop for auto-format)"
+    fi
+else
+    skip "No Nix files staged — skipping nix format"
+fi
+
+# ─── 3. Format check (staged Rust files only) ───────────────────────────
 
 PASSED=true
 
 if [ -n "$RUST_STAGED" ]; then
     step "Checking Rust formatting (staged files)..."
 
-    # Check each staged Rust file
-    while IFS= read -r file; do
-        full_path="$PROJECT_ROOT/$file"
-        if [ -f "$full_path" ]; then
-            if ! cargo fmt --check "$full_path" 2>/dev/null; then
-                fail "$file is not formatted"
-                PASSED=false
-            fi
-        fi
-    done <<< "$RUST_STAGED"
-
-    if [ "$PASSED" = true ]; then
+    if cargo fmt --check 2>/dev/null; then
         ok "All staged Rust files are formatted"
     else
+        fail "One or more Rust files are not formatted"
         echo -e "  ${YELLOW}💡 Run:${NC} cargo fmt"
         echo ""
         exit 1
@@ -131,7 +142,7 @@ else
     skip "No Rust files staged — skipping format check"
 fi
 
-# ─── 2. Clippy (quick check on lib) ─────────────────────────────────────
+# ─── 4. Clippy (quick check on lib) ─────────────────────────────────────
 
 step "Running clippy (lib, deny warnings)..."
 
@@ -146,7 +157,7 @@ else
     exit 1
 fi
 
-# ─── 3. Unit tests (lib only, fast) ─────────────────────────────────────
+# ─── 5. Unit tests (lib only, fast) ─────────────────────────────────────
 
 step "Running unit tests..."
 
@@ -159,7 +170,7 @@ else
     exit 1
 fi
 
-# ─── 4. Quick compilation check ─────────────────────────────────────────
+# ─── 6. Quick compilation check ─────────────────────────────────────────
 
 step "Checking compilation..."
 

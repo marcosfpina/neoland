@@ -382,6 +382,8 @@
           neoland = neolandPackage;
         };
 
+        formatter = pkgs.nixfmt-rfc-style;
+
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             pkg-config
@@ -420,7 +422,7 @@
             export NEOLAND_CONTROL_PLANE_URL="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
             export NEOLAND_ML_API_URL="''${NEOLAND_ML_API_URL:-http://127.0.0.1:8080}"
             export ML_OPS_API_URL="''${ML_OPS_API_URL:-http://127.0.0.1:8083}"
-            export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:5001}"
+            export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:8081}"
             export VLLM_URL="''${VLLM_URL:-}"
             export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
             export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$NEOLAND_CONTROL_PLANE_URL}"
