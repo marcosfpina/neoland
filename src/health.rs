@@ -151,8 +151,8 @@ async fn check_vector_store_health_with_url(db_url: Option<String>) -> Component
 
 /// Health checker for LLM providers — probes the SecureLLM Bridge gateway.
 pub async fn check_llm_health() -> ComponentHealth {
-    let url =
-        std::env::var("NEOLAND_ML_API_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let url = std::env::var("NEOLAND_GATEWAY_URL")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
     check_llm_health_with_url(&url).await
 }
 

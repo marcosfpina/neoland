@@ -44,8 +44,8 @@ async fn main() {
             }
         },
 
-        Commands::Client { server_url, ml_api_url } => {
-            if let Err(e) = neoland::tui::run_client(&server_url, &ml_api_url).await {
+        Commands::Client { server_url, neoland_gateway_url } => {
+            if let Err(e) = neoland::tui::run_client(&server_url, &neoland_gateway_url).await {
                 eprintln!("❌ Erro no cliente TUI: {}", e);
                 std::process::exit(1);
             }
@@ -70,9 +70,10 @@ async fn main() {
             }
         },
 
-        Commands::Doctor { server_url, ml_api_url, json } => {
+        Commands::Doctor { server_url, neoland_gateway_url, json } => {
             let config = Config::load();
-            let report = collect_doctor_report(&runtime, &config, &server_url, &ml_api_url).await;
+            let report =
+                collect_doctor_report(&runtime, &config, &server_url, &neoland_gateway_url).await;
             println!("{}", render_doctor_report(&report, json));
             if report.has_errors() {
                 std::process::exit(1);
