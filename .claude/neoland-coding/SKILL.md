@@ -24,8 +24,8 @@ os contratos entre camadas, as regras de trabalho e o ritmo de entrega por Ciclo
 | IPC intra-host | mmap (`/run/neoland/agent-flags.shm`) |
 
 **Arquivos canônicos de contexto** (sempre atualizados ao final de cada entrega):
-- `~/master/neoland/CLAUDE.md` — regras, stack, contratos, fases
-- `~/master/neoland/PROGRESS.md` — estado atual, score, tabela de ciclo
+- `~/master/neoland/.github/CLAUDE.md` — regras, stack, contratos, fases
+- `~/master/neoland/docs/neoland-progress.md` — estado atual, score, tabela de ciclo
 
 ---
 
@@ -50,7 +50,7 @@ os contratos entre camadas, as regras de trabalho e o ritmo de entrega por Ciclo
 
 1. `cargo check --lib` — deve estar limpo
 2. `cargo test --lib` — 100% passando antes de qualquer commit
-3. Atualizar `CLAUDE.md` e `PROGRESS.md` com o que foi entregue
+3. Atualizar `.github/CLAUDE.md` e `docs/neoland-progress.md` com o que foi entregue
 4. Criar ADR se a decisão afeta arquitetura ou contratos
 
 ---
@@ -156,8 +156,8 @@ Os tipos em `src/agents/client.rs` espelham `agents/neoland_agents/schemas/api.p
 Cada Ciclo tem fases A, B, C, D. Fases são entregues sequencialmente.
 Ao completar uma fase:
 1. Testes passando
-2. `CLAUDE.md` atualizado (fase marcada ✅)
-3. `PROGRESS.md` atualizado (score + tabela)
+2. `.github/CLAUDE.md` atualizado (fase marcada ✅)
+3. `docs/neoland-progress.md` atualizado (score + tabela)
 4. ADR criado se houve decisão arquitetural
 5. Commit descritivo com `feat(agents):` ou prefixo relevante
 
@@ -230,8 +230,8 @@ ADRs existentes: ADR-011 a ADR-020 (ver `docs/ADR/`)
 ```
 [ ] cargo check --lib — limpo
 [ ] cargo test --lib  — 100% passando
-[ ] CLAUDE.md         — fase marcada ✅, env vars, layout atualizado
-[ ] PROGRESS.md       — score + tabela de ciclo atualizados
+[ ] .github/CLAUDE.md              — fase marcada ✅, env vars, layout atualizado
+[ ] docs/neoland-progress.md       — score + tabela de ciclo atualizados
 [ ] ADR criado        — se houve decisão arquitetural
 [ ] Commit feito      — mensagem descritiva com prefixo correto
 ```

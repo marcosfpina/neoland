@@ -412,7 +412,7 @@ Only use this for emergency fixes or when you're certain the changes are safe. C
 
 ## Architecture Overview
 
-For a full technical deep-dive, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For a full technical deep-dive, see [neoland-architecture.md](docs/neoland-architecture.md).
 
 ### High-Level Structure
 
@@ -484,17 +484,17 @@ All major decisions are recorded as Architecture Decision Records (ADRs) in `doc
 
 ### Documentation
 
-| Resource                   | Location                   |
-| -------------------------- | -------------------------- |
-| Architecture Overview      | `ARCHITECTURE.md`          |
-| Quick Start Guide          | `QUICKSTART.md`            |
-| ADR Ledger                 | `docs/ADR.md`              |
-| Security Documentation     | `docs/AUTHENTICATION.md`   |
-| Vault Setup                | `docs/VAULT_SETUP.md`      |
-| SOPS Setup                 | `docs/SOPS_SETUP.md`       |
-| API Documentation          | Swagger UI at `/swagger-ui/` |
-| ROADMAP                    | `ROADMAP.md`               |
-| PROGRESS                   | `docs/runbooks/PROGRESS.md` |
+| Resource                   | Location                              |
+| -------------------------- | ------------------------------------- |
+| Architecture Overview      | `docs/neoland-architecture.md`        |
+| Quick Start Guide          | `docs/neoland-quickstart.md`          |
+| ADR Ledger                 | `docs/neoland-adr.md`                 |
+| Security Documentation     | `docs/neoland-authentication.md`      |
+| Vault Setup                | `docs/neoland-vault-setup.md`         |
+| SOPS Setup                 | `docs/neoland-sops-setup.md`          |
+| API Documentation          | Swagger UI at `/swagger-ui/`          |
+| Roadmap                    | `docs/neoland-roadmap.md`             |
+| Progress                   | `docs/neoland-progress.md`            |
 
 ### Troubleshooting
 
@@ -509,7 +509,7 @@ neoland test --json
 neoland restart
 ```
 
-For common issues, see the [Troubleshooting](QUICKSTART.md#troubleshooting) section in the Quick Start guide.
+For common issues, see the [Troubleshooting](docs/neoland-quickstart.md#troubleshooting) section in the Quick Start guide.
 
 ---
 
