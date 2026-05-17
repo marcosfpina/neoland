@@ -500,7 +500,7 @@ cargo test --test env_fallback
 | Date | Status | Notes |
 |------|--------|-------|
 | 2026-01-30 | Accepted | Initial implementation (Phase 1.2) |
-| 2026-01-30 | Updated | Referenced in PROGRESS.md |
+| 2026-01-30 | Updated | Referenced in neoland-progress.md |
 | TBD | Updated | Add automatic key rotation (Phase 1.3+) |
 
 ## Implementation Status
@@ -518,7 +518,7 @@ cargo test --test env_fallback
 - Audit trail: Vault audit log
 - Performance: <1ms cache hit, 50-100ms Vault read
 
-**Progress**: See [PROGRESS.md](../PROGRESS.md) for complete status
+**Progress**: See [neoland-progress.md](../neoland-progress.md) for complete status
 
 ## Sign-off
 

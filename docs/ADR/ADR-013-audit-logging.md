@@ -604,7 +604,7 @@ tail -f /var/log/neoland/audit.log
 | Date | Status | Notes |
 |------|--------|-------|
 | 2026-01-30 | Accepted | Initial implementation (Phase 1.3) |
-| 2026-01-30 | Updated | Referenced in PROGRESS.md |
+| 2026-01-30 | Updated | Referenced in neoland-progress.md |
 | TBD | Updated | Centralized logging (Phase 4) |
 
 ## Implementation Status
@@ -624,7 +624,7 @@ tail -f /var/log/neoland/audit.log
 - `src/secrets.rs` - Secret access logging
 - `src/lib.rs` - Module export
 
-**Progress**: See [PROGRESS.md](../PROGRESS.md) for complete status
+**Progress**: See [neoland-progress.md](../neoland-progress.md) for complete status
 
 ## Sign-off
 
