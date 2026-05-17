@@ -153,7 +153,7 @@ mod tests {
             "doctor",
             "--server-url",
             "http://localhost:4000",
-            "--ml-api-url",
+            "--neoland-gateway-url",
             "http://localhost:9000",
             "--json",
             "--log-level",

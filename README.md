@@ -109,7 +109,7 @@ Neoland implements enterprise-grade security hardening (Phase 1 Complete):
 
 **Security Posture**: Phase 1 Complete (RBAC + Vault + Audit + Rate Limiting)
 
-See: `docs/AUTHENTICATION.md`, `docs/VAULT_SETUP.md`, `docs/SOPS_SETUP.md`, `docs/ADR/`
+See: `docs/neoland-authentication.md`, `docs/neoland-vault-setup.md`, `docs/neoland-sops-setup.md`, `docs/ADR/`
 
 ---
 
@@ -154,7 +154,7 @@ nix develop
 # Inside the dev shell
 neoland-secrets
 neoland-server
-neoland-client --ml-api-url http://localhost:8080
+neoland-client --neoland-gateway-url http://localhost:8080
 neoland-doctor --json
 
 # Or run one-shot commands without opening a shell
@@ -165,7 +165,7 @@ nix develop --command neoland-test --json
 cargo build --bin neoland --release
 
 # Run TUI client
-./target/release/neoland client --ml-api-url http://localhost:8080
+./target/release/neoland client --neoland-gateway-url http://localhost:8080
 ```
 
 ### NixOS Integration
@@ -216,12 +216,12 @@ neoland client
 
 # In nix develop, the shortcut is a real executable too
 neoland-client
-nix develop --command neoland-client --ml-api-url http://localhost:8080
+nix develop --command neoland-client --neoland-gateway-url http://localhost:8080
 
 # Custom endpoints
 neoland client \
   --server-url http://[::1]:50051 \
-  --ml-api-url http://localhost:8080
+  --neoland-gateway-url http://localhost:8080
 ```
 
 ### SOPS Workflow
@@ -289,7 +289,7 @@ All major architectural decisions are documented in [**Architecture Decision Rec
 2. **gRPC Internal**: Local Qwen 1.8B (CPU fallback)
 3. **SecureLLM providers / upstreams**: `ml-ops-api`, cloud providers, and local backends behind the gateway
 
-**Configuration**: `--ml-api-url` points to the primary OpenAI-compatible gateway endpoint.
+**Configuration**: `--neoland-gateway-url` points to the primary OpenAI-compatible gateway endpoint.
 
 ### 3. Module Refactoring
 
@@ -334,7 +334,7 @@ Primary LLM gateway consumed by Neoland:
 - Audit, rate limiting and provider routing
 - Can proxy to `ml-ops-api` for local inference
 
-**Usage**: `--ml-api-url` should point here in the default topology.
+**Usage**: `--neoland-gateway-url` should point here in the default topology.
 
 ### ml-ops-api
 

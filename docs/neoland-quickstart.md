@@ -27,7 +27,7 @@ nix develop
 # Dev-shell commands
 neoland-secrets
 neoland-server
-neoland-client --ml-api-url http://localhost:9000
+neoland-client --neoland-gateway-url http://localhost:9000
 neoland-doctor --json
 
 # One-shot commands also work
@@ -76,12 +76,12 @@ neoland client
 
 # In nix develop, you can use the shortcut command
 neoland-client
-nix develop --command neoland-client --ml-api-url http://localhost:9000
+nix develop --command neoland-client --neoland-gateway-url http://localhost:9000
 
 # Custom endpoints
 neoland client \
   --server-url http://[::1]:50051 \
-  --ml-api-url http://localhost:9000
+  --neoland-gateway-url http://localhost:9000
 ```
 
 ## Secrets
@@ -217,9 +217,9 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 
 ```bash
 # ML Offload API URL (if using external GPU service)
-export ML_API_URL="http://gpu-server.local:9000"
+export NEOLAND_GATEWAY_URL="http://gpu-server.local:9000"
 
-neoland client --ml-api-url $ML_API_URL
+neoland client --neoland-gateway-url $NEOLAND_GATEWAY_URL
 ```
 
 ### Preset Customization
