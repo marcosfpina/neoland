@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 
 import dspy
@@ -31,8 +32,12 @@ class AgentOrchestrator:
         self.checkpoint = CheckpointManager(checkpoint_dir=checkpoint_dir, db_url=db_url)
 
     async def run(self, request: TaskRequest) -> PipelineResult:
+        latencies: dict[str, int] = {}
+
         # 1. Junior — sempre executa
+        t0 = time.monotonic()
         jr = self.junior(task=request.task, context=request.rag_context, session_id=str(request.session_id))
+        latencies["junior"] = int((time.monotonic() - t0) * 1000)
         junior_out = JuniorOutput(
             hypothesis=jr.hypothesis,
             confidence=float(jr.confidence),
@@ -42,7 +47,9 @@ class AgentOrchestrator:
         )
 
         # 2. Senior — sempre executa
+        t0 = time.monotonic()
         sr = self.senior(task=request.task, proposal=junior_out.model_dump_json())
+        latencies["senior"] = int((time.monotonic() - t0) * 1000)
         senior_out = SeniorOutput(
             valid_parts=sr.valid_parts if isinstance(sr.valid_parts, list) else [],
             rejected_parts=sr.rejected_parts if isinstance(sr.rejected_parts, list) else [],
@@ -54,11 +61,13 @@ class AgentOrchestrator:
         # 3. Architect — somente se Senior escalou
         architect_out: ArchitectOutput | None = None
         if senior_out.escalate_to_architect:
+            t0 = time.monotonic()
             ar = self.architect(
                 task=request.task,
                 refined_hypothesis=senior_out.refined_hypothesis,
                 risk_assessment=senior_out.risk_assessment,
             )
+            latencies["architect"] = int((time.monotonic() - t0) * 1000)
             architect_out = ArchitectOutput(
                 structural_soundness=bool(ar.structural_soundness),
                 composability_score=float(ar.composability_score),
@@ -74,7 +83,9 @@ class AgentOrchestrator:
             "architect": architect_out.model_dump() if architect_out else None,
         }, ensure_ascii=False)
 
+        t0 = time.monotonic()
         tl = self.tech_leader(task=request.task, all_inputs=all_inputs)
+        latencies["tech_leader"] = int((time.monotonic() - t0) * 1000)
         tech_leader_out = TechLeaderOutput(
             decision=tl.decision,
             rationale=tl.rationale,
@@ -86,12 +97,14 @@ class AgentOrchestrator:
         result = PipelineResult(
             task_id=request.task_id,
             session_id=request.session_id,
+            task=request.task,
             timestamp=datetime.now(tz=timezone.utc),
             junior=junior_out,
             senior=senior_out,
             architect=architect_out,
             tech_leader=tech_leader_out,
             checkpoint_path="",  # preenchido após save
+            stage_latencies_ms=latencies,
         )
 
         # 5. Checkpoint automático

@@ -59,9 +59,14 @@ class TechLeaderOutput(BaseModel):
 class PipelineResult(BaseModel):
     task_id: UUID
     session_id: UUID
+    task: str = Field(default="", description="Texto original da task enviada pelo control plane")
     timestamp: datetime
     junior: JuniorOutput
     senior: SeniorOutput
     architect: ArchitectOutput | None = None  # presente apenas se senior.escalate_to_architect
     tech_leader: TechLeaderOutput
     checkpoint_path: str = Field(description="Caminho do arquivo ADR JSON gerado")
+    stage_latencies_ms: dict[str, int] = Field(
+        default_factory=dict,
+        description="Latência real de cada estágio medida pelo pipeline Python",
+    )

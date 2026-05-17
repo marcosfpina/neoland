@@ -46,8 +46,14 @@ async def run_pipeline(request: TaskRequest) -> PipelineResult:
 
 @app.get("/v1/pipeline/session/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
-    """Histórico de checkpoints da sessão — implementado pelo checkpoint manager."""
-    return {"session_id": session_id, "message": "not implemented yet"}
+    """Checkpoints de uma sessão, do mais recente ao mais antigo."""
+    try:
+        runs = await get_orchestrator().checkpoint.list_by_session(session_id)
+        return {"session_id": session_id, "runs": runs, "total": len(runs)}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="session_id must be a valid UUID") from None
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/health")
