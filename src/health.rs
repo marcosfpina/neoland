@@ -149,23 +149,53 @@ async fn check_vector_store_health_with_url(db_url: Option<String>) -> Component
     }
 }
 
-/// Health checker for LLM providers
+/// Health checker for LLM providers — probes the SecureLLM Bridge gateway.
 pub async fn check_llm_health() -> ComponentHealth {
+    let url =
+        std::env::var("NEOLAND_ML_API_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    check_llm_health_with_url(&url).await
+}
+
+async fn check_llm_health_with_url(base_url: &str) -> ComponentHealth {
     let start = std::time::Instant::now();
+    let probe_url = format!("{}/health", base_url.trim_end_matches('/'));
 
-    // Check if at least one LLM backend is available.
-    // For now, we assume local engine is always available.
-    // Phase 5.4: Add real connectivity check via UnifiedLLMClient.health_status()
-    let status = HealthStatus::Healthy;
-    let message = "LLM inference engine operational".to_string();
+    let result = reqwest::Client::new()
+        .get(&probe_url)
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await;
 
-    debug!("LLM health check completed in {:?}", start.elapsed());
+    let elapsed = start.elapsed().as_millis() as u64;
 
-    ComponentHealth {
-        name: "llm_provider".to_string(),
-        status,
-        message,
-        response_time_ms: Some(start.elapsed().as_millis() as u64),
+    match result {
+        Ok(resp) if resp.status().is_success() => {
+            debug!("LLM gateway health check OK in {}ms", elapsed);
+            ComponentHealth {
+                name: "llm_provider".to_string(),
+                status: HealthStatus::Healthy,
+                message: format!("SecureLLM Bridge reachable at {}", base_url),
+                response_time_ms: Some(elapsed),
+            }
+        },
+        Ok(resp) => {
+            warn!("LLM gateway returned {}", resp.status());
+            ComponentHealth {
+                name: "llm_provider".to_string(),
+                status: HealthStatus::Degraded,
+                message: format!("SecureLLM Bridge returned HTTP {}", resp.status()),
+                response_time_ms: Some(elapsed),
+            }
+        },
+        Err(e) => {
+            warn!("LLM gateway unreachable: {}", e);
+            ComponentHealth {
+                name: "llm_provider".to_string(),
+                status: HealthStatus::Degraded,
+                message: format!("SecureLLM Bridge unreachable ({})", base_url),
+                response_time_ms: Some(elapsed),
+            }
+        },
     }
 }
 
@@ -372,7 +402,17 @@ mod tests {
     async fn test_llm_health() {
         let health = check_llm_health().await;
         assert_eq!(health.name, "llm_provider");
-        assert_eq!(health.status, HealthStatus::Healthy);
+        // Healthy when gateway is up, Degraded when not running — never Unhealthy
+        assert_ne!(health.status, HealthStatus::Unhealthy);
+        assert!(health.response_time_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_llm_health_unreachable() {
+        let health = check_llm_health_with_url("http://127.0.0.1:19999").await;
+        assert_eq!(health.name, "llm_provider");
+        assert_eq!(health.status, HealthStatus::Degraded);
+        assert!(health.response_time_ms.is_some());
     }
 
     #[tokio::test]

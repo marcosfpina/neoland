@@ -16,7 +16,7 @@ pub mod events;
 pub mod presets;
 pub mod ui;
 
-use app::{AppState, ConnectionStatus, StageStatus};
+use app::{AppState, ConnectionStatus, StageStatus, TaskStatus};
 use events::Action;
 use ui::render;
 
@@ -31,6 +31,7 @@ enum AgentStreamEvent {
     ToolCallDone { tool: String, duration_ms: u64 },
     ToolCallFailed { tool: String },
     BreakpointHit { tool: String, args_summary: String },
+    BreakpointResolved { tool: String, resolution: String },
     AdrCheckpoint { status: String, title: String },
     PipelineDone { latency_ms: u64 },
     PipelineError { error: String },
@@ -103,6 +104,20 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                     }
                     AgentStreamEvent::BreakpointHit { tool, args_summary } => {
                         app.trigger_breakpoint(tool, args_summary);
+                    }
+                    AgentStreamEvent::BreakpointResolved { tool, resolution } => {
+                        app.pending_breakpoint = None;
+                        app.output_text = format!(
+                            "{}\n[breakpoint] {} → {}",
+                            app.output_text, tool, resolution
+                        );
+                        if let Some(id) = app.active_task_id {
+                            if let Some(t) = app.tasks.iter_mut().find(|t| t.id == id) {
+                                if t.status == TaskStatus::WaitingForBreakpoint {
+                                    t.status = TaskStatus::Running;
+                                }
+                            }
+                        }
                     }
                     AgentStreamEvent::ToolCallFailed { tool } => {
                         app.fail_tool_call(&tool);
@@ -213,10 +228,13 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                 let srv = app.server_url.clone();
                                 let session = app.active_session;
                                 let key = api_key.clone();
+                                let err_tx = agent_tx.clone();
                                 app.pending_breakpoint = None; // Hide UI instantly
                                 tokio::spawn(async move {
                                     if let Err(e) = post_breakpoint_resolve(&srv, &key, session, &resolution, instruction.as_deref()).await {
-                                        eprintln!("Failed to resolve breakpoint: {}", e);
+                                        let _ = err_tx.send(AgentStreamEvent::PipelineError {
+                                            error: format!("Breakpoint resolve failed: {}", e),
+                                        }).await;
                                     }
                                 });
                             }
@@ -225,9 +243,12 @@ pub async fn run_client(server_url: &str, ml_api_url: &str) -> Result<()> {
                                 let srv = app.server_url.clone();
                                 let key = api_key.clone();
                                 let session = app.active_session;
+                                let err_tx = agent_tx.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = post_agent_steer(&srv, &key, session, &msg).await {
-                                        eprintln!("Failed to steer task: {}", e);
+                                        let _ = err_tx.send(AgentStreamEvent::PipelineError {
+                                            error: format!("Steer failed: {}", e),
+                                        }).await;
                                     }
                                 });
                             }
@@ -602,10 +623,22 @@ async fn subscribe_sse(url: String, api_key: String, tx: mpsc::Sender<AgentStrea
             }
         }
     }
+    // Flush any remaining buffer content after stream closes (e.g. pipeline_done
+    // arriving without a trailing double-newline when the connection drops cleanly).
+    for line in buf.lines() {
+        if let Some(data) = line.strip_prefix("data: ") {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                if let Some(evt) = parse_sse_event(&val) {
+                    let _ = tx.send(evt).await;
+                }
+            }
+        }
+    }
 }
 
 fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
     match val["type"].as_str()? {
+        "pipeline_started" => Some(AgentStreamEvent::StageStarted { stage: "junior".to_string() }),
         "stage_started" => {
             Some(AgentStreamEvent::StageStarted { stage: val["stage"].as_str()?.to_string() })
         },
@@ -635,6 +668,10 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
         "breakpoint_hit" => Some(AgentStreamEvent::BreakpointHit {
             tool: val["tool"].as_str()?.to_string(),
             args_summary: val["args_summary"].as_str().unwrap_or("").to_string(),
+        }),
+        "breakpoint_resolved" => Some(AgentStreamEvent::BreakpointResolved {
+            tool: val["tool"].as_str().unwrap_or("").to_string(),
+            resolution: val["resolution"].as_str().unwrap_or("").to_string(),
         }),
         "adr_checkpoint" => Some(AgentStreamEvent::AdrCheckpoint {
             status: val["status"].as_str().unwrap_or("").to_string(),
