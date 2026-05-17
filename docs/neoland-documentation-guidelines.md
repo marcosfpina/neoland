@@ -67,9 +67,9 @@ Quando um documento abordar instalação ou execução, preferir esta ordem:
 ## Fonte De Verdade Por Tema
 
 - `README.md`: posicionamento geral e caminhos principais
-- `QUICKSTART.md`: entrada rápida de uso
-- `docs/SOPS_SETUP.md`: fluxo preferido com SOPS
-- `deploy/README.md`: estratégia operacional e deploy
+- `docs/neoland-quickstart.md`: entrada rápida de uso
+- `docs/neoland-sops-setup.md`: fluxo preferido com SOPS
+- `deploy/neoland-deploy.md`: estratégia operacional e deploy
 - `secrets/README.md`: convenções do diretório de secrets
 
 ## Regra De Compatibilidade

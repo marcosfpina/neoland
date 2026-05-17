@@ -133,8 +133,8 @@ Ainda não fecha tudo:
 
 ## Relação Com Os Roadmaps
 
-- [`docs/DX_ROADMAP.md`](/home/kernelcore/master/neoland/docs/DX_ROADMAP.md)
-- [`ROADMAP.md`](/home/kernelcore/master/neoland/ROADMAP.md)
+- [`docs/neoland-dx-roadmap.md`](/home/kernelcore/master/neoland/docs/neoland-dx-roadmap.md)
+- [`docs/neoland-roadmap.md`](/home/kernelcore/master/neoland/docs/neoland-roadmap.md)
 
 Azure DevOps aqui não substitui esses roadmaps.  
 Ele serve para acelerar a verificação prática deles.
