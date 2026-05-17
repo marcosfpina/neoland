@@ -1224,11 +1224,11 @@ pub async fn resolve_agent_breakpoint(
         _ => BreakpointResolution::Reject,
     };
 
-    if orch.resolve_breakpoint(session_id, resolution).await.is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    match orch.resolve_breakpoint(session_id, resolution).await {
+        Ok(true) => Ok(Json(serde_json::json!({ "status": "resolved" }))),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-
-    Ok(Json(serde_json::json!({ "status": "resolved" })))
 }
 
 /// GET /v1/agents/events — global SSE stream of all agent pipeline events.

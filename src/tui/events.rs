@@ -11,5 +11,6 @@ pub enum Action {
     CancelTask,         // ^x
     FocusNextPanel,     // tab
     FocusPrevPanel,     // shift+tab
-    ResolveBreakpoint { resolution: String, instruction: Option<String> }, // Enter/Esc during Breakpoint
+    ResolveBreakpoint { resolution: String, instruction: Option<String> }, /* Enter/Esc during
+                         * Breakpoint */
 }

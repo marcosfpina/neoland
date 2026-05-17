@@ -25,6 +25,7 @@ import type {
 
 const DEFAULT_CONTROL_PLANE_URL = "http://127.0.0.1:3001"
 const DEFAULT_DSPY_URL = "http://127.0.0.1:8001"
+const DEFAULT_DEV_API_KEY = "neoland_dev_insecure"
 
 function controlPlaneUrl() {
   return (

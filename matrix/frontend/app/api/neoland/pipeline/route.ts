@@ -1,28 +1,33 @@
 import { NextResponse } from "next/server"
 
-import { normalizeHistoricalRun } from "@/lib/neoland/history"
+import { getAdrDocuments } from "@/lib/neoland/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const MATRIX_BACKEND_URL =
-  (process.env.NEOLAND_MATRIX_URL || "http://localhost:8002").replace(/\/$/, "")
-
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const limit = searchParams.get("limit") ?? "50"
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200)
 
   try {
-    const resp = await fetch(`${MATRIX_BACKEND_URL}/pipeline/history?limit=${limit}`, {
-      cache: "no-store",
-    })
-    if (!resp.ok) {
-      return NextResponse.json({ runs: [], total: 0 }, { status: 200 })
-    }
-    const data = await resp.json()
-    const runs = Array.isArray(data.runs) ? data.runs.map(normalizeHistoricalRun) : []
-    return NextResponse.json({ ...data, runs })
+    const adrs = await getAdrDocuments()
+    const slice = adrs.slice(0, limit)
+
+    const runs = slice.map((adr) => ({
+      run_id: adr.adr_id,
+      session_id: adr.adr_id.split("-")[1] ?? "",
+      task_preview: adr.context,
+      decision: adr.full_pipeline.tech_leader.decision,
+      source_decision: adr.full_pipeline.tech_leader.decision,
+      adr_title: adr.title,
+      junior_confidence: adr.full_pipeline.junior.confidence,
+      total_latency_ms: 0,
+      score: 0,
+      timestamp: new Date(adr.timestamp).getTime(),
+    }))
+
+    return NextResponse.json({ runs, total: adrs.length })
   } catch {
-    return NextResponse.json({ runs: [], total: 0 }, { status: 200 })
+    return NextResponse.json({ runs: [], total: 0 })
   }
 }

@@ -63,11 +63,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1777813289,
-        "narHash": "sha256-ETweoGg3JPtj3U2mqmsEDV7qtSdvh+hXIYRHGcaKjt8=",
+        "lastModified": 1778963838,
+        "narHash": "sha256-7sjm5LALOg7x3yT/ceRivIK5IBD1j6HwmSkupElo3TY=",
         "ref": "refs/heads/main",
-        "rev": "791a52220817949928dd3543117b37c04aeeb553",
-        "revCount": 30,
+        "rev": "f685ab124b592c731f88b0b37bec328c1dde5c8d",
+        "revCount": 31,
         "type": "git",
         "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
       },
@@ -94,11 +94,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1777578337,
-        "narHash": "sha256-Ad49moKWeXtKBJNy2ebiTQUEgdLyvGmTeykAQ9xM+Z4=",
+        "lastModified": 1778869304,
+        "narHash": "sha256-30sZNZoA1cqF5JNO9fVX+wgiQYjB7HJqqJ4ztCDeBZE=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "15f4ee454b1dce334612fa6843b3e05cf546efab",
+        "rev": "d233902339c02a9c334e7e593de68855ad26c4cb",
         "type": "github"
       },
       "original": {
@@ -154,11 +154,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1777346187,
-        "narHash": "sha256-oVxyGjpiIsrXhWTJVUOs38fZQkLjd0nZGOY9K7Kfot8=",
+        "lastModified": 1778901358,
+        "narHash": "sha256-n35a8GOPs8zi35GXPe4uBz0Y8xseTkQpNgcrq81gPg0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "146e7bf7569b8288f24d41d806b9f584f7cfd5b5",
+        "rev": "61ec6a4fc56fe0c2b863f7b3eaba07b6664697d9",
         "type": "github"
       },
       "original": {
@@ -172,11 +172,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1777778183,
-        "narHash": "sha256-Lqv9MZO0XAGcMbXJU+ULBSMD41Pf391uJehylUQKe7Y=",
+        "lastModified": 1778901358,
+        "narHash": "sha256-n35a8GOPs8zi35GXPe4uBz0Y8xseTkQpNgcrq81gPg0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "dbba5f888c82ef3ce594c451c33ac2474eb80847",
+        "rev": "61ec6a4fc56fe0c2b863f7b3eaba07b6664697d9",
         "type": "github"
       },
       "original": {
@@ -212,11 +212,11 @@
         "rust-overlay": "rust-overlay_3"
       },
       "locked": {
-        "lastModified": 1777716559,
-        "narHash": "sha256-eEe93I2Z4FEetL3N5NhST48iu/oVZseGJRMJbP+z1jw=",
+        "lastModified": 1778957723,
+        "narHash": "sha256-+R5CIYzY/VoH6GdwXjQX8QvoY7w4Ds6QfwpzoyvK0I0=",
         "ref": "refs/heads/main",
-        "rev": "3cce10b42fc13e1b5a824d4402d22e81be693b6a",
-        "revCount": 72,
+        "rev": "0b415bc50d51c610b91b0dc8369bbe316682ed3e",
+        "revCount": 83,
         "type": "git",
         "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
       },
