@@ -41,7 +41,10 @@ pub struct AgentOrchestrator {
         tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::sync::mpsc::Sender<String>>>,
     pub native_mcp: Option<Arc<NativeMcpServer>>,
     pending_breakpoints: tokio::sync::Mutex<
-        std::collections::HashMap<Uuid, tokio::sync::oneshot::Sender<BreakpointResolution>>,
+        std::collections::HashMap<
+            Uuid,
+            (String, tokio::sync::oneshot::Sender<BreakpointResolution>),
+        >,
     >,
 }
 
@@ -492,9 +495,13 @@ impl AgentOrchestrator {
     pub async fn register_breakpoint(
         &self,
         session_id: Uuid,
+        tool_name: String,
         resolve_tx: tokio::sync::oneshot::Sender<BreakpointResolution>,
     ) {
-        self.pending_breakpoints.lock().await.insert(session_id, resolve_tx);
+        self.pending_breakpoints
+            .lock()
+            .await
+            .insert(session_id, (tool_name, resolve_tx));
     }
 
     /// Returns `Ok(true)` if a breakpoint was found and resolved, `Ok(false)`
@@ -505,8 +512,19 @@ impl AgentOrchestrator {
         resolution: BreakpointResolution,
     ) -> Result<bool> {
         let mut lock = self.pending_breakpoints.lock().await;
-        if let Some(tx) = lock.remove(&session_id) {
+        if let Some((tool_name, tx)) = lock.remove(&session_id) {
+            let resolution_label = match &resolution {
+                BreakpointResolution::Approve => "approve",
+                BreakpointResolution::Reject => "reject",
+                BreakpointResolution::Steer(_) => "steer",
+            }
+            .to_string();
             let _ = tx.send(resolution);
+            self.publish(AgentEvent::BreakpointResolved {
+                session_id,
+                tool: tool_name,
+                resolution: resolution_label,
+            });
             Ok(true)
         } else {
             Ok(false)

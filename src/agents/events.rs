@@ -143,6 +143,19 @@ mod tests {
     }
 
     #[test]
+    fn test_breakpoint_resolved_serializes() {
+        let event = AgentEvent::BreakpointResolved {
+            session_id: Uuid::nil(),
+            tool: "shell".to_string(),
+            resolution: "approve".to_string(),
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], "breakpoint_resolved");
+        assert_eq!(json["tool"], "shell");
+        assert_eq!(json["resolution"], "approve");
+    }
+
+    #[test]
     fn test_adr_checkpoint_serializes() {
         let event = AgentEvent::AdrCheckpoint {
             session_id: Uuid::nil(),

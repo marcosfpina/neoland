@@ -1497,7 +1497,11 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                 tokio::spawn(async move {
                                     while let Some(req) = bp_rx.recv().await {
                                         orch_clone
-                                            .register_breakpoint(req.session_id, req.resolve_tx)
+                                            .register_breakpoint(
+                                                req.session_id,
+                                                req.tool_name.clone(),
+                                                req.resolve_tx,
+                                            )
                                             .await;
                                         orch_clone.publish(AgentEvent::BreakpointHit {
                                             session_id: req.session_id,
