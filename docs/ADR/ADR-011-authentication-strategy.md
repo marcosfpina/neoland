@@ -370,7 +370,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 | Date | Status | Notes |
 |------|--------|-------|
 | 2026-01-30 | Accepted | Initial implementation (Phase 1.1) |
-| 2026-01-30 | Updated | Referenced in PROGRESS.md |
+| 2026-01-30 | Updated | Referenced in neoland-progress.md |
 | TBD | Updated | gRPC mTLS implementation (Phase 1.5) |
 
 ## Implementation Status
@@ -386,7 +386,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 - AuthManager now loads keys from Vault via SecretsManager
 - `new_with_secrets()` method replaces hardcoded keys
 
-**Progress**: See [PROGRESS.md](../PROGRESS.md) for complete status
+**Progress**: See [neoland-progress.md](../neoland-progress.md) for complete status
 
 ## Sign-off
 

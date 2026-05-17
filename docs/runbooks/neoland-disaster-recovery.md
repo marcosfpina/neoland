@@ -775,10 +775,10 @@ aws s3 ls s3://neoland-backups-prod/
 
 ### Appendix D: Related Documents
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
-- [RUNBOOKS.md](./runbooks/README.md) - Operational runbooks
+- [neoland-architecture.md](../neoland-architecture.md) - System architecture
+- [RUNBOOKS.md](./README.md) - Operational runbooks
 - [SECURITY.md](./SECURITY.md) - Security documentation
-- [PROGRESS.md](./PROGRESS.md) - Production readiness status
+- [neoland-progress.md](../neoland-progress.md) - Production readiness status
 
 ### Appendix E: Revision History
 
