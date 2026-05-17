@@ -2,8 +2,18 @@
 # Run `just` to list all commands
 # Requires: `just` and Nix dev shell or Rust toolchain.
 # Most commands work inside `nix develop` or with `direnv allow`.
+#
+# ⚠️  SOPS Secrets:
+#   Commands prefixed with `server` / `client` / `doctor` load secrets
+#   from `secrets/neoland.sops.env` via `scripts/neoland-run.sh`.
+#   Commands suffixed with `-raw` run cargo directly WITHOUT loading SOPS.
+#   If you don't have the age key imported, set env vars manually:
+#     export NEOLAND_ADMIN_API_KEY="..."
+#     export NEOLAND_USER_API_KEY="..."
+#     export NEOLAND_READONLY_API_KEY="..."
+#   and then use the `-raw` variants.
 
-set positional-arguments := true
+set positional-arguments
 
 # ─── Check & Lint ─────────────────────────────────────────────────────────
 
@@ -26,12 +36,22 @@ fmt-check:
 # ─── Test ─────────────────────────────────────────────────────────────────
 
 # Library unit tests
+# Uses cargo directly because tests shouldn't depend on secrets
+# For integration tests that need secrets, use test-all-with-secrets
 test:
     cargo test --lib
+
+# Unit tests with SOPS secrets loaded
+test-with-secrets:
+    bash scripts/neoland-run.sh test -- --lib
 
 # All tests (lib + integration + bins)
 test-all:
     cargo test
+
+# All tests with SOPS secrets loaded
+test-all-with-secrets:
+    bash scripts/neoland-run.sh test
 
 # CLI-specific tests
 test-cli:
@@ -57,16 +77,28 @@ build-debug:
 
 # ─── Run ──────────────────────────────────────────────────────────────────
 
-# Start gRPC + REST server
+# Start gRPC + REST server (loads SOPS secrets automatically)
 server:
+    bash scripts/neoland-run.sh server
+
+# Cargo direct (no SOPS — set env vars manually first)
+server-raw:
     cargo run -- server
 
-# Launch TUI client
+# Launch TUI client (loads SOPS secrets automatically)
 client:
+    bash scripts/neoland-run.sh client
+
+# Cargo direct (no SOPS — set env vars manually first)
+client-raw:
     cargo run -- client
 
-# Environment diagnostics (JSON)
+# Environment diagnostics with SOPS secrets loaded
 doctor:
+    bash scripts/neoland-run.sh doctor -- --json
+
+# Cargo direct (no SOPS)
+doctor-raw:
     cargo run -- doctor --json
 
 # Start DSPy agent pipeline (Python/FastAPI)
