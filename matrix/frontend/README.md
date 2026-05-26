@@ -49,11 +49,11 @@ Neoland UI repositioned from the Matrix base to serve as the primary workbench f
    ```
 
 2. **Start Backend Services**
-   Ensure the Neoland Rust server is running (usually port 8000).
+   Ensure the Neoland Rust control plane is running (default REST port 3001).
 
 3. **Start Frontend**
    ```bash
-   cd matrix/apps/frontend
+   cd matrix/frontend
    npm run dev
    ```
 

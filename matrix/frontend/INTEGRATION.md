@@ -2,6 +2,11 @@
 
 **Status**: Frontend and Backend now live in the same monorepo workspace.
 
+> Current status note (2026-05-17): this guide describes the inherited Matrix
+> frontend/backend integration. The active Neoland workbench path is
+> `matrix/frontend`, with the Rust control plane at `:3001` and DSPy agents at
+> `:8001`. Use `docs/neoland-project-snapshot.md` for the current Neoland map.
+
 ---
 
 ## 🏗️ Architecture Overview

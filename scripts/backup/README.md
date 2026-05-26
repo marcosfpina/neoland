@@ -640,10 +640,10 @@ pg_restore --jobs=4 ...
 
 ## Related Documentation
 
-- [Disaster Recovery Plan](../../docs/disaster_recovery.md) - Complete DR documentation
+- [Disaster Recovery Runbook](../../docs/runbooks/neoland-disaster-recovery.md) - Complete DR documentation
 - [Runbooks](../../docs/runbooks/) - Operational procedures
-- [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) - System architecture
-- [PROGRESS.md](../../docs/PROGRESS.md) - Production readiness status
+- [Architecture](../../docs/neoland-architecture.md) - System architecture
+- [Progress](../../docs/neoland-progress.md) - current delivery status
 
 ## Support
 
