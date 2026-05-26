@@ -1,14 +1,14 @@
 # Neoland - AI Agent Platform
 
-**Status**: v0.1.0 — Beta | Security-Hardened | NixOS/Hyprland Integrated
+**Status**: v0.1.0 — Integrated Pre-Release Beta | Security-Hardened | Nix/NixOS First
 
-Neoland is a terminal-based AI assistant built in Rust, designed as a foundational component of a larger AI agent ecosystem. It features a modern async TUI, multi-agent DSPy pipeline, comprehensive security hardening, and deep NixOS integration.
+Neoland is an AI control-plane component built in Rust, Python, and TypeScript. It combines a code-task TUI, a Rust REST/gRPC control plane, a DSPy multi-agent pipeline, a Next.js operator workbench, and Nix-first runtime wiring for the larger AI agent ecosystem.
 
 **Version**: 0.1.0
-**Production Readiness**: 96/100
+**Responsible Public Pre-Release Readiness**: 78/100
 
 - ✅ Security Hardening — Auth, RBAC, Vault, Audit, Rate Limiting
-- ✅ Testing — 198 Rust unit tests + 24 Python contract tests (0 mocks)
+- ✅ Testing — 226 Rust unit tests passing, 17 ignored + Python contract suite available
 - ✅ CI/CD — GitHub Actions + pre-commit hooks (fmt, clippy, test)
 - ✅ Multi-agent DSPy pipeline — Junior → Senior → Architect → TechLeader
 - ✅ Observability — Prometheus metrics, OpenTelemetry spans, Swagger UI at `/swagger-ui/`
@@ -16,6 +16,7 @@ Neoland is a terminal-based AI assistant built in Rust, designed as a foundation
 - ✅ ADR Ledger — Merkle chain + secp256k1 signatures + at-least-once delivery
 - ✅ EDR rules — 3 SIGMA + 6 YARA rules (agent pipeline anomaly detection)
 - ✅ TUI — async tokio::select!, Tokyo Night, readline cursor, word-nav, braille spinner
+- ⚠️ Release gates still open — full runtime smoke, DSPy doctor probe, session API hardening, frontend analytics guards, backup/restore ritual
 
 ---
 
@@ -115,11 +116,11 @@ See: `docs/neoland-authentication.md`, `docs/neoland-vault-setup.md`, `docs/neol
 
 ## Testing & Quality
 
-**Test Suite**: 198 Rust unit tests + 24 Python contract tests — zero mocks
+**Test Suite**: 226 Rust unit tests passing + Python contract tests available
 
 | Suite | Count | Notes |
 |-------|-------|-------|
-| Rust lib (`cargo test --lib`) | 198 | includes TUI, auth, agents, metrics, openapi |
+| Rust lib (`cargo test --lib --quiet`) | 226 passing, 17 ignored | includes TUI, auth, agents, metrics, openapi |
 | Python contract (`pytest -m contract`) | 24 | AgentFlags IPC + all Pydantic schemas, no LLM required |
 | adr-ledger | 15 | Merkle chain, JetStream, signers |
 
@@ -233,7 +234,7 @@ Users can also provide secrets through shell environment variables, local
 untracked env files, or external secret stores. `SOPS` is the preferred option
 when you want stronger handling for versioned secrets, but it is not mandatory.
 
-See: [`docs/SOPS_SETUP.md`](docs/SOPS_SETUP.md)
+See: [`docs/neoland-sops-setup.md`](docs/neoland-sops-setup.md)
 
 **Key Features**:
 
@@ -260,7 +261,7 @@ nix develop --command neoland-doctor --json
 
 ## 🏗️ Architectural Decisions
 
-All major architectural decisions are documented in [**Architecture Decision Records (ADR)**](docs/ADR.md).
+Major architectural decisions are documented in [`docs/ADR/`](docs/ADR/) and summarized in [`docs/neoland-adr.md`](docs/neoland-adr.md).
 
 **Key Decisions**:
 
@@ -369,64 +370,21 @@ Window management via `hyprland-ipc` crate:
 
 ## 🛣️ Roadmap
 
-### Current Status ✅
+Current source-of-truth docs:
 
-- Unified CLI (replaces 4 shell scripts)
-- TUI client (production-ready)
-- Configurable endpoints
-- NixOS declarative config
-- Agent Hub integration
+- [`docs/neoland-project-snapshot.md`](docs/neoland-project-snapshot.md) — codebase map and runtime topology
+- [`docs/neoland-progress.md`](docs/neoland-progress.md) — current status, evidence, and active gaps
+- [`docs/neoland-roadmap.md`](docs/neoland-roadmap.md) — delivery roadmap to responsible public release
+- [`docs/neoland-dx-roadmap.md`](docs/neoland-dx-roadmap.md) — promise/evidence/status verification loop
+- [`docs/roadmaps/neoland-llm-runtime-roadmap.md`](docs/roadmaps/neoland-llm-runtime-roadmap.md) — SecureLLM/ml-ops/llama runtime alignment
 
-### Next Phase 🚧
+Next delivery focus:
 
-#### Neutron Integration
-
-**Objective**: Supply chain and distributed data trust layer.
-
-**Planned Features**:
-
-- Cryptographic verification of training data provenance
-- Distributed consensus for model updates
-- Tamper-proof audit logs for LLM interactions
-- Zero-knowledge proofs for sensitive inference
-  **Timeline**: Implementation after Neutron v1.0 release (Q2 2026)
-
-**Architecture**:
-
-```rust
-// Future module structure
-src/
-└── neutron/
-    ├── provenance.rs    # Data lineage tracking
-    ├── consensus.rs     # Distributed verification
-    └── zkp.rs          # Zero-knowledge layer
-```
-
-**Integration Points**:
-
-1. `ml-offload-api`: Verify backend attestations
-2. `securellm-bridge`: Audit log immutability
-3. `VectorStore`: Document source verification
-
-**See Also**: [`docs/ADR.md#ADR-007`](docs/ADR.md) for architectural decisions
-
----
-
-### Strategic Roadmap (Q2-Q3 2026)
-
-> **Note**: The following features are in planning/early design phase. No code has been written for these yet.
-
-#### Neutron (NEXUS Platform) - AI Compliance (Q2 2026)
-
-**Status**: Separate project, PoC stage. See `neutron/` directory.
-
-Kernel-level AI compliance enforcement using seccomp-BPF. Targeting EU AI Act high-risk deadline (Aug 2, 2026).
-
-#### ADR-Ledger Integration (Q2 2026)
-
-**Status**: Planned, 0% implemented.
-
-Intelligent governance for architecture decisions with semantic search over ADRs.
+1. harden session serialization and session DB mapping;
+2. add direct DSPy health to `neoland doctor`;
+3. guard frontend analytics against partial ADR/checkpoint payloads;
+4. run the first complete `Neoland -> SecureLLM Bridge -> ml-ops-api -> llama.cpp` smoke;
+5. turn that smoke into the release-candidate preflight.
 
 ---
 
@@ -440,7 +398,7 @@ Intelligent governance for architecture decisions with semantic search over ADRs
 | Qwen 1.8B Inference  | 5-10 tok/s (CPU) | Candle backend; consider llama.cpp for production |
 | Build Time (release) | \~10s            |                                                   |
 
-**Note**: Local inference at 5-10 tok/s CPU is suitable for development/testing. For production workloads, use the ml-offload API backend (GPU-accelerated) or the SecureLLM cloud fallback. SLO targets (500 RPS, p99 <200ms) have not been validated yet.
+**Note**: Local inference at 5-10 tok/s CPU is suitable for development/testing. For production workloads, use the SecureLLM Bridge gateway backed by `ml-ops-api` and `llama.cpp`/`vLLM`. SLO targets (500 RPS, p99 <200ms) have not been validated yet.
 
 ---
 
@@ -461,23 +419,26 @@ cargo check --all-targets
 
 ## Known Issues
 
-1. **Legacy Scripts**: `run-*.sh` still present (marked for removal)
-2. **engine.rs has 0 tests**: Core inference engine has no unit test coverage
-3. **In-memory Vector Store**: `nlp.rs` uses `Vec<Document>` - data lost on restart. Persistent store (`storage/vector_store.rs`) exists but requires PostgreSQL + pgvector setup
-4. **Path Dependencies**: 5 path dependencies in Cargo.toml require sibling projects to build (see Cargo.toml comments for setup)
-5. **Local inference performance**: 5-10 tok/s CPU via Candle is below production threshold; use ml-offload or SecureLLM fallback
-6. **Lock contention risk**: `Arc<Mutex<>>` on engine/vector store may bottleneck above \~50 req/s
-7. **Warnings**: Unused imports in `securellm-core` (external crate)
-8. **SLO targets unvalidated**: 500 RPS / p99 <200ms targets have never been load-tested
+1. **Session API hardening**: session serialization and DB row mapping need explicit failure handling before release candidate.
+2. **Doctor coverage**: direct DSPy `NEOLAND_DSPY_URL` probing still needs to be added.
+3. **Runtime smoke**: the official SecureLLM Bridge -> ml-ops-api -> llama.cpp path is documented but still needs one recorded full-stack task run.
+4. **Frontend analytics guards**: dashboard analytics need to tolerate partial ADR/checkpoint payloads.
+5. **Path Dependencies**: Cargo uses pinned git dependencies and local patching conventions; see `Cargo.toml` and `.cargo/config.toml` if developing with sibling checkouts.
+6. **Local inference performance**: CPU Candle inference is a dev fallback, not the production performance path.
+7. **SLO targets unvalidated**: 500 RPS / p99 <200ms targets require load-test evidence before being advertised.
+8. **Tracked backup files**: `.orig` files should be removed or archived in a dedicated cleanup pass.
 
 ---
 
 ## 📚 Documentation
 
-- : Architecture Decision Records (NEW)
-- : System architecture overview
-- : Legacy quick reference
-- : UI/UX design rationale
+- [`docs/neoland-project-snapshot.md`](docs/neoland-project-snapshot.md): current codebase map
+- [`docs/neoland-architecture.md`](docs/neoland-architecture.md): architecture overview
+- [`docs/neoland-quickstart.md`](docs/neoland-quickstart.md): setup and first run
+- [`docs/neoland-roadmap.md`](docs/neoland-roadmap.md): delivery roadmap
+- [`docs/neoland-progress.md`](docs/neoland-progress.md): status and gaps
+- [`docs/ADR/`](docs/ADR/): architectural decisions
+- [`docs/runbooks/`](docs/runbooks/): operations runbooks
 
 ---
 
@@ -494,4 +455,4 @@ Proprietary - Internal Research Project
 ---
 
 **Maintained by**: VoidNxSEC Team
-**Last Updated**: 2026-04-26
+**Last Updated**: 2026-05-17
