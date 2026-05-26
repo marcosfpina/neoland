@@ -1,5 +1,9 @@
 # Architecture Decision Records (ADR) - Neoland
 
+> Current status note (2026-05-17): this file is a historical ADR summary.
+> The active ADR vault lives in [`docs/ADR/`](ADR/). The current runtime
+> topology is tracked in [`roadmaps/neoland-llm-runtime-roadmap.md`](roadmaps/neoland-llm-runtime-roadmap.md).
+
 ## ADR-001: Arquitetura de 3 Camadas para LLM Inference
 
 **Data**: 2026-01-18  

@@ -2,6 +2,11 @@
 
 > **Visão de Produto**: Tornar IA local acessível e visual para usuários não-técnicos
 
+> Current status note (2026-05-17): use this as aspirational product context.
+> The current delivery target is the responsible public pre-release tracked in
+> [`neoland-roadmap.md`](neoland-roadmap.md), with the workbench and TUI focused
+> on verified operator/code-task flows first.
+
 ---
 
 ## 🎯 O Problema

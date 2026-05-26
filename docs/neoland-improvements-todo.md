@@ -1,68 +1,108 @@
-# Plano de Execução: Melhorias Contínuas (Neoland)
+# Neoland Active Improvement Backlog
 
-Este documento detalha um plano de ação estruturado para abordar as oportunidades de melhoria identificadas no projeto Neoland, priorizando a estabilidade e a prontidão para produção (buscando atingir 100% de *Production Readiness*).
+**Last Updated**: 2026-05-17
+**Purpose**: keep the next implementation queue aligned with the mapped codebase,
+not older production-readiness phases.
 
-## Fase A: Estabilidade e Prevenção de Falhas (Prioridade Alta)
+---
 
-Estas tarefas focam em evitar problemas críticos em produção, como vazamentos de memória e falhas silenciosas.
+## Critical: Contract And Diagnostics
 
-- [x] **A.1. Implementar LRU Cache no VectorStore (`src/storage/vector_store.rs`)**
-  - **Problema:** O armazenamento em memória atual cresce indefinidamente.
-  - **Ação:** Substituir ou envelopar o armazenamento atual (provavelmente um `HashMap` ou vetor) com uma estrutura de dados de evicção (ex: crate `lru` ou customizada) baseada em capacidade máxima ou tempo de vida (TTL).
-  - **Critério de Aceite:** O consumo de memória do VectorStore em memória não deve ultrapassar o limite configurado sob carga pesada.
+- [ ] **SESS-1: explicit session serialization errors**
+  - Area: `src/server/mod.rs`
+  - Problem: `serde_json::to_value(&session).unwrap_or_default()` can turn a serialization failure into a misleading `{}` response.
+  - Acceptance: session handlers return a clear 500 with log context when serialization fails.
 
-- [x] **A.2. Finalizar Comando `neoland doctor` (`src/cli.rs` / `src/commands.rs`)**
-  - **Problema:** A TUI sugere o uso de `neoland doctor` em erros de conexão, mas a ferramenta de diagnóstico não está completa ou devidamente detalhada.
-  - **Ação:** Expandir o comando para verificar conectividade de rede (gRPC, REST), acesso ao banco de dados (PostgreSQL/pgvector), disponibilidade do Vault e status dos backends de inferência (ml-offload-api).
-  - **Critério de Aceite:** O usuário pode rodar `neoland doctor` e obter um relatório claro do que está falhando no ambiente.
+- [ ] **SESS-2: robust session row mapping**
+  - Area: `src/agents/session.rs`
+  - Problem: tuple-index mapping is fragile if the DB projection changes.
+  - Acceptance: session metadata is mapped by named fields or an equivalent resilient pattern.
 
-## Fase B: Observabilidade e Testes (Prioridade Média-Alta)
+- [ ] **DOC-1: direct DSPy doctor probe**
+  - Area: `src/commands.rs`
+  - Problem: `doctor` diagnoses control plane, gateway, ml-ops, llama, DB, and Vault, but not the Python DSPy service directly.
+  - Acceptance: `neoland doctor --json` includes a distinct DSPy pipeline result using `NEOLAND_DSPY_URL`.
 
-Estas tarefas melhoram a visibilidade do sistema e garantem que regressões não ocorram.
+- [ ] **RT-1: full LLM runtime smoke**
+  - Area: `flake.nix`, `modules/applications/*`, external services
+  - Problem: the official topology is documented but not proven in one boot/task run.
+  - Acceptance: documented output for `Neoland -> SecureLLM Bridge -> ml-ops-api -> llama.cpp`.
 
-- [ ] **B.1. Habilitar OpenTelemetry Tracing (`src/logging.rs` e Python Agents)**
-  - **Problema:** Dificuldade de rastrear a origem de latências altas (citado em `high-latency.md`), especialmente cruzando a fronteira Rust -> Python.
-  - **Ação:** Configurar o exportador OTLP no Rust (crate `opentelemetry`) e no Python (`opentelemetry-sdk`). Propagar o `traceparent` (Correlation IDs) nos cabeçalhos gRPC/REST.
-  - **Critério de Aceite:** Traces completos visíveis em uma ferramenta compatível (Jaeger/Prometheus/Grafana) desde a TUI até a resposta do Agente.
+---
 
-- [ ] **B.2. Corrigir Testes Ignorados e Atingir 80% de Cobertura**
-  - **Problema:** O `docs/neoland-roadmap.md` e o `docs/neoland-progress.md` citam ~26 testes ignorados (incluindo stubs gRPC).
-  - **Ação:** Investigar o porquê de os testes em `tests/` e `src/` estarem com `#[ignore]`. Corrigi-los e adicionar testes unitários para a camada TUI e integrações de fallback.
-  - **Critério de Aceite:** `cargo test` passa 100% (sem `ignored` críticos) e cobertura sobe para >= 80%.
+## High: Operator Surface
 
-## Fase C: Escalabilidade, Performance e Segurança (Prioridade Média)
+- [ ] **UI-1: partial ADR guards**
+  - Area: `matrix/frontend/lib/neoland/server.ts`
+  - Problem: analytics assumes complete `full_pipeline` payloads.
+  - Acceptance: dashboard overview and analytics render neutral values for partial checkpoints.
 
-Estas tarefas preparam o sistema para escalar de forma segura com mais usuários, agentes e poder computacional.
+- [ ] **UI-2: frontend verification pass**
+  - Area: `matrix/frontend`
+  - Problem: current source has not been validated with full lint/build during this sync.
+  - Acceptance: `frontend-lint` and `frontend-build` results are recorded, with legacy debt separated from newly touched code.
 
-- [ ] **C.1. Suporte para GPUs e Endpoints Externos (LLMs)**
-  - **Problema:** A inferência atual depende muito de CPU local, gerando gargalos de performance e limitando a escalabilidade. O gerenciamento dinâmico (como Nvidia Brev) pode ser caótico se não estruturado corretamente.
-  - **Ação:** Adicionar suporte nativo à configuração de endpoints externos (compatíveis com OpenAI/vLLM). Estruturar um pipeline de roteamento robusto via Circuit Breaker para alternar fluidamente entre clusters GPU remotos e o fallback local em CPU, abstraindo a complexidade da infraestrutura externa.
-  - **Critério de Aceite:** O sistema roteia requisições para GPUs remotas de forma transparente, executando *failover* para o fallback local em caso de falha externa.
+- [ ] **TUI-1: SSE degraded timeout**
+  - Area: `src/tui/mod.rs`
+  - Problem: a dead-but-open SSE socket can leave the TUI looking connected.
+  - Acceptance: long-silent streams degrade visibly and recovery guidance is shown.
 
-- [ ] **C.2. Gerenciamento de Conexões (PgBouncer)**
-  - **Problema:** O aumento de agentes Python causará exaustão de conexões no PostgreSQL.
-  - **Ação:** Atualizar os manifestos/arquivos do Kubernetes ou docker-compose (se aplicável) para incluir o PgBouncer. Configurar o Rust e o Python para apontar para a porta do PgBouncer.
-  - **Critério de Aceite:** Sistema suporta 100+ agentes simultâneos sem estourar o limite de conexões do DB.
+---
 
-- [ ] **C.3. Proteção Automática (Rate Limiting Dinâmico / IP Blocking)**
-  - **Problema:** O documento de mitigação de força bruta prevê bloqueios automáticos, mas a implementação pode estar incompleta.
-  - **Ação:** Expandir o RateLimiter em `src/server/mod.rs` para banir temporariamente IPs que excedam a cota de forma agressiva (Fail2Ban like).
-  - **Critério de Aceite:** IPs maliciosos são colocados em quarentena automaticamente.
+## High: Release Operations
 
-- [ ] **C.4. Pré-aquecimento de Modelos (Cold Starts)**
-  - **Problema:** Modelos Qwen locais demoram a responder no primeiro uso.
-  - **Ação:** Criar um script ou endpoint em `ml-offload-api` que force o carregamento do modelo na inicialização do serviço.
-  - **Critério de Aceite:** O primeiro request após o deploy tem latência comparável aos subsequentes.
+- [ ] **OPS-1: canonical preflight**
+  - Area: `scripts/`, `docs/runbooks/`, `docs/neoland-quickstart.md`
+  - Problem: validation exists in pieces.
+  - Acceptance: one short preflight covers boot, health, task, session, ADR, and service visibility.
 
-## Fase D: Documentação Abrangente (Prioridade Contínua)
+- [ ] **OPS-2: backup/restore smoke**
+  - Area: `scripts/backup/`, checkpoint storage
+  - Problem: backup scripts exist, but restore is not part of the normal release gate.
+  - Acceptance: restore of at least one checkpoint/session artifact is demonstrated and documented.
 
-Garantir que os múltiplos subprojetos do Neoland sejam mantíveis, compreensíveis e fáceis de integrar.
+- [ ] **OPS-3: release honesty pass**
+  - Area: `README.md`, quickstart, docs index
+  - Problem: older docs still contain inflated readiness language.
+  - Acceptance: public-facing docs describe pre-release beta status, verified flows, and limitations.
 
-- [ ] **D.1. Documentar Agentes Python (`agents/README.md`)**
-  - **Ação:** Detalhar a arquitetura baseada em DSPy, o pipeline RAG, a comunicação IPC com o Rust e como adicionar novos agentes/skills.
-- [ ] **D.2. Documentar Backend Core (`src/README.md`)**
-  - **Ação:** Explicar o ciclo de vida da engine Rust, a ponte de ML (`ml_offload`), gerenciamento de estado (`AppState`) e o fluxo de inferência e fallback.
-- [ ] **D.3. Documentar Infraestrutura e Observabilidade (`deploy/README.md`)**
-  - **Ação:** Guias sobre o uso de Nix, Prometheus, Vault, SOPS, e os manifestos Kubernetes associados.
-- [ ] **D.4. Documentar Sistema de Skills (`skills/README.md`)**
-  - **Ação:** Criar um guia padrão sobre como escrever, testar e integrar novas skills (ex: `Linux_Server_Master`, `security-architect`) para os agentes Python.
+---
+
+## Medium: Cleanup And Hardening
+
+- [ ] **CLEAN-1: tracked backup files**
+  - Area: `src/tui/mod.rs.orig`, `agents/neoland_agents/tools.py.orig`
+  - Problem: tracked `.orig` files make the active map noisier.
+  - Acceptance: remove or archive in a dedicated cleanup commit after confirming they are not needed.
+
+- [ ] **LOAD-1: load/SLO validation**
+  - Area: `tests/load/`, `benches/`
+  - Problem: 500 RPS and p99 latency targets are not validated for the current stack.
+  - Acceptance: record REST/gRPC load results and adjust README claims.
+
+- [ ] **SEC-1: edge hardening cut**
+  - Area: auth, deployment docs
+  - Problem: enterprise backlog and first-release security minimum are mixed.
+  - Acceptance: first-release security minimum is explicit; enterprise items stay backlog.
+
+---
+
+## Recently Closed Or Reclassified
+
+- [x] `VectorStore` unbounded-memory concern is no longer the main active blocker; persistent storage exists and release work should focus on integration gates.
+- [x] `neoland doctor` now probes the SecureLLM gateway with `/api/health` before `/health`.
+- [x] frontend pipeline is no longer an "awaiting backend contract" stub.
+- [x] session browsing is no longer lookup-only; `/v1/agents/sessions` exists and the workbench consumes it.
+- [x] `ml_api_url` naming was re-scoped to `neoland_gateway_url`; legacy env remains as an alias.
+
+---
+
+## Working Rule
+
+When a backlog item closes, update:
+
+1. [`docs/neoland-progress.md`](neoland-progress.md)
+2. [`docs/neoland-roadmap.md`](neoland-roadmap.md)
+3. any specific side roadmap that owns the area
+
+No readiness score increase without test, smoke, or runtime evidence.

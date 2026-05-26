@@ -2,6 +2,9 @@
 
 NEOLAND supports multiple LLM providers through the SecureLLM Bridge. In the default runtime topology, `Neoland -> SecureLLM Bridge API -> ml-ops-api -> llama.cpp/vLLM`. This document explains how to configure and use each provider within that stack.
 
+Current naming rule: `NEOLAND_GATEWAY_URL` is the canonical Neoland gateway
+variable. `NEOLAND_ML_API_URL` remains as a compatibility alias only.
+
 ## Supported Providers
 
 | Provider | Type | Cost | Speed | API Key Required |

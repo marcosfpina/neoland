@@ -1,241 +1,180 @@
 # Neoland DX Roadmap
 
-**Última atualização**: 2026-04-28  
-**Objetivo**: validar se a experiência real do projeto corresponde ao que o Neoland promete em docs, CLI, TUI e superfícies web.
+**Last Updated**: 2026-05-17
+**Objective**: verify that Neoland's real developer/operator experience matches
+what the CLI, TUI, workbench, quickstart, and release docs promise.
 
 ---
 
-## O Que DX Significa Aqui
+## Current DX Reading
 
-Para Neoland, `DX` não é só conforto de desenvolvimento.
+Neoland DX is now materially better than the older roadmap described:
 
-É a soma de:
+- `just --list` exposes a clear command surface.
+- `server`, `client`, and `doctor` recipes load SOPS secrets through `scripts/neoland-run.sh`.
+- `*-raw` recipes exist for direct cargo runs without SOPS.
+- frontend helper commands are exported by the Nix dev shell.
+- Python agent helpers exist for starting agents and running contract/integration tests.
+- `NEOLAND_GATEWAY_URL` is now the canonical gateway env, with `NEOLAND_ML_API_URL` kept as compatibility alias.
 
-- instalar sem atrito
-- entender o que o projeto faz de verdade
-- subir os componentes principais sem improviso
-- usar os fluxos centrais sem comportamento surpreendente
-- confiar que os docs não prometem mais do que o sistema entrega
-
-O problema atual não é ausência total de componentes.  
-O problema é que **precisamos verificar se cada componente funciona conforme é prometido**.
+The remaining DX work is verification and truthfulness, not command invention.
 
 ---
 
-## Pergunta Norteadora
+## DX Principle
 
-Para cada fluxo principal, queremos responder:
+For each promised flow, track:
 
-**“O que o Neoland promete?”**  
-**“O que o código realmente entrega?”**  
-**“O que já está testado?”**  
-**“O que ainda depende de confiança manual?”**
+```text
+promise -> evidence -> status -> next action
+```
 
----
+Status vocabulary:
 
-## Meta Principal
-
-Sair de:
-
-- componentes aparentemente funcionais
-- documentação forte demais
-- confiança implícita
-
-Para:
-
-- promessas explícitas
-- fluxo principal verificado
-- gaps nomeados
-- DX honesta para Nix, NixOS e Ubuntu bare metal
+- `verified`: tested in the current tree and safe to document as working.
+- `partial`: implemented but not fully smoked or has caveats.
+- `stale`: doc/UI copy no longer matches the code.
+- `backlog`: intentionally not required for the first public pre-release.
 
 ---
 
-## Streams De Trabalho
+## Active Workstreams
 
-## Stream 1 — Promise Inventory
-**Objetivo**: listar as promessas reais do projeto.
+## Stream 1 - Command Surface
 
-Fontes prioritárias:
+**Status**: `mostly_verified`
 
-- [`README.md`](/home/kernelcore/master/neoland/README.md)
-- [`docs/neoland-quickstart.md`](/home/kernelcore/master/neoland/docs/neoland-quickstart.md)
-- [`docs/neoland-roadmap.md`](/home/kernelcore/master/neoland/docs/neoland-roadmap.md)
-- help da CLI
-- telas do TUI
-- páginas centrais do frontend
+Evidence:
 
-**Entregáveis**
+- `just --list` shows server/client/doctor/test/frontend/agents/secrets/validate commands.
+- `justfile` documents SOPS-loaded and raw variants.
+- `flake.nix` exposes wrapper commands and frontend helpers.
 
-- inventário de claims por superfície
-- classificação por claim:
-  - `verified`
-  - `partially verified`
-  - `doc-only`
-  - `stale`
+Next:
 
-## Stream 2 — Core Journey Verification
-**Objetivo**: validar os caminhos principais de uso.
+- [ ] run `just doctor-raw` or `neoland doctor --json` after the direct DSPy probe lands;
+- [ ] keep README command examples aligned with `justfile`.
 
-Journeys prioritárias:
+## Stream 2 - Core Journey Verification
 
-1. entrar no ambiente
-2. configurar secrets
-3. subir server
-4. validar health
-5. abrir TUI
-6. executar fluxo principal
-7. inspecionar sessão/checkpoint
-8. usar frontend workbench
+**Status**: `partial`
 
-**Entregáveis**
+Target journey:
 
-- checklist de smoke por jornada
-- resultado por jornada:
-  - `works as promised`
-  - `works with caveats`
-  - `broken`
-  - `unclear claim`
+1. enter dev shell;
+2. load or provide secrets;
+3. start server;
+4. start DSPy agents;
+5. run `doctor`;
+6. submit a task;
+7. inspect live stream;
+8. inspect session;
+9. inspect ADR/checkpoint;
+10. stop and restore.
 
-## Stream 3 — TUI Truthfulness
-**Objetivo**: verificar se o TUI é estável e se comunica o estado real do sistema.
+Next:
 
-Pontos de foco:
+- [ ] turn the target journey into one release preflight;
+- [ ] record the first full successful output in `docs/neoland-progress.md`.
 
-- bugs visíveis
-- fluxos quebrados
-- mensagens de estado enganosas
-- teclas/atalhos prometidos versus comportamento real
-- ergonomia para primeira execução
+## Stream 3 - TUI Truthfulness
 
-**Entregáveis**
+**Status**: `partial`
 
-- lista priorizada de bugs de DX do TUI
-- separação entre:
-  - bug funcional
-  - bug de feedback
-  - bug de onboarding
+Done:
 
-## Stream 4 — Frontend Truthfulness
-**Objetivo**: confirmar se o workbench mostra a verdade do backend.
+- live SSE stage output;
+- breakpoint resolved handling;
+- visible steering/breakpoint failures;
+- shell-like input history;
+- code-task workstation direction.
 
-Pontos de foco:
+Next:
 
-- SSE já exposto mas não consumido
-- sessões reais versus navegação prometida
-- dependências residuais de Matrix
-- métricas que parecem canônicas sem serem
+- [ ] add long-silent SSE timeout/degraded handling;
+- [ ] re-test first-run behavior after diagnostics work;
+- [ ] keep non-code orchestration surfaces in the web console.
 
-**Entregáveis**
+## Stream 4 - Frontend Truthfulness
 
-- matriz página -> contrato real consumido
-- lista de cópias e módulos que precisam ser rebaixados ou corrigidos
+**Status**: `partial`
 
-## Stream 5 — Environment DX
-**Objetivo**: suportar bem os dois públicos principais.
+Done:
 
-Perfis:
+- `/pipeline` uses real `PipelineRunner`;
+- session registry consumes `GET /v1/agents/sessions`;
+- live stream relay consumes `GET /v1/agents/events/:session`;
+- stats route uses ADR/checkpoint truth instead of Matrix as canonical data.
 
-- `Nix/NixOS`
-- `Ubuntu bare metal`
+Next:
 
-Pontos de foco:
+- [ ] guard analytics for partial ADR documents;
+- [ ] run frontend lint/build;
+- [ ] keep Matrix telemetry visibly optional/non-canonical.
 
-- setup inicial
-- secrets
-- comandos principais
-- troubleshooting mínimo
+## Stream 5 - Environment DX
 
-**Entregáveis**
+**Status**: `partial`
 
-- comparação lado a lado dos dois fluxos
-- gaps onde um dos ambientes está claramente pior documentado ou menos suportado
+Nix/NixOS is the strongest path:
 
-## Stream 6 — Release Honesty
-**Objetivo**: alinhar claims de readiness ao que já foi verificado.
+- dev shell;
+- SOPS;
+- wrappers;
+- NixOS modules;
+- integrated LLM suite module.
 
-Pontos de foco:
+Ubuntu/bare-metal remains supported conceptually through env vars and local files,
+but it needs a refreshed smoke path.
 
-- percentuais de readiness
-- claims do README
-- “production ready” versus “pré-release técnico”
-- features avançadas ainda não verificadas ponta a ponta
+Next:
 
-**Entregáveis**
+- [ ] document the minimal Ubuntu path without requiring SOPS;
+- [ ] document where SOPS is preferred but not mandatory;
+- [ ] verify the same command sequence outside Nix or label it as partial.
 
-- lista de claims para manter
-- lista de claims para reescrever
-- lista de claims para remover até validação
+## Stream 6 - Release Honesty
+
+**Status**: `in_progress`
+
+Done:
+
+- readiness recalibrated to 78/100;
+- current project snapshot and roadmap updated;
+- older archive/checkpoint docs marked as historical context.
+
+Next:
+
+- [ ] update README/quickstart public claims after the next fixes;
+- [ ] remove or soften unverified SLO/performance claims;
+- [ ] keep "pre-release beta" language until the full runtime smoke passes.
 
 ---
 
-## Matriz Inicial De Avaliação
+## Current DX Matrix
 
-| Área | Promessa atual | Estado percebido | Ação |
-|------|----------------|------------------|------|
-| TUI | moderna, estável, pronta para uso central | parcial | validar fluxo real e fechar bugs |
-| Pipeline | multi-agent flow real | bom no core, mas precisa checagem ponta a ponta | smoke + contrato |
-| Frontend Pipeline | live view operacional | parcial | consumir SSE real |
-| Sessions | inspeção real | parcial | fluxo real existe, browsing é limitado |
-| ADR Vault | checkpoints reais | bom | validar corpus e navegação |
-| Services | health real | bom | validar smoke em ambiente real |
-| Secrets | SOPS preferido, env válido | bom | manter mensagem consistente |
-| Quickstart | subir em poucos minutos | parcial | validar em fluxo limpo |
-| Production readiness | alto e publicável | inflado | recalibrar por evidência |
-
----
-
-## Roadmap Em Fases
-
-## Fase A — Inventário E Critérios
-**Status**: `next`
-
-- [ ] listar promessas centrais por superfície
-- [ ] definir critérios de `verified`, `partial`, `stale`
-- [ ] registrar os fluxos de maior risco de frustração
-
-## Fase B — Smoke De Journeys
-**Status**: `next`
-
-- [ ] validar fluxo Nix/NixOS
-- [ ] validar fluxo Ubuntu bare metal
-- [ ] validar TUI principal
-- [ ] validar frontend principal
-- [ ] validar sessão + ADR
-
-## Fase C — Gap Closure
-**Status**: `planned`
-
-- [ ] corrigir bugs de TUI que quebram a jornada principal
-- [ ] corrigir claims enganosas no frontend
-- [ ] alinhar Quickstart com fluxo realmente suportado
-- [ ] reduzir ambiguidade de paths, comandos e estados
-
-## Fase D — DX Verification Loop
-**Status**: `planned`
-
-- [ ] transformar smoke checks em rotina repetível
-- [ ] adicionar verificação por release
-- [ ] impedir que docs voltem a prometer além da evidência
+| Area | Current Promise | Status | Next Action |
+|------|-----------------|--------|-------------|
+| Dev shell | reproducible Nix environment | verified | keep command list current |
+| SOPS secrets | preferred encrypted dotenv flow | verified for wrapper shape | keep env/local file as valid alternative |
+| CLI doctor | environment diagnostics | partial | add direct DSPy probe |
+| TUI | code-task live workstation | partial | timeout/degraded state and first-run polish |
+| Pipeline workbench | real task + live stream | partial | verify with full stack and frontend build |
+| Sessions | recent session registry | implemented | verify DB-backed flow in full smoke |
+| ADR vault | checkpoint-backed decisions | partial | guard partial checkpoint analytics |
+| Services | health/readiness/liveness map | partial | include runtime layers in release preflight |
+| Runtime topology | SecureLLM -> ml-ops -> llama | partial | run end-to-end smoke |
+| Release docs | honest public pre-release | in_progress | finish README/quickstart pass after fixes |
 
 ---
 
-## Critério De Conclusão
+## Completion Criteria
 
-Consideraremos o DX do Neoland em estado saudável quando:
+DX is healthy when:
 
-- os principais fluxos de uso tiverem smoke claro e repetível
-- TUI, frontend e docs descreverem o mesmo produto
-- Nix e Ubuntu tiverem caminhos compreensíveis e honestos
-- claims de readiness forem lastreadas em verificação, não em intenção
-
----
-
-## Próximo Passo Recomendado
-
-A sequência mais útil agora é:
-
-1. inventariar claims do `README`, `QUICKSTART` e TUI
-2. transformar isso em uma matriz `promessa -> evidência -> status`
-3. atacar primeiro os bugs e drifts que quebram a jornada principal
-
-Esse roadmap existe para garantir que Neoland não seja só um projeto com partes impressionantes, mas um sistema que cumpre aquilo que promete para quem vai realmente usar, instalar e avaliar.
+- the main flow can be run from docs without private context;
+- diagnostics identify the broken layer;
+- frontend and TUI represent real backend state;
+- SOPS is preferred but not mandatory;
+- Nix/NixOS and one non-Nix path are understandable;
+- readiness claims are tied to test or smoke evidence.
