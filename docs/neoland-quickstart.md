@@ -216,7 +216,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 ### Environment Variables
 
 ```bash
-# ML Offload API URL (if using external GPU service)
+# Primary Neoland gateway URL (SecureLLM Bridge by default)
 export NEOLAND_GATEWAY_URL="http://gpu-server.local:9000"
 
 neoland client --neoland-gateway-url $NEOLAND_GATEWAY_URL
@@ -315,7 +315,7 @@ neoland restart
 
 ## Performance Tips
 
-1. **Use ml-offload-api**: Offload to GPU for 10-50x speedup
+1. **Use the gateway path**: SecureLLM Bridge -> ml-ops-api -> llama.cpp/vLLM for accelerated inference
 2. **Reduce max_tokens**: Lower values = faster responses
 3. **Disable RAG**: Set `context_top_k: 0` if not needed
 
@@ -323,8 +323,8 @@ neoland restart
 
 ## Next Steps
 
-- Read `ARCHITECTURE.md` for technical details
-- Explore integration points (`ml-offload-api`, `securellm-bridge`)
+- Read `docs/neoland-project-snapshot.md` and `docs/neoland-architecture.md` for technical details
+- Explore integration points (`securellm-bridge`, `ml-ops-api`, `llama.cpp`)
 - Check the bundled NixOS module: `modules/applications/neoland.nix`
 
 ---

@@ -453,8 +453,8 @@ curl http://neoland:3001/health | jq '.status'
 
 - **Alerting Rules**: `k8s/prometheus/alerts.yml`
 - **Metrics Documentation**: `docs/METRICS.md`
-- **Architecture**: `docs/ARCHITECTURE.md`
-- **Production Readiness**: `docs/PROGRESS.md`
+- **Architecture**: `docs/neoland-architecture.md`
+- **Production Readiness**: `docs/neoland-progress.md`
 - **Incident Response Plan**: `docs/SECURITY_INCIDENT_RESPONSE.md` (TODO: Phase 6)
 
 ---

@@ -5,6 +5,12 @@
 
 This document provides a technical deep-dive into Neoland's architecture, design patterns, and integration strategies.
 
+> Current status note (2026-05-17): this file is historical architecture
+> context. For the current mapped topology, ports, status, and release blockers,
+> use [`neoland-project-snapshot.md`](neoland-project-snapshot.md),
+> [`neoland-progress.md`](neoland-progress.md), and
+> [`roadmaps/neoland-llm-runtime-roadmap.md`](roadmaps/neoland-llm-runtime-roadmap.md).
+
 ---
 
 ## Table of Contents

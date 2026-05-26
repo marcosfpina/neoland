@@ -1,242 +1,186 @@
 # Neoland LLM Runtime Roadmap
 
-**Última atualização**: 2026-04-28  
-**Objetivo**: fechar a arquitetura operacional de inferência do Neoland com uma topologia única, validável e pronta para endurecimento.
+**Last Updated**: 2026-05-17
+**Objective**: make Neoland's inference topology official, diagnosable, and
+repeatable for the first responsible public pre-release.
 
 ---
 
-## Decisão Arquitetural
+## Architectural Decision
 
-### Topologia alvo
+Canonical topology:
 
 ```text
 Neoland
   -> SecureLLM Bridge API
     -> ml-ops-api
       -> llama.cpp
-      -> vLLM (opcional)
+      -> vLLM (optional)
 ```
 
-### O que esta decisão significa
+Meaning:
 
-- `Neoland` não deve falar com `llama.cpp` diretamente no fluxo principal
-- `SecureLLM Bridge` é o gateway/proxy reverso semântico para LLMs
-- `ml-ops-api` é a camada de inferência e roteamento GPU/local
-- `llama.cpp` e `vLLM` ficam como backends atrás do `ml-ops-api`
-- `spider-nix-network` não é gateway principal do produto; ele pode existir como proxy outbound auxiliar quando houver necessidade real
-
-### Fonte de verdade por camada
-
-- `Neoland`: UX, TUI, control plane, jornadas, health do produto
-- `securellm-bridge`: gateway LLM, policies, audit, provider routing
-- `ml-ops-api`: inferência OpenAI-compatible, health do runtime, escolha de backend
-- `llama.cpp` / `vLLM`: execução do modelo
+- Neoland's primary client-facing endpoint is the SecureLLM Bridge gateway.
+- `ml-ops-api` is the inference bridge behind the gateway.
+- `llama.cpp` and `vLLM` are backends behind `ml-ops-api`.
+- direct `llama.cpp` access can exist for debugging, but it is not the product default.
 
 ---
 
-## Problema Atual
+## Current State
 
-Hoje o runtime de inferência está funcional em partes, mas com naming e health ainda confusos:
+Done:
 
-- `ml_api_url` no Neoland ainda carrega semântica mista entre `ml-offload`, `SecureLLM API` e `llama.cpp`
-- `doctor` do Neoland ainda verifica um endpoint incompatível com o `securellm-bridge` (`/health` em vez de `/api/health`)
-- a documentação mistura `8080`, `8081`, `8083`, `5001` e `9000` sem declarar claramente qual porta pertence a qual camada
-- parte do repo ainda descreve `llama.cpp` direto, enquanto a topologia decidida usa gateway + inference bridge
+- `src/config.rs` and CLI now use `neoland_gateway_url` / `--neoland-gateway-url`.
+- `NEOLAND_GATEWAY_URL` is canonical in dev shell and NixOS LLM suite wiring.
+- `NEOLAND_ML_API_URL` remains supported as a compatibility alias.
+- `doctor` probes SecureLLM Bridge using `/api/health` before `/health`.
+- `doctor` optionally probes `ML_OPS_API_URL` and `LLAMACPP_URL` when declared.
+- NixOS modules exist for `services.neoland`, `services.securellm-bridge-api`, `services.ml-ops-api`, and `services.neoland-llm-suite`.
 
-O roadmap desta trilha existe para resolver isso sem improviso.
+Still open:
 
----
-
-## Meta Principal
-
-Sair de:
-
-- backend de inferência parcialmente funcional
-- nomenclatura ambígua
-- health checks enganosos
-- múltiplas leituras possíveis da mesma stack
-
-Para:
-
-- uma topologia oficial
-- um conjunto claro de URLs e portas
-- diagnóstico correto por camada
-- fluxo repetível de `boot -> health -> task -> fallback -> troubleshooting`
+- direct DSPy `NEOLAND_DSPY_URL/health` is not yet part of `doctor`;
+- a complete `Neoland -> SecureLLM Bridge -> ml-ops-api -> llama.cpp` task run has not been recorded in the current docs;
+- frontend/services view does not yet represent every runtime layer as release-gate evidence;
+- README/quickstart need a final pass after the smoke succeeds.
 
 ---
 
-## Configuração Alvo
+## Official Local Ports
 
-### Single-host dev/staging
+| Layer | Role | Default |
+|-------|------|---------|
+| Neoland REST | control plane | `http://127.0.0.1:3001` |
+| Neoland gRPC | internal gRPC | `http://[::1]:50051` |
+| Frontend workbench | operator UI | `http://127.0.0.1:3006` |
+| DSPy agents | agent pipeline | `http://127.0.0.1:8001` |
+| SecureLLM Bridge API | LLM gateway | `http://127.0.0.1:8080` |
+| ml-ops-api | inference bridge | `http://127.0.0.1:8083` |
+| llama.cpp | local backend | `http://127.0.0.1:8081` |
+| vLLM | optional backend | `http://127.0.0.1:8000` |
 
-| Camada | Papel | URL sugerida |
-|--------|-------|--------------|
-| `Neoland REST` | control plane | `http://127.0.0.1:3001` |
-| `SecureLLM Bridge API` | gateway LLM principal | `http://127.0.0.1:8080` |
-| `ml-ops-api` | inference bridge | `http://127.0.0.1:8083` |
-| `llama.cpp` | backend local | `http://127.0.0.1:5001` |
-| `vLLM` | backend opcional | `http://127.0.0.1:8000` |
+## Official Env Names
 
-### Variáveis esperadas
-
-| Variável | Dono | Valor alvo |
-|----------|------|------------|
-| `NEOLAND_ML_API_URL` | Neoland | `http://127.0.0.1:8080` |
-| `ML_OPS_API_URL` | securellm-bridge | `http://127.0.0.1:8083` |
-| `LLAMACPP_URL` | ml-ops-api | `http://127.0.0.1:5001` |
-| `VLLM_URL` | ml-ops-api | `http://127.0.0.1:8000` |
-
-### Regra de naming
-
-- `ml_api_url` no Neoland deve ser entendido como: endpoint OpenAI-compatible principal consumido pelo cliente
-- na topologia decidida, esse endpoint é o `SecureLLM Bridge API`
-- `llama.cpp` e `vLLM` não devem ser tratados como URLs primárias do client do Neoland
+| Variable | Owner | Status | Purpose |
+|----------|-------|--------|---------|
+| `NEOLAND_GATEWAY_URL` | Neoland | canonical | SecureLLM Bridge endpoint consumed by Neoland |
+| `NEOLAND_ML_API_URL` | Neoland | compatibility | legacy alias mapped to gateway URL |
+| `NEOLAND_DSPY_URL` | Neoland | canonical | Python DSPy pipeline endpoint |
+| `ML_OPS_API_URL` | SecureLLM Bridge | canonical | ml-ops upstream URL |
+| `LLAMACPP_URL` | ml-ops-api | canonical | llama.cpp backend URL |
+| `VLLM_URL` | ml-ops-api | optional | vLLM backend URL |
 
 ---
 
-## Roadmap De Execução
+## Roadmap
 
-## Fase 0 — Freeze De Topologia
-**Status**: `in_progress`
+## Phase 0 - Freeze Topology
 
-- [ ] declarar explicitamente em docs centrais que o gateway principal é o `securellm-bridge`
-- [ ] declarar explicitamente que `ml-ops-api` é upstream de inferência
-- [ ] declarar explicitamente que `spider-nix-network` não é o gateway principal do produto
-- [ ] parar de usar linguagem ambígua como “ml-offload ou llama.cpp” no mesmo campo sem distinguir camada
+**Status**: `done`
 
-**Saída da fase**
+- [x] declare SecureLLM Bridge as the primary gateway;
+- [x] declare ml-ops-api as the inference bridge;
+- [x] keep `llama.cpp` behind ml-ops-api in the default path;
+- [x] keep `NEOLAND_ML_API_URL` only as compatibility naming.
 
-- uma topologia oficial, curta e repetível
+## Phase 1 - Naming Alignment
 
-## Fase 1 — Alinhamento De Naming No Neoland
+**Status**: `done`
+
+- [x] code config surface renamed to `neoland_gateway_url`;
+- [x] CLI arg is `--neoland-gateway-url`;
+- [x] dev shell exports `NEOLAND_GATEWAY_URL`;
+- [x] NixOS suite exports both canonical and compatibility env vars.
+
+## Phase 2 - Health And Doctor
+
+**Status**: `partial`
+
+- [x] gateway health probes `/api/health` and `/health`;
+- [x] ml-ops-api health is diagnosed when `ML_OPS_API_URL` exists;
+- [x] llama.cpp health is diagnosed when `LLAMACPP_URL` exists;
+- [ ] DSPy health is diagnosed directly from `NEOLAND_DSPY_URL`;
+- [ ] doctor output names all layers in a way operators can act on immediately.
+
+Gate:
+
+- `neoland doctor --json` can identify which layer failed without reading logs first.
+
+## Phase 3 - Bridge Bootstrap
+
 **Status**: `next`
 
-- [ ] revisar `README.md`, `docs/PROVIDERS.md` e docs de runtime para refletir o gateway real
-- [ ] rebaixar ou remover referências que tratem `ml_api_url` como `llama.cpp` direto
-- [ ] renomear labels de UX e diagnóstico onde `ml-offload` não descreve mais o runtime real
-- [ ] decidir se `ml_api_url` mantém esse nome por compatibilidade ou se ganha alias/documentação mais precisa
+- [ ] start `securellm-api-server` with ml-ops provider enabled;
+- [ ] pass `ML_OPS_API_URL=http://127.0.0.1:8083`;
+- [ ] confirm `/api/health`;
+- [ ] confirm OpenAI-compatible request path consumed by Neoland.
 
-**Saída da fase**
+## Phase 4 - ml-ops Bootstrap
 
-- operador entende qual serviço o Neoland realmente consome
-
-## Fase 2 — Health E Doctor Corretos
 **Status**: `next`
 
-- [ ] ajustar `neoland doctor` para validar `SecureLLM Bridge API` com o path correto
-- [ ] suportar pelo menos um destes modelos de health:
-  - `gateway health`
-  - `gateway ready`
-  - health encadeado do upstream
-- [ ] separar no diagnóstico:
-  - control plane down
-  - gateway down
-  - inference bridge down
-  - backend local down
-- [ ] impedir que warning genérico esconda qual camada realmente falhou
+- [ ] start ml-ops-api on `127.0.0.1:8083`;
+- [ ] set `LLAMACPP_URL=http://127.0.0.1:8081`;
+- [ ] confirm `/health` and `/api/health` behavior;
+- [ ] confirm at least one backend is routable.
 
-**Saída da fase**
+## Phase 5 - Backend And Forwarding
 
-- `doctor` vira fonte de verdade do runtime de inferência
-
-## Fase 3 — Bootstrap Do SecureLLM Bridge
 **Status**: `next`
 
-- [ ] validar que o `securellm-api-server` sobe com `ml-ops-api` habilitado como provider
-- [ ] configurar `ML_OPS_API_URL` corretamente no ambiente do bridge
-- [ ] decidir fallback order oficial entre `ml-ops`, providers externos e local directo
-- [ ] garantir que o bridge continue OpenAI-compatible no endpoint que o Neoland consome
-- [ ] documentar env mínimo para dev shell, NixOS e Ubuntu bare metal
+- [ ] start llama.cpp on `127.0.0.1:8081`;
+- [ ] validate `ml-ops-api -> llama.cpp`;
+- [ ] validate `SecureLLM Bridge -> ml-ops-api -> llama.cpp`;
+- [ ] decide whether vLLM is release backlog or optional smoke.
 
-**Saída da fase**
+## Phase 6 - End-To-End Runtime Smoke
 
-- gateway pronto para operar como entrypoint do Neoland
-
-## Fase 4 — Bootstrap Do ml-ops-api
-**Status**: `next`
-
-- [ ] configurar `LLAMACPP_URL` para upstream do `llama.cpp`
-- [ ] configurar `VLLM_URL` quando houver backend disponível
-- [ ] validar `/health`, `/api/health` e `/v1/chat/completions`
-- [ ] garantir que o roteador interno do `ml-ops-api` enxerga pelo menos um backend funcional
-- [ ] documentar claramente quando o Neoland deve falar com `8080` e quando o compose publica `8083`
-
-**Saída da fase**
-
-- camada de inferência pronta e observável
-
-## Fase 5 — Backend Local E Forwarding
 **Status**: `planned`
 
-- [ ] fixar porta oficial do `llama.cpp` atrás do `ml-ops-api`
-- [ ] validar forwarding `ml-ops-api -> llama.cpp`
-- [ ] validar forwarding `securellm-bridge -> ml-ops-api -> llama.cpp`
-- [ ] opcional: validar `vLLM` como backend alternativo sem quebrar o gateway principal
-- [ ] decidir estratégia default:
-  - `llama.cpp` como baseline local
-  - `vLLM` como upgrade de throughput/contexto
+- [ ] start Neoland server;
+- [ ] start DSPy agents;
+- [ ] start SecureLLM Bridge;
+- [ ] start ml-ops-api;
+- [ ] start llama.cpp;
+- [ ] run `neoland doctor --json`;
+- [ ] submit a real task from TUI or workbench;
+- [ ] inspect session and ADR/checkpoint;
+- [ ] record the command sequence and output in progress docs.
 
-**Saída da fase**
+## Phase 7 - Release Discipline
 
-- backend local roteado sem atalhos informais
-
-## Fase 6 — Validação End-to-End
 **Status**: `planned`
 
-- [ ] subir `Neoland + SecureLLM Bridge + ml-ops-api + llama.cpp`
-- [ ] rodar `neoland doctor`
-- [ ] abrir `neoland client`
-- [ ] executar prompt real via endpoint OpenAI-compatible principal
-- [ ] validar fallback e mensagens quando uma camada cai
-- [ ] validar que latência, erros e backend ativo aparecem de forma honesta
-
-**Saída da fase**
-
-- jornada principal da inferência comprovada
-
-## Fase 7 — Observabilidade E Release Discipline
-**Status**: `planned`
-
-- [ ] definir health board por camada
-- [ ] padronizar logs e nomes dos componentes
-- [ ] garantir troubleshooting mínimo para:
-  - gateway indisponível
-  - ml-ops indisponível
-  - llama.cpp indisponível
-  - vLLM indisponível
-  - mismatch de portas/envs
-- [ ] transformar a validação em checklist de release
-
-**Saída da fase**
-
-- stack de inferência pronta para operar sem adivinhação
+- [ ] convert the smoke into a release preflight;
+- [ ] document failure modes by layer;
+- [ ] update README/quickstart after proof;
+- [ ] separate first-release requirements from HA/enterprise backlog.
 
 ---
 
-## Tracking Inicial
+## Tracking
 
-| ID | Item | Status | Criticidade |
+| ID | Item | Status | Criticality |
 |----|------|--------|-------------|
-| LLM-1 | Congelar topologia `Neoland -> SecureLLM Bridge -> ml-ops-api -> llama.cpp/vLLM` | In progress | Alta |
-| LLM-2 | Corrigir semântica de `ml_api_url` no Neoland | Next | Alta |
-| LLM-3 | Ajustar `doctor` para health do gateway real | Next | Alta |
-| LLM-4 | Subir `securellm-api-server` com `ml-ops` habilitado | Next | Alta |
-| LLM-5 | Fixar `LLAMACPP_URL` e forwarding no `ml-ops-api` | Next | Alta |
-| LLM-6 | Validar E2E completo com task real | Planned | Alta |
-| LLM-7 | Padronizar docs de portas e envs | Planned | Média |
-| LLM-8 | Decidir papel operacional do `vLLM` no primeiro corte | Planned | Média |
-| LLM-9 | Deixar `spider-nix-network` explícito como opcional e não-core | Planned | Média |
+| LLM-1 | Freeze canonical topology | Done | High |
+| LLM-2 | Rename Neoland gateway naming | Done | High |
+| LLM-3 | Export canonical gateway env in Nix | Done | High |
+| LLM-4 | Gateway/ml-ops/llama doctor probes | Partial | High |
+| LLM-5 | Direct DSPy doctor probe | Next | Critical |
+| LLM-6 | Bootstrap SecureLLM Bridge with ml-ops | Next | Critical |
+| LLM-7 | Bootstrap ml-ops-api with llama.cpp | Next | Critical |
+| LLM-8 | Complete E2E task smoke | Planned | Critical |
+| LLM-9 | Release preflight from smoke | Planned | High |
 
 ---
 
-## Critério De Conclusão
+## Completion Criteria
 
-Consideraremos esta trilha fechada quando:
+This roadmap closes when:
 
-- `Neoland` apontar para o gateway correto por default
-- `doctor` diagnosticar corretamente cada camada da stack
-- `securellm-bridge` estiver operacionalmente posicionado como proxy/gateway principal
-- `ml-ops-api` estiver roteando para `llama.cpp` com health real
-- as portas e variáveis oficiais não gerarem ambiguidade documental
-- a stack completa puder ser explicada e validada em menos de 5 minutos
-
+- `NEOLAND_GATEWAY_URL` is the visible default everywhere;
+- `doctor` identifies control plane, DSPy, gateway, ml-ops, llama.cpp, DB, Vault, and config;
+- SecureLLM Bridge and ml-ops-api run as the official inference path;
+- a real task completes through the gateway chain;
+- docs show exact ports, env vars, commands, health checks, and known failures.
