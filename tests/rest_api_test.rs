@@ -1,380 +1,658 @@
-//! REST API Integration Tests
+//! REST API E2E Integration Tests
 //!
-//! Tests for REST API endpoints including authentication, rate limiting, and
-//! error handling.
+//! These tests exercise the full HTTP server stack:
+//! - Start a real server on a dedicated port
+//! - Wait for it to become healthy via polling
+//! - Test every endpoint with proper assertions
+//! - Clean up by aborting the server task
+//!
+//! Run with: cargo test --test rest_api -- --nocapture
+//! Skip slow tests: cargo test --test rest_api -- --skip test_rate_limiting
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use reqwest::{Client, StatusCode};
-use serde_json::json;
+use serde_json::Value;
 use tokio::time::sleep;
 
-const TEST_GRPC_PORT: u16 = 50053;
-const TEST_REST_PORT: u16 = 3003;
-const BASE_URL: &str = "http://127.0.0.1:3003";
+// ── Port configuration ───────────────────────────────────────────────────────
+// These must not conflict with other running instances.
+const TEST_GRPC_PORT: u16 = 50054;
+const TEST_REST_PORT: u16 = 3004;
+const BASE_URL: &str = "http://127.0.0.1:3004";
 
-// Valid development API keys from auth.rs
+// ── Dev API keys (must match src/auth.rs) ────────────────────────────────────
 const ADMIN_API_KEY: &str = "neoland_admin_dev_key_change_in_production";
 const USER_API_KEY: &str = "neoland_user_dev_key_change_in_production";
 const READONLY_API_KEY: &str = "neoland_readonly_dev_key_change_in_production";
 
-/// Helper to start test server
+// ── Timeouts ─────────────────────────────────────────────────────────────────
+const SERVER_START_TIMEOUT: Duration = Duration::from_secs(60);
+const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/// Start the server in a background tokio task.
 async fn start_test_server() -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let _ = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await;
+        if let Err(e) = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await {
+            eprintln!("[TEST SERVER] run_server failed: {e}");
+        }
     })
 }
 
-/// Helper to wait for server to be ready
-async fn wait_for_server() {
-    sleep(Duration::from_millis(500)).await;
-}
+/// Poll /health until the server responds 200 or we time out.
+/// Returns `Ok(())` if the server is healthy, `Err(String)` otherwise.
+async fn wait_for_server_ready() -> Result<(), String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
-#[tokio::test]
-async fn test_health_endpoint() {
-    let server = start_test_server().await;
-    wait_for_server().await;
-
-    let client = Client::new();
-    let response = client.get(format!("{}/health", BASE_URL)).send().await;
-
-    match response {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-            let body = resp.text().await.unwrap();
-            assert_eq!(body, "OK");
-        },
-        Err(e) => {
-            eprintln!("Health check failed: {}", e);
-        },
+    let deadline = Instant::now() + SERVER_START_TIMEOUT;
+    while Instant::now() < deadline {
+        match client.get(format!("{BASE_URL}/health")).send().await {
+            Ok(resp) if resp.status() == StatusCode::OK => return Ok(()),
+            Ok(resp) => {
+                // Server responded but not OK yet (e.g. 503 during init)
+                let status = resp.status();
+                let _body = resp.text().await.unwrap_or_default();
+                eprintln!("[WAIT] /health returned {status} — retrying...");
+            },
+            Err(e) => {
+                // Connection refused or timeout — server not ready yet
+                eprintln!("[WAIT] /health error: {e} — retrying...");
+            },
+        }
+        sleep(HEALTH_POLL_INTERVAL).await;
     }
 
-    server.abort();
+    Err(format!(
+        "Server did not become healthy within {SERVER_START_TIMEOUT:?} on {BASE_URL}"
+    ))
+}
+
+/// Build a shared HTTP client.
+fn http_client() -> Client {
+    Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("Failed to build HTTP client")
+}
+
+// =============================================================================
+// Public endpoint tests (no auth required)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_health_endpoint() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/health"))
+        .send()
+        .await
+        .expect("GET /health failed — is the server running?");
+
+    assert_eq!(resp.status(), StatusCode::OK, "/health should return 200");
+
+    let body: Value = resp.json().await.expect("/health response is not valid JSON");
+    assert!(body.get("status").is_some(), "/health response must contain 'status' field");
+    assert!(body.get("version").is_some(), "/health response must contain 'version' field");
+    assert!(
+        body.get("components").is_some(),
+        "/health response must contain 'components' array"
+    );
+
+    // Print health summary for diagnostics
+    println!("Health: status={:?}, version={:?}", body["status"], body["version"]);
 }
 
 #[tokio::test]
-async fn test_chat_endpoint_requires_auth() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_readiness_endpoint() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
+    let client = http_client();
+    let resp = client.get(format!("{BASE_URL}/ready")).send().await.expect("GET /ready failed");
 
-    // Request without API key should fail
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
-        .json(&json!({
-            "messages": [
-                {"role": "user", "content": "Hello"}
-            ],
+    assert!(
+        resp.status() == StatusCode::OK || resp.status() == StatusCode::SERVICE_UNAVAILABLE,
+        "/ready should return 200 or 503 (got {})",
+        resp.status()
+    );
+
+    let body: Value = resp.json().await.expect("/ready response is not valid JSON");
+    assert!(body.get("ready").is_some(), "/ready response must contain 'ready' boolean");
+    println!("Readiness: ready={:?}", body["ready"]);
+}
+
+#[tokio::test]
+async fn e2e_liveness_endpoint() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client.get(format!("{BASE_URL}/live")).send().await.expect("GET /live failed");
+
+    assert_eq!(resp.status(), StatusCode::OK, "/live should return 200");
+
+    let body: Value = resp.json().await.expect("/live response is not valid JSON");
+    assert_eq!(body["alive"], true, "/live must return alive: true");
+    println!("Liveness: {:?}", body);
+}
+
+#[tokio::test]
+async fn e2e_metrics_endpoint() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/metrics"))
+        .send()
+        .await
+        .expect("GET /metrics failed");
+
+    assert_eq!(resp.status(), StatusCode::OK, "/metrics should return 200");
+
+    let body = resp.text().await.expect("/metrics body should be readable");
+    assert!(!body.is_empty(), "/metrics body should not be empty");
+    assert!(
+        body.contains("# HELP") || body.contains("# TYPE"),
+        "/metrics should expose Prometheus-format metrics (got first 200 chars: {:?})",
+        &body[..body.len().min(200)]
+    );
+}
+
+#[tokio::test]
+async fn e2e_agents_health_endpoint() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/v1/agents/health"))
+        .send()
+        .await
+        .expect("GET /v1/agents/health failed");
+
+    // This endpoint always returns 200 (even with pipeline disabled)
+    assert_eq!(resp.status(), StatusCode::OK, "/v1/agents/health should return 200");
+
+    let body: Value = resp.json().await.expect("/v1/agents/health response is not valid JSON");
+    assert!(body.get("status").is_some(), "response must contain 'status' field");
+    println!("Agent health: {:?}", body);
+}
+
+// =============================================================================
+// Chat endpoint auth tests
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_chat_requires_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": "Hello"}],
             "stream": true
         }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions failed");
 
-    match response {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "Chat without API key should return 401"
+    );
 }
 
 #[tokio::test]
-async fn test_chat_endpoint_with_valid_auth() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_chat_with_valid_admin_key() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
-
-    // Request with valid API key
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
         .header("X-API-Key", ADMIN_API_KEY)
-        .json(&json!({
-            "messages": [
-                {"role": "user", "content": "Test message"}
-            ],
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": "Test message"}],
             "stream": true
         }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions with admin key failed");
 
-    match response {
-        Ok(resp) => {
-            // Should not be unauthorized
-            assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
-
-            // Should either be OK (200) or other valid response
-            // Note: Actual streaming response handling depends on server implementation
-            println!("Response status: {}", resp.status());
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
+    // With a valid key we should NOT get 401.
+    // Actual status depends on LLM engine availability, but auth passed.
+    assert_ne!(resp.status(), StatusCode::UNAUTHORIZED, "Admin key should pass auth");
+    assert_ne!(resp.status(), StatusCode::FORBIDDEN, "Admin key should pass auth");
+    println!("Chat with admin key: HTTP {}", resp.status());
 }
 
 #[tokio::test]
-async fn test_chat_endpoint_with_invalid_auth() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_chat_with_valid_user_key() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
-
-    // Request with invalid API key
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
-        .header("X-API-Key", "invalid_key_12345")
-        .json(&json!({
-            "messages": [
-                {"role": "user", "content": "Test"}
-            ],
-            "stream": true
-        }))
-        .send()
-        .await;
-
-    match response {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
-}
-
-#[tokio::test]
-async fn test_chat_endpoint_with_different_roles() {
-    let server = start_test_server().await;
-    wait_for_server().await;
-
-    let client = Client::new();
-    let test_payload = json!({
-        "messages": [
-            {"role": "user", "content": "Test"}
-        ],
-        "stream": true
-    });
-
-    // Test with admin key
-    let response_admin = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
-        .header("X-API-Key", ADMIN_API_KEY)
-        .json(&test_payload)
-        .send()
-        .await;
-
-    if let Ok(resp) = response_admin {
-        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    // Test with user key
-    let response_user = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
         .header("X-API-Key", USER_API_KEY)
-        .json(&test_payload)
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": "Test"}],
+            "stream": true
+        }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions with user key failed");
 
-    if let Ok(resp) = response_user {
-        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
-    }
+    assert_ne!(resp.status(), StatusCode::UNAUTHORIZED, "User key should pass auth");
+    assert_ne!(resp.status(), StatusCode::FORBIDDEN, "User key should pass auth");
+    println!("Chat with user key: HTTP {}", resp.status());
+}
 
-    // Test with readonly key (should also work for read operations)
-    let response_readonly = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
+#[tokio::test]
+async fn e2e_chat_with_valid_readonly_key() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
         .header("X-API-Key", READONLY_API_KEY)
-        .json(&test_payload)
-        .send()
-        .await;
-
-    if let Ok(resp) = response_readonly {
-        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    server.abort();
-}
-
-#[tokio::test]
-async fn test_input_validation_empty_prompt() {
-    let server = start_test_server().await;
-    wait_for_server().await;
-
-    let client = Client::new();
-
-    // Request with empty prompt
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
-        .header("X-API-Key", ADMIN_API_KEY)
-        .json(&json!({
-            "messages": [
-                {"role": "user", "content": ""}  // Empty content
-            ],
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": "Test"}],
             "stream": true
         }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions with readonly key failed");
 
-    match response {
-        Ok(resp) => {
-            // Should return bad request due to validation
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
+    assert_ne!(resp.status(), StatusCode::UNAUTHORIZED, "Readonly key should pass auth");
+    println!("Chat with readonly key: HTTP {}", resp.status());
 }
 
 #[tokio::test]
-async fn test_input_validation_invalid_role() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_chat_with_invalid_key_rejected() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
-
-    // Request with invalid role
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
-        .header("X-API-Key", ADMIN_API_KEY)
-        .json(&json!({
-            "messages": [
-                {"role": "invalid_role", "content": "Test message"}
-            ],
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
+        .header("X-API-Key", "definitely_not_a_valid_key_12345")
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": "Test"}],
             "stream": true
         }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions with invalid key failed");
 
-    match response {
-        Ok(resp) => {
-            // Should return bad request due to validation
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "Invalid API key should return 401");
+}
 
-    server.abort();
+// =============================================================================
+// Input validation tests
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_validation_empty_prompt() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .json(&serde_json::json!({
+            "messages": [{"role": "user", "content": ""}],
+            "stream": true
+        }))
+        .send()
+        .await
+        .expect("POST /v1/chat/completions failed");
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "Empty message content should return 400"
+    );
 }
 
 #[tokio::test]
-async fn test_input_validation_too_many_messages() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_validation_invalid_role() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
-
-    // Create request with >100 messages (exceeds MAX_MESSAGE_COUNT)
-    let mut messages = Vec::new();
-    for i in 0..101 {
-        messages.push(json!({"role": "user", "content": format!("Message {}", i)}));
-    }
-
-    let response = client
-        .post(format!("{}/v1/chat/completions", BASE_URL))
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
         .header("X-API-Key", ADMIN_API_KEY)
-        .json(&json!({
+        .json(&serde_json::json!({
+            "messages": [{"role": "invalid_role", "content": "Test message"}],
+            "stream": true
+        }))
+        .send()
+        .await
+        .expect("POST /v1/chat/completions failed");
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "Invalid role should return 400");
+}
+
+#[tokio::test]
+async fn e2e_validation_too_many_messages() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let messages: Vec<serde_json::Value> = (0..101)
+        .map(|i| serde_json::json!({"role": "user", "content": format!("Message {i}")}))
+        .collect();
+
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .json(&serde_json::json!({
             "messages": messages,
             "stream": true
         }))
         .send()
-        .await;
+        .await
+        .expect("POST /v1/chat/completions failed");
 
-    match response {
-        Ok(resp) => {
-            // Should return bad request due to validation
-            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST, ">100 messages should return 400");
 }
 
 #[tokio::test]
-#[ignore] // This test takes time due to rate limiting
-async fn test_rate_limiting() {
-    let server = start_test_server().await;
-    wait_for_server().await;
+async fn e2e_validation_missing_messages_field() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
 
-    let client = Client::new();
-    let test_payload = json!({
-        "messages": [
-            {"role": "user", "content": "Test"}
-        ],
-        "stream": true
-    });
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/chat/completions"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .json(&serde_json::json!({
+            "stream": true
+            // messages field deliberately missing
+        }))
+        .send()
+        .await
+        .expect("POST /v1/chat/completions failed");
 
-    let mut success_count = 0;
-    let mut rate_limited_count = 0;
+    // Missing required field should fail deserialization → 422 or 400
+    assert!(
+        resp.status() == StatusCode::UNPROCESSABLE_ENTITY
+            || resp.status() == StatusCode::BAD_REQUEST,
+        "Missing messages field should return 422 or 400 (got {})",
+        resp.status()
+    );
+}
 
-    // Send 105 requests rapidly (limit is 100/min)
-    for _i in 0..105 {
-        let response = client
-            .post(format!("{}/v1/chat/completions", BASE_URL))
+// =============================================================================
+// Agent pipeline endpoint tests (auth required, likely 503 without DB)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_agent_task_requires_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/agents/task"))
+        .json(&serde_json::json!({
+            "task": "Test task"
+        }))
+        .send()
+        .await
+        .expect("POST /v1/agents/task failed");
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "Agent task without auth should return 401"
+    );
+}
+
+#[tokio::test]
+async fn e2e_agent_task_with_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .post(format!("{BASE_URL}/v1/agents/task"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .json(&serde_json::json!({
+            "task": "Analyze the architecture"
+        }))
+        .send()
+        .await
+        .expect("POST /v1/agents/task with auth failed");
+
+    // Without DATABASE_URL, the orchestrator is disabled → 503.
+    // With DATABASE_URL configured, it may return 200 or 500.
+    let status = resp.status();
+    assert!(
+        status == StatusCode::SERVICE_UNAVAILABLE
+            || status == StatusCode::OK
+            || status == StatusCode::INTERNAL_SERVER_ERROR,
+        "Agent task with valid key should return 503 (no DB), 200 (success), or 500 (error) — got {status}"
+    );
+    println!("Agent task with admin key: HTTP {status}");
+}
+
+#[tokio::test]
+async fn e2e_agent_sessions_requires_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/v1/agents/sessions"))
+        .send()
+        .await
+        .expect("GET /v1/agents/sessions failed");
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "Agent sessions without auth should return 401"
+    );
+}
+
+#[tokio::test]
+async fn e2e_agent_sessions_with_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/v1/agents/sessions"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .send()
+        .await
+        .expect("GET /v1/agents/sessions with auth failed");
+
+    let status = resp.status();
+    assert!(
+        status == StatusCode::SERVICE_UNAVAILABLE
+            || status == StatusCode::OK
+            || status == StatusCode::INTERNAL_SERVER_ERROR,
+        "Agent sessions with valid key should return 503 (no DB) or 200 — got {status}"
+    );
+    println!("Agent sessions with admin key: HTTP {status}");
+}
+
+#[tokio::test]
+async fn e2e_agent_tools_requires_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/v1/agents/tools"))
+        .send()
+        .await
+        .expect("GET /v1/agents/tools failed");
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "Agent tools without auth should return 401"
+    );
+}
+
+#[tokio::test]
+async fn e2e_agent_tools_with_auth() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/v1/agents/tools"))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .send()
+        .await
+        .expect("GET /v1/agents/tools with auth failed");
+
+    let status = resp.status();
+    assert!(
+        status == StatusCode::SERVICE_UNAVAILABLE
+            || status == StatusCode::OK
+            || status == StatusCode::INTERNAL_SERVER_ERROR,
+        "Agent tools with valid key should return 503 (no DB) or 200 — got {status}"
+    );
+
+    if status == StatusCode::OK {
+        let body: Value = resp.json().await.expect("Response should be valid JSON");
+        assert!(body.get("tools").is_some(), "Response should contain 'tools' field");
+        println!("Agent tools: {:?}", body);
+    }
+}
+
+// =============================================================================
+// OpenAPI / Swagger endpoint tests
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_openapi_spec() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/openapi.json"))
+        .send()
+        .await
+        .expect("GET /openapi.json failed");
+
+    assert_eq!(resp.status(), StatusCode::OK, "/openapi.json should return 200");
+
+    let body: Value = resp.json().await.expect("/openapi.json is not valid JSON");
+    assert!(
+        body.get("openapi").is_some(),
+        "OpenAPI spec should have 'openapi' version field"
+    );
+    assert!(body.get("info").is_some(), "OpenAPI spec should have 'info' section");
+    assert!(body.get("paths").is_some(), "OpenAPI spec should have 'paths' section");
+    println!("OpenAPI: version={:?}, title={:?}", body["openapi"], body["info"]["title"]);
+}
+
+// =============================================================================
+// CORS headers
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_cors_headers_present() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let resp = client
+        .get(format!("{BASE_URL}/health"))
+        .header("Origin", "http://example.com")
+        .send()
+        .await
+        .expect("GET /health with Origin failed");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let headers = resp.headers();
+    println!("CORS headers: {:?}", headers);
+
+    // If CORS middleware is configured, we should see these headers
+    if let Some(allow_origin) = headers.get("access-control-allow-origin") {
+        println!("CORS enabled: allow-origin={allow_origin:?}");
+    } else {
+        println!("CORS headers not present (may not be configured)");
+    }
+}
+
+// =============================================================================
+// Rate limiting (can be slow — marked with #[ignore] by default)
+// =============================================================================
+
+#[tokio::test]
+#[ignore = "takes ~2s due to rate limit window timing"]
+async fn e2e_rate_limiting_excess_requests_blocked() {
+    let _server = start_test_server().await;
+    wait_for_server_ready().await.expect("Server failed to start");
+
+    let client = http_client();
+    let mut rate_limited_count = 0u32;
+    let mut success_count = 0u32;
+    let total_requests = 110;
+
+    for i in 0..total_requests {
+        let resp = client
+            .post(format!("{BASE_URL}/v1/chat/completions"))
             .header("X-API-Key", ADMIN_API_KEY)
-            .json(&test_payload)
+            .json(&serde_json::json!({
+                "messages": [{"role": "user", "content": "Test"}],
+                "stream": true
+            }))
             .send()
             .await;
 
-        if let Ok(resp) = response {
-            if resp.status() == StatusCode::TOO_MANY_REQUESTS {
+        match resp {
+            Ok(r) if r.status() == StatusCode::TOO_MANY_REQUESTS => {
                 rate_limited_count += 1;
-            } else if resp.status() != StatusCode::UNAUTHORIZED {
+            },
+            Ok(r) if r.status() != StatusCode::UNAUTHORIZED => {
                 success_count += 1;
-            }
+            },
+            Ok(_) => {}, // auth failure
+            Err(e) => {
+                eprintln!("Request {i} failed: {e}");
+            },
         }
 
-        // Small delay to avoid overwhelming the server
-        sleep(Duration::from_millis(10)).await;
+        // Brief delay to avoid connection saturation
+        if i % 10 == 0 {
+            sleep(Duration::from_millis(5)).await;
+        }
     }
 
-    println!("Success: {}, Rate limited: {}", success_count, rate_limited_count);
+    println!(
+        "Rate limit test: {success_count} succeeded, {rate_limited_count} rate-limited out of {total_requests}"
+    );
 
-    // Should have some rate-limited requests
-    assert!(rate_limited_count > 0, "Expected some requests to be rate limited");
-
-    server.abort();
-}
-
-#[tokio::test]
-async fn test_cors_headers() {
-    let server = start_test_server().await;
-    wait_for_server().await;
-
-    let client = Client::new();
-
-    let response = client
-        .get(format!("{}/health", BASE_URL))
-        .header("Origin", "http://example.com")
-        .send()
-        .await;
-
-    match response {
-        Ok(resp) => {
-            // Check for CORS headers (if configured)
-            println!("Headers: {:?}", resp.headers());
-            // Note: Actual CORS validation depends on server configuration
-        },
-        Err(e) => {
-            eprintln!("Request failed: {}", e);
-        },
-    }
-
-    server.abort();
+    assert!(
+        rate_limited_count > 0,
+        "Expected at least some requests to be rate-limited (limit is 100 req/min)"
+    );
 }

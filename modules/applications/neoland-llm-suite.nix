@@ -90,6 +90,7 @@ in
       environmentFile = lib.mkDefault cfg.neolandEnvironmentFile;
       extraEnvironment = lib.mkMerge [
         {
+          NEOLAND_GATEWAY_URL = gatewayUrl;
           NEOLAND_ML_API_URL = gatewayUrl;
           ML_OPS_API_URL = mlOpsUrl;
           LLAMACPP_URL = cfg.llamacppUrl;
