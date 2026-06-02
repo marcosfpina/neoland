@@ -595,6 +595,9 @@ async fn post_breakpoint_resolve(
 
 // ── SSE subscriber ────────────────────────────────────────────────────
 
+// After this many seconds without any data, the connection is considered dead.
+const SSE_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+
 async fn subscribe_sse(url: String, api_key: String, tx: mpsc::Sender<AgentStreamEvent>) {
     let client = reqwest::Client::new();
     let resp = match client.get(&url).header("X-API-Key", &api_key).send().await {
@@ -605,24 +608,44 @@ async fn subscribe_sse(url: String, api_key: String, tx: mpsc::Sender<AgentStrea
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
 
-    while let Some(Ok(bytes)) = stream.next().await {
-        buf.push_str(&String::from_utf8_lossy(&bytes));
-        while let Some(pos) = buf.find("\n\n") {
-            let event_text = buf[..pos].to_string();
-            buf.drain(..pos + 2);
-            for line in event_text.lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
-                        if let Some(evt) = parse_sse_event(&val) {
-                            if tx.send(evt).await.is_err() {
-                                return;
+    loop {
+        match tokio::time::timeout(SSE_IDLE_TIMEOUT, stream.next()).await {
+            // Normal chunk received.
+            Ok(Some(Ok(bytes))) => {
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+                while let Some(pos) = buf.find("\n\n") {
+                    let event_text = buf[..pos].to_string();
+                    buf.drain(..pos + 2);
+                    for line in event_text.lines() {
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                                if let Some(evt) = parse_sse_event(&val) {
+                                    if tx.send(evt).await.is_err() {
+                                        return;
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
+            },
+            // Stream closed cleanly (server finished or client disconnected).
+            Ok(Some(Err(_))) | Ok(None) => break,
+            // No data for SSE_IDLE_TIMEOUT — connection silently dead.
+            Err(_) => {
+                let _ = tx
+                    .send(AgentStreamEvent::PipelineError {
+                        error: format!(
+                            "SSE connection idle for {}s — server may be down",
+                            SSE_IDLE_TIMEOUT.as_secs()
+                        ),
+                    })
+                    .await;
+                return;
+            },
         }
     }
+
     // Flush any remaining buffer content after stream closes (e.g. pipeline_done
     // arriving without a trailing double-newline when the connection drops cleanly).
     for line in buf.lines() {

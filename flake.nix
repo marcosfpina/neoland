@@ -13,6 +13,10 @@
       url = "git+ssh://git@github.com/VoidNxSEC/ml-ops-api";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    aiAgentOs = {
+      url = "git+ssh://git@github.com/marcosfpina/ai-agent-os?rev=f583d013400a67d87d9f20232fcf0521c10d4b26";
+      flake = false;
+    };
   };
 
   outputs =
@@ -406,15 +410,31 @@
               nodejs_24
               python313
               poetry
+              # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
+              stdenv.cc.cc.lib
             ]
             ++ frontendCommandPackages
             ++ neolandCommandPackages;
+
+          LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+            # Make ai-agent-os available at the expected relative path for cargo path overrides.
+            # .cargo/config.toml patches hyprland-ipc via ../ai-agent-os/crates/hyprland-ipc.
+            _ai_agent_os_link="$(dirname "$NEOLAND_PROJECT_ROOT")/ai-agent-os"
+            if [ "$(readlink "$_ai_agent_os_link" 2>/dev/null)" != "${inputs.aiAgentOs}" ]; then
+              ln -sfn ${inputs.aiAgentOs} "$_ai_agent_os_link"
+            fi
+            unset _ai_agent_os_link
+
+            # Local dev database (no credentials — peer auth via unix socket).
+            export DATABASE_URL="''${DATABASE_URL:-postgresql:///neoland?host=/run/postgresql}"
+
             export NEOLAND_FRONTEND_DIR="$NEOLAND_PROJECT_ROOT/matrix/frontend"
             export NEOLAND_FRONTEND_HOST="''${NEOLAND_FRONTEND_HOST:-127.0.0.1}"
             export NEOLAND_FRONTEND_PORT="''${NEOLAND_FRONTEND_PORT:-3006}"
@@ -426,6 +446,7 @@
             export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:8081}"
             export VLLM_URL="''${VLLM_URL:-}"
             export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+            export NEOLAND_CHECKPOINT_DIR="''${NEOLAND_CHECKPOINT_DIR:-$HOME/.local/share/neoland/checkpoints/adr}"
             export NEXT_PUBLIC_BACKEND_URL="''${NEXT_PUBLIC_BACKEND_URL:-$NEOLAND_CONTROL_PLANE_URL}"
 
             frontend-install() { command frontend-install "$@"; }

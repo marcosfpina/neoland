@@ -2,11 +2,8 @@ import type { LucideIcon } from "lucide-react"
 import {
   Activity,
   BookCopy,
-  Cpu,
   GitBranchPlus,
   Radar,
-  Shield,
-  SlidersHorizontal,
   Waypoints,
 } from "lucide-react"
 

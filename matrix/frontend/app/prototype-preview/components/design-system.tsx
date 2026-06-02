@@ -41,7 +41,7 @@ export function DesignSystem() {
     { name: "3xl", value: "4rem", pixels: "64px" },
   ])
 
-  const [components, setComponents] = useState([
+  const [components, _setComponents] = useState([
     {
       name: "Primary Button",
       category: "Buttons",

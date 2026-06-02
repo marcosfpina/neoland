@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "aiAgentOs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1769339602,
+        "narHash": "sha256-hbs8nHdXzbK2XLBREhAmwJXWkM09bBMYuKlWFvx6agk=",
+        "ref": "refs/heads/main",
+        "rev": "f583d013400a67d87d9f20232fcf0521c10d4b26",
+        "revCount": 10,
+        "type": "git",
+        "url": "ssh://git@github.com/marcosfpina/ai-agent-os"
+      },
+      "original": {
+        "rev": "f583d013400a67d87d9f20232fcf0521c10d4b26",
+        "type": "git",
+        "url": "ssh://git@github.com/marcosfpina/ai-agent-os"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -142,6 +159,7 @@
     },
     "root": {
       "inputs": {
+        "aiAgentOs": "aiAgentOs",
         "flake-utils": "flake-utils",
         "mlOpsApi": "mlOpsApi",
         "nixpkgs": "nixpkgs_2",

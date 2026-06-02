@@ -9,6 +9,7 @@
 //! Run with: cargo test --test rest_api -- --nocapture
 //! Skip slow tests: cargo test --test rest_api -- --skip test_rate_limiting
 
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use reqwest::{Client, StatusCode};
@@ -34,13 +35,31 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 // Helpers
 // =============================================================================
 
-/// Start the server in a background tokio task.
-async fn start_test_server() -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        if let Err(e) = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await {
-            eprintln!("[TEST SERVER] run_server failed: {e}");
-        }
-    })
+// Server runs in a dedicated OS thread with its own tokio runtime so it
+// outlives any individual test's runtime.  OnceLock ensures a single start.
+static SERVER_THREAD_STARTED: OnceLock<()> = OnceLock::new();
+
+fn spawn_server_thread() {
+    std::thread::spawn(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("failed to build server runtime")
+            .block_on(async {
+                if let Err(e) =
+                    neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await
+                {
+                    eprintln!("[TEST SERVER] run_server failed: {e}");
+                }
+            });
+    });
+}
+
+async fn ensure_server_ready() {
+    SERVER_THREAD_STARTED.get_or_init(|| {
+        spawn_server_thread();
+    });
+    wait_for_server_ready().await.expect("Server failed to start");
 }
 
 /// Poll /health until the server responds 200 or we time out.
@@ -88,8 +107,7 @@ fn http_client() -> Client {
 
 #[tokio::test]
 async fn e2e_health_endpoint() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -114,8 +132,7 @@ async fn e2e_health_endpoint() {
 
 #[tokio::test]
 async fn e2e_readiness_endpoint() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client.get(format!("{BASE_URL}/ready")).send().await.expect("GET /ready failed");
@@ -133,8 +150,7 @@ async fn e2e_readiness_endpoint() {
 
 #[tokio::test]
 async fn e2e_liveness_endpoint() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client.get(format!("{BASE_URL}/live")).send().await.expect("GET /live failed");
@@ -148,8 +164,7 @@ async fn e2e_liveness_endpoint() {
 
 #[tokio::test]
 async fn e2e_metrics_endpoint() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -171,8 +186,7 @@ async fn e2e_metrics_endpoint() {
 
 #[tokio::test]
 async fn e2e_agents_health_endpoint() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -195,8 +209,7 @@ async fn e2e_agents_health_endpoint() {
 
 #[tokio::test]
 async fn e2e_chat_requires_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -218,8 +231,7 @@ async fn e2e_chat_requires_auth() {
 
 #[tokio::test]
 async fn e2e_chat_with_valid_admin_key() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -242,8 +254,7 @@ async fn e2e_chat_with_valid_admin_key() {
 
 #[tokio::test]
 async fn e2e_chat_with_valid_user_key() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -264,8 +275,7 @@ async fn e2e_chat_with_valid_user_key() {
 
 #[tokio::test]
 async fn e2e_chat_with_valid_readonly_key() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -285,8 +295,7 @@ async fn e2e_chat_with_valid_readonly_key() {
 
 #[tokio::test]
 async fn e2e_chat_with_invalid_key_rejected() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -309,8 +318,7 @@ async fn e2e_chat_with_invalid_key_rejected() {
 
 #[tokio::test]
 async fn e2e_validation_empty_prompt() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -333,8 +341,7 @@ async fn e2e_validation_empty_prompt() {
 
 #[tokio::test]
 async fn e2e_validation_invalid_role() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -353,8 +360,7 @@ async fn e2e_validation_invalid_role() {
 
 #[tokio::test]
 async fn e2e_validation_too_many_messages() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let messages: Vec<serde_json::Value> = (0..101)
@@ -377,8 +383,7 @@ async fn e2e_validation_too_many_messages() {
 
 #[tokio::test]
 async fn e2e_validation_missing_messages_field() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -407,8 +412,7 @@ async fn e2e_validation_missing_messages_field() {
 
 #[tokio::test]
 async fn e2e_agent_task_requires_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -429,8 +433,7 @@ async fn e2e_agent_task_requires_auth() {
 
 #[tokio::test]
 async fn e2e_agent_task_with_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -457,8 +460,7 @@ async fn e2e_agent_task_with_auth() {
 
 #[tokio::test]
 async fn e2e_agent_sessions_requires_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -476,8 +478,7 @@ async fn e2e_agent_sessions_requires_auth() {
 
 #[tokio::test]
 async fn e2e_agent_sessions_with_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -499,8 +500,7 @@ async fn e2e_agent_sessions_with_auth() {
 
 #[tokio::test]
 async fn e2e_agent_tools_requires_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -518,8 +518,7 @@ async fn e2e_agent_tools_requires_auth() {
 
 #[tokio::test]
 async fn e2e_agent_tools_with_auth() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -550,8 +549,7 @@ async fn e2e_agent_tools_with_auth() {
 
 #[tokio::test]
 async fn e2e_openapi_spec() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -578,8 +576,7 @@ async fn e2e_openapi_spec() {
 
 #[tokio::test]
 async fn e2e_cors_headers_present() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let resp = client
@@ -609,8 +606,7 @@ async fn e2e_cors_headers_present() {
 #[tokio::test]
 #[ignore = "takes ~2s due to rate limit window timing"]
 async fn e2e_rate_limiting_excess_requests_blocked() {
-    let _server = start_test_server().await;
-    wait_for_server_ready().await.expect("Server failed to start");
+    ensure_server_ready().await;
 
     let client = http_client();
     let mut rate_limited_count = 0u32;

@@ -50,7 +50,7 @@ function formatUptime(seconds: number): string {
   return `${mins}m`
 }
 
-function getStatusColor(state: string): string {
+function _getStatusColor(state: string): string {
   switch (state) {
     case "active":
       return "text-chart-2"
@@ -107,7 +107,7 @@ export default function LiveMonitorPage() {
   const [source, setSource] = useState<"daemon" | "simulated">("simulated")
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [refreshInterval, setRefreshInterval] = useState(2000)
+  const [refreshInterval, _setRefreshInterval] = useState(2000)
 
   const fetchMetrics = useCallback(async () => {
     try {

@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-const bgGradient = "bg-gradient-to-br from-background via-secondary to-background"
+const _bgGradient = "bg-gradient-to-br from-background via-secondary to-background"
 
 export default function DbManager() {
   const [selectedDb, setSelectedDb] = useState("users_db")
@@ -328,7 +328,7 @@ LIMIT 100;
                                 <td className="p-3 text-muted-foreground">id</td>
                                 <td className="p-3 text-muted-foreground">integer</td>
                                 <td className="p-3 text-muted-foreground">NO</td>
-                                <td className="p-3 text-muted-foreground">nextval('users_id_seq')</td>
+                                <td className="p-3 text-muted-foreground">nextval(&apos;users_id_seq&apos;)</td>
                               </tr>
                               <tr className="border-t border-border">
                                 <td className="p-3 text-muted-foreground">name</td>

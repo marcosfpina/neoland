@@ -1,6 +1,6 @@
 // LLM Providers configuration
 
-import type { LLMProvider, LLMModel } from "./types"
+import type { LLMProvider, LLMModel, ModelCapability } from "./types"
 
 export const LLM_PROVIDERS: LLMProvider[] = [
   {
@@ -249,5 +249,5 @@ export function getProviderById(id: string): LLMProvider | undefined {
 }
 
 export function getModelsByCapability(capability: string): LLMModel[] {
-  return getAllModels().filter((m) => m.capabilities.includes(capability as any))
+  return getAllModels().filter((m) => m.capabilities.includes(capability as ModelCapability))
 }

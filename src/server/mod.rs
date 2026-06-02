@@ -969,8 +969,13 @@ pub(crate) async fn submit_agent_task(
                     serde_json::json!(format!("{:?}", result.tech_leader.decision).to_lowercase()),
                 );
             let _ = state.audit_logger.log(decision_event).await;
-            (StatusCode::OK, Json(serde_json::to_value(&result).unwrap_or_default()))
-                .into_response()
+            match serde_json::to_value(&result) {
+                Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+                Err(e) => {
+                    tracing::error!(error = %e, session_id = %session_id, "Failed to serialize agent task result");
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize result"}))).into_response()
+                },
+            }
         },
         Err(e) => {
             tracing::error!(error = %e, session_id = %session_id, "Agent task execution failed");
@@ -1058,8 +1063,13 @@ pub(crate) async fn get_agent_session(
     };
 
     match orchestrator.get_session(id).await {
-        Ok(session) => (StatusCode::OK, Json(serde_json::to_value(&session).unwrap_or_default()))
-            .into_response(),
+        Ok(session) => match serde_json::to_value(&session) {
+            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, session_id = %id, "Failed to serialize session");
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize session"}))).into_response()
+            },
+        },
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session");
             (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Session not found"})))
@@ -1103,8 +1113,13 @@ pub(crate) async fn list_agent_sessions(
     let limit = query.limit.unwrap_or(24).clamp(1, 100) as i64;
 
     match orchestrator.list_sessions(limit).await {
-        Ok(sessions) => (StatusCode::OK, Json(serde_json::to_value(&sessions).unwrap_or_default()))
-            .into_response(),
+        Ok(sessions) => match serde_json::to_value(&sessions) {
+            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to serialize session list");
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize sessions"}))).into_response()
+            },
+        },
         Err(e) => {
             tracing::warn!(error = %e, "Failed to list recent sessions");
             (

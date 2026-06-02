@@ -16,7 +16,7 @@
 export interface DecisionRequest {
   agent_id: string;
   decision_type: string;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
   proposed_action: string;
   model_version?: string;
 }
@@ -30,7 +30,7 @@ export interface WorkflowContext {
   specialization: string;
   step?: number;
   total_steps?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // =============================================================================
@@ -200,7 +200,7 @@ export interface CodeAnalysisResponse {
 /**
  * Type guard for RankingResponse
  */
-export function isRankingResponse(obj: any): obj is RankingResponse {
+export function isRankingResponse(obj: unknown): obj is RankingResponse {
   return (
     typeof obj === 'object' &&
     typeof obj.agent_id === 'string' &&
@@ -216,7 +216,7 @@ export function isRankingResponse(obj: any): obj is RankingResponse {
 /**
  * Type guard for APIError
  */
-export function isAPIError(obj: any): obj is APIError {
+export function isAPIError(obj: unknown): obj is APIError {
   return (
     typeof obj === 'object' &&
     typeof obj.error === 'string' &&
@@ -227,7 +227,7 @@ export function isAPIError(obj: any): obj is APIError {
 /**
  * Type guard for HealthStatus
  */
-export function isHealthStatus(obj: any): obj is HealthStatus {
+export function isHealthStatus(obj: unknown): obj is HealthStatus {
   return (
     typeof obj === 'object' &&
     typeof obj.status === 'string' &&

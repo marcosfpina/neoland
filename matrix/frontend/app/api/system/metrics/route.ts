@@ -4,13 +4,13 @@
  */
 
 import { NextResponse } from "next/server"
-import type { SystemMetrics, MetricsHistory } from "@/lib/system/types"
+import type { SystemMetrics } from "@/lib/system/types"
 import http from "http"
 
 const UDS_PATH = "/tmp/mission-control.sock"
 
 // Helper to fetch from UDS
-function fetchFromUds(path: string): Promise<any> {
+function fetchFromUds(path: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const options = {
       socketPath: UDS_PATH,
@@ -25,7 +25,7 @@ function fetchFromUds(path: string): Promise<any> {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           try {
             resolve(JSON.parse(data))
-          } catch (e) {
+          } catch (_e) {
             reject(new Error("Invalid JSON response"))
           }
         } else {

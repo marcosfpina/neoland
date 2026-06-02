@@ -266,14 +266,14 @@ const PRODUCTIVITY_INSIGHTS: ProductivityInsight[] = [
   },
 ]
 
-const severityColors = {
+const _severityColors = {
   low: "border-blue-500/30 bg-blue-500/10 text-blue-400",
   medium: "border-amber-500/30 bg-amber-500/10 text-amber-400",
   high: "border-orange-500/30 bg-orange-500/10 text-orange-400",
   critical: "border-red-500/30 bg-red-500/10 text-red-400",
 }
 
-const statusColors = {
+const _statusColors = {
   "on-track": "text-emerald-400",
   "at-risk": "text-amber-400",
   behind: "text-red-400",

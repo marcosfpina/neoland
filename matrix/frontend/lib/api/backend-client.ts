@@ -22,7 +22,6 @@ import {
   PrometheusMetrics,
   BackendClientConfig,
   RequestOptions,
-  SimulatedRanking,
   isRankingResponse,
   isHealthStatus,
 } from './types';
@@ -103,7 +102,7 @@ export class BackendClient {
         } else {
           return (await response.text()) as T;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error;
         this.errorCount++;
 
