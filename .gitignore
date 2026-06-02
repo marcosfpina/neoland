@@ -13,3 +13,4 @@ agents/*.egg-info/
 **/__pycache__/
 **/*.pyc
 node_modules/
+.mcp.json
