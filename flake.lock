@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "advisory-db": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777660670,
+        "narHash": "sha256-C8hgon8MOPJWA67TH1PHEziDwpsSdJN2CpFdKTwb6ZI=",
+        "owner": "rustsec",
+        "repo": "advisory-db",
+        "rev": "20377f44edabca7c4a765ccdcd05935331b6191f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rustsec",
+        "repo": "advisory-db",
+        "type": "github"
+      }
+    },
     "aiAgentOs": {
       "flake": false,
       "locked": {
@@ -15,6 +31,21 @@
         "rev": "f583d013400a67d87d9f20232fcf0521c10d4b26",
         "type": "git",
         "url": "ssh://git@github.com/marcosfpina/ai-agent-os"
+      }
+    },
+    "crane": {
+      "locked": {
+        "lastModified": 1777689689,
+        "narHash": "sha256-HGdYOOU4j7w5I/Tlve6z/Q/P9cGHZMhSlALlgfikjsU=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "709b316b6ba9424932b33761549e2117bbb3c5ae",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
       }
     },
     "flake-utils": {
@@ -71,6 +102,24 @@
         "type": "github"
       }
     },
+    "flake-utils_4": {
+      "inputs": {
+        "systems": "systems_4"
+      },
+      "locked": {
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
     "mlOpsApi": {
       "inputs": {
         "flake-utils": "flake-utils_2",
@@ -111,11 +160,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1778869304,
-        "narHash": "sha256-30sZNZoA1cqF5JNO9fVX+wgiQYjB7HJqqJ4ztCDeBZE=",
+        "lastModified": 1780243769,
+        "narHash": "sha256-x5UQuRsH3MqI0U9afaXSNqzTPSeZlRLvFAav2Ux1pNw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d233902339c02a9c334e7e593de68855ad26c4cb",
+        "rev": "331800de5053fcebacf6813adb5db9c9dca22a0c",
         "type": "github"
       },
       "original": {
@@ -157,13 +206,38 @@
         "type": "github"
       }
     },
+    "phantom": {
+      "inputs": {
+        "advisory-db": "advisory-db",
+        "crane": "crane",
+        "flake-utils": "flake-utils_3",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_2"
+      },
+      "locked": {
+        "lastModified": 1779773274,
+        "narHash": "sha256-3UT0+C7KHOxKJolAMBnG3OlKFHxAYn28zows5dJ94/g=",
+        "owner": "VoidNxSEC",
+        "repo": "phantom",
+        "rev": "7704b26853f154fe70477e6f1fea2b62514b65df",
+        "type": "github"
+      },
+      "original": {
+        "owner": "VoidNxSEC",
+        "repo": "phantom",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "aiAgentOs": "aiAgentOs",
         "flake-utils": "flake-utils",
         "mlOpsApi": "mlOpsApi",
         "nixpkgs": "nixpkgs_2",
-        "rust-overlay": "rust-overlay_2",
+        "phantom": "phantom",
+        "rust-overlay": "rust-overlay_3",
         "securellmBridge": "securellmBridge"
       }
     },
@@ -187,14 +261,17 @@
     },
     "rust-overlay_2": {
       "inputs": {
-        "nixpkgs": "nixpkgs_3"
+        "nixpkgs": [
+          "phantom",
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1778901358,
-        "narHash": "sha256-n35a8GOPs8zi35GXPe4uBz0Y8xseTkQpNgcrq81gPg0=",
+        "lastModified": 1777778183,
+        "narHash": "sha256-Lqv9MZO0XAGcMbXJU+ULBSMD41Pf391uJehylUQKe7Y=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "61ec6a4fc56fe0c2b863f7b3eaba07b6664697d9",
+        "rev": "dbba5f888c82ef3ce594c451c33ac2474eb80847",
         "type": "github"
       },
       "original": {
@@ -204,6 +281,24 @@
       }
     },
     "rust-overlay_3": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_3"
+      },
+      "locked": {
+        "lastModified": 1780370483,
+        "narHash": "sha256-7mDa7OBAaf7MU6ZovT9ENfD62kH911SsSazBb4KTDF0=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "4a408e1fc99ad517b4cb402fd0de7464f40c05e1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_4": {
       "inputs": {
         "nixpkgs": "nixpkgs_4"
       },
@@ -223,18 +318,18 @@
     },
     "securellmBridge": {
       "inputs": {
-        "flake-utils": "flake-utils_3",
+        "flake-utils": "flake-utils_4",
         "nixpkgs": [
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay_3"
+        "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1778957723,
-        "narHash": "sha256-+R5CIYzY/VoH6GdwXjQX8QvoY7w4Ds6QfwpzoyvK0I0=",
+        "lastModified": 1779917500,
+        "narHash": "sha256-OsbS2Aw7pQdpMHHSBvLCV84HSI4C8nq5U7nyG4pOt5o=",
         "ref": "refs/heads/main",
-        "rev": "0b415bc50d51c610b91b0dc8369bbe316682ed3e",
-        "revCount": 83,
+        "rev": "f24c360feb267b8ba92e949f678add9a8bac893a",
+        "revCount": 101,
         "type": "git",
         "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
       },
@@ -274,6 +369,21 @@
       }
     },
     "systems_3": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "systems_4": {
       "locked": {
         "lastModified": 1681028828,
         "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
