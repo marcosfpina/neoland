@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use tracing::instrument;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct SessionState {
     pub session_id: Uuid,
     pub task_count: i32,
@@ -42,8 +42,8 @@ impl SessionManager {
         .await
         .context("Failed to upsert session")?;
 
-        // Fetch current state
-        let row: (Uuid, i32, DateTime<Utc>, Option<serde_json::Value>, bool) = sqlx::query_as(
+        // Fetch current state — named mapping via FromRow; safe under column reorder.
+        let state = sqlx::query_as::<_, SessionState>(
             r#"
                 SELECT session_id, task_count, last_activity, last_decision, active
                 FROM agent_session_metadata
@@ -55,13 +55,7 @@ impl SessionManager {
         .await
         .context("Failed to fetch session")?;
 
-        Ok(SessionState {
-            session_id: row.0,
-            task_count: row.1,
-            last_activity: row.2,
-            last_decision: row.3,
-            active: row.4,
-        })
+        Ok(state)
     }
 
     #[instrument(skip(self, decision_json), fields(session_id = %session_id))]
@@ -88,31 +82,18 @@ impl SessionManager {
     }
 
     #[instrument(skip(self))]
-    #[allow(clippy::type_complexity)]
     pub async fn list_recent(&self, limit: i64) -> Result<Vec<SessionState>> {
-        let rows: Vec<(Uuid, i32, DateTime<Utc>, Option<serde_json::Value>, bool)> =
-            sqlx::query_as(
-                r#"
+        sqlx::query_as::<_, SessionState>(
+            r#"
                 SELECT session_id, task_count, last_activity, last_decision, active
                 FROM agent_session_metadata
                 ORDER BY last_activity DESC
                 LIMIT $1
                 "#,
-            )
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await
-            .context("Failed to list sessions")?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| SessionState {
-                session_id: row.0,
-                task_count: row.1,
-                last_activity: row.2,
-                last_decision: row.3,
-                active: row.4,
-            })
-            .collect())
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to list sessions")
     }
 }

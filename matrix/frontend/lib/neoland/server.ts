@@ -355,7 +355,9 @@ export const getServicesSnapshot = cache(async (): Promise<ServiceNode[]> => {
 
 export async function getDashboardOverview(): Promise<DashboardOverview> {
   const [services, adrs] = await Promise.all([getServicesSnapshot(), getAdrDocuments()])
-  const decisions = adrs.map((document) => document.full_pipeline.tech_leader.decision)
+  const decisions = adrs
+    .map((document) => document.full_pipeline?.tech_leader?.decision)
+    .filter((d): d is string => Boolean(d))
   const approves = decisions.filter((decision) => decision === "approve").length
 
   return {
@@ -374,15 +376,15 @@ export async function getAgentAnalytics(): Promise<{
 }> {
   const adrs = await getAdrDocuments()
 
-  const juniorConfidence = adrs.reduce((sum, adr) => sum + adr.full_pipeline.junior.confidence, 0)
-  const seniorEscalations = adrs.filter((adr) => adr.full_pipeline.senior.escalate_to_architect).length
-  const architectRuns = adrs.filter((adr) => adr.full_pipeline.architect).length
+  const juniorConfidence = adrs.reduce((sum, adr) => sum + (adr.full_pipeline?.junior?.confidence ?? 0), 0)
+  const seniorEscalations = adrs.filter((adr) => adr.full_pipeline?.senior?.escalate_to_architect).length
+  const architectRuns = adrs.filter((adr) => adr.full_pipeline?.architect).length
   const architectScore = adrs.reduce(
-    (sum, adr) => sum + (adr.full_pipeline.architect?.composability_score || 0),
+    (sum, adr) => sum + (adr.full_pipeline?.architect?.composability_score ?? 0),
     0,
   )
   const approveCount = adrs.filter(
-    (adr) => adr.full_pipeline.tech_leader.decision === "approve",
+    (adr) => adr.full_pipeline?.tech_leader?.decision === "approve",
   ).length
 
   return {
@@ -394,7 +396,7 @@ export async function getAgentAnalytics(): Promise<{
         primaryMetricLabel: "Avg confidence",
         primaryMetricValue: adrs.length ? `${(juniorConfidence / adrs.length).toFixed(2)}` : "0.00",
         secondaryMetricLabel: "Unknown clusters",
-        secondaryMetricValue: `${adrs.reduce((sum, adr) => sum + adr.full_pipeline.junior.unknowns.length, 0)}`,
+        secondaryMetricValue: `${adrs.reduce((sum, adr) => sum + (adr.full_pipeline?.junior?.unknowns?.length ?? 0), 0)}`,
       },
       {
         label: "Senior",
@@ -403,7 +405,7 @@ export async function getAgentAnalytics(): Promise<{
         primaryMetricLabel: "Escalation rate",
         primaryMetricValue: adrs.length ? `${Math.round((seniorEscalations / adrs.length) * 100)}%` : "0%",
         secondaryMetricLabel: "Refined hypotheses",
-        secondaryMetricValue: `${adrs.filter((adr) => adr.full_pipeline.senior.refined_hypothesis).length}`,
+        secondaryMetricValue: `${adrs.filter((adr) => adr.full_pipeline?.senior?.refined_hypothesis).length}`,
       },
       {
         label: "Architect",
@@ -431,7 +433,7 @@ export async function getAgentAnalytics(): Promise<{
         adr_id: adr.adr_id,
         title: adr.title,
         timestamp: adr.timestamp,
-        confidence: adr.full_pipeline.junior.confidence,
+        confidence: adr.full_pipeline?.junior?.confidence ?? 0,
       })),
   }
 }

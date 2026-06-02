@@ -156,6 +156,18 @@ validate:
 audit:
     cargo audit
 
+# Show current roadmap and release status
+roadmap:
+    cat ROADMAP.md
+
+# Full-stack smoke: Neoland → SecureLLM → ml-ops → llama.cpp
+smoke:
+    bash scripts/smoke-full-stack.sh
+
+# Release preflight: all gates (tests, lint, build, smoke, doctor)
+preflight:
+    bash scripts/release-preflight.sh
+
 # ─── Clean ────────────────────────────────────────────────────────────────
 
 # Remove cargo artifacts

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434"
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
-async function checkService(url: string, name: string) {
+async function checkService(url: string, _name: string) {
   const start = performance.now()
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(2000) })

@@ -417,7 +417,35 @@ pub async fn collect_doctor_report(
         }
     }
 
-    // 7. Vault Connectivity
+    // 7. DSPy Agent Pipeline
+    let dspy_url = runtime
+        .env_var("NEOLAND_DSPY_URL")
+        .unwrap_or_else(|| config.agents.dspy_url.clone());
+    let dspy_health_url = format!("{}/health", dspy_url.trim_end_matches('/'));
+    match runtime.http_get_status(&dspy_health_url).await {
+        Ok(status) if (200..300).contains(&status) => {
+            checks.push(CheckResult::ok(
+                "DSPy Pipeline",
+                format!("Agent pipeline reachable at {} (status {})", dspy_url, status),
+            ));
+        },
+        Ok(status) => {
+            checks.push(CheckResult::warning(
+                "DSPy Pipeline",
+                format!("Agent pipeline returned status {} at {}", status, dspy_url),
+                "Check if `just agents-start` (uvicorn on :8001) is running.",
+            ));
+        },
+        Err(err) => {
+            checks.push(CheckResult::warning(
+                "DSPy Pipeline",
+                format!("Agent pipeline not reachable at {}", dspy_url),
+                format!("Start with `just agents-start` or set NEOLAND_DSPY_URL ({err})"),
+            ));
+        },
+    }
+
+    // 8. Vault Connectivity
     let vault_addr = runtime.env_var("VAULT_ADDR").unwrap_or_else(|| config.vault.addr.clone());
     let vault_health_url = format!("{}/v1/sys/health", vault_addr.trim_end_matches('/'));
     match runtime.http_get_status(&vault_health_url).await {

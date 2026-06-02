@@ -265,7 +265,7 @@ export function TerminalEmulator({ initialCwd = "~", onCommand, className }: Ter
         <div className="p-4 space-y-2">
           {/* Welcome message */}
           {history.length === 0 && (
-            <div className="text-slate-500">Welcome to Git Pilot Terminal. Type 'help' for available commands.</div>
+            <div className="text-slate-500">Welcome to Git Pilot Terminal. Type &apos;help&apos; for available commands.</div>
           )}
 
           {/* Command history */}

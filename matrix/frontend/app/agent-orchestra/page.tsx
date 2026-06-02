@@ -42,7 +42,7 @@ export default function AgentOrchestra() {
   // Approval dialog state
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [pendingRanking, setPendingRanking] = useState<RankingResponse | null>(null)
-  const [pendingAgent, setPendingAgent] = useState<any>(null)
+  const [pendingAgent, setPendingAgent] = useState<unknown>(null)
   const [approvalResolve, setApprovalResolve] = useState<((value: boolean) => void) | null>(null)
 
   const workflows = [
@@ -271,7 +271,7 @@ export default function AgentOrchestra() {
   }
 
   // Show approval dialog and wait for user decision
-  const requestApproval = (ranking: RankingResponse, agent: any): Promise<boolean> => {
+  const requestApproval = (ranking: RankingResponse, agent: unknown): Promise<boolean> => {
     return new Promise((resolve) => {
       setPendingRanking(ranking)
       setPendingAgent(agent)

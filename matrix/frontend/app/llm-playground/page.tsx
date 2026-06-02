@@ -173,7 +173,7 @@ export default function LLMPlayground() {
     }, 2000)
   }
 
-  const generateMockResponse = (provider, prompt) => {
+  const generateMockResponse = (provider, _prompt) => {
     const responses = {
       openai:
         "Based on the code review, I've identified several areas for improvement:\n\n1. **Missing Dependencies**: The useEffect hook should include `user.id` in its dependency array\n2. **Error Handling**: Add try-catch blocks for the API call\n3. **State Management**: Consider using a custom hook for data fetching\n4. **Performance**: Implement proper loading states and error boundaries\n\nHere's an improved version with these fixes implemented...",

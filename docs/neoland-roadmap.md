@@ -1,3 +1,5 @@
+> **Source-of-truth movida para `ROADMAP.md` na raiz do projeto (2026-05-31). Este arquivo é histórico.**
+
 # Neoland Roadmap To Responsible Public Release
 
 **Last Updated**: 2026-05-17

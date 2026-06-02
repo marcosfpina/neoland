@@ -49,7 +49,7 @@ export function InteractionDesigner() {
     },
   ])
 
-  const [transitions, setTransitions] = useState([
+  const [_transitions, _setTransitions] = useState([
     {
       id: "page-1",
       name: "Page Slide Transition",

@@ -19,11 +19,4 @@ class JuniorAgent(dspy.Module):
             return call_rust_tool(session_id, "run_shell_command", {"command": command})
         
         propose = dspy.ReAct(TaskProposal, tools=[run_shell_command])
-        
-        # Add constraints at runtime
-        propose.assert_constraints = [
-            dspy.Assert(lambda x: 0.0 <= float(x.confidence) <= 1.0, "confidence must be float between 0.0 and 1.0"),
-            dspy.Assert(lambda x: x.risk_level in ("low", "medium", "high"), "risk_level must be low, medium, high"),
-        ]
-
         return propose(task=task, context=context)

@@ -243,7 +243,7 @@ export default function GitAssistant() {
                       <div className="space-y-1 text-sm text-gray-300">
                         <div>• Use conventional commits: feat, fix, docs, style, refactor, test, chore</div>
                         <div>• Keep the first line under 50 characters</div>
-                        <div>• Use present tense: "add feature" not "added feature"</div>
+                        <div>• Use present tense: &quot;add feature&quot; not &quot;added feature&quot;</div>
                         <div>• Include detailed description for complex changes</div>
                       </div>
                     </div>

@@ -8,8 +8,8 @@ export interface LLMProvider {
   defaultModel: string
   apiKeyEnv: string
   headers: (apiKey: string) => Record<string, string>
-  formatRequest: (prompt: string, options: LLMOptions) => any
-  parseResponse: (response: any) => LLMResponse
+  formatRequest: (prompt: string, options: LLMOptions) => unknown
+  parseResponse: (response: unknown) => LLMResponse
   pricing: {
     input: number // per 1K tokens
     output: number // per 1K tokens
@@ -38,7 +38,7 @@ export interface LLMResponse {
   }
   model: string
   finishReason: string
-  usage?: any
+  usage?: unknown
 }
 
 export const LLM_PROVIDERS: Record<string, LLMProvider> = {
@@ -60,7 +60,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage.prompt_tokens,
@@ -96,7 +96,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.content[0].text,
       tokens: {
         input: response.usage.input_tokens,
@@ -120,7 +120,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
     models: ["gemini-1.5-pro", "gemini-1.5-flash"],
     defaultModel: "gemini-1.5-pro",
     apiKeyEnv: "GOOGLE_API_KEY",
-    headers: (apiKey: string) => ({
+    headers: (_apiKey: string) => ({
       "Content-Type": "application/json",
     }),
     formatRequest: (prompt: string, options: LLMOptions) => ({
@@ -130,7 +130,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
         maxOutputTokens: options.maxTokens ?? 1000,
       },
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.candidates[0].content.parts[0].text,
       tokens: {
         input: response.usageMetadata.promptTokenCount,
@@ -165,7 +165,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage.prompt_tokens,
@@ -200,7 +200,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage.prompt_tokens,
@@ -235,7 +235,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.text,
       tokens: {
         input: response.meta.tokens.input_tokens,
@@ -270,7 +270,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage.prompt_tokens,
@@ -305,7 +305,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 1000,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage.prompt_tokens,
@@ -340,7 +340,7 @@ export const LLM_PROVIDERS: Record<string, LLMProvider> = {
       max_tokens: options.maxTokens ?? 2048,
       stream: options.stream ?? false,
     }),
-    parseResponse: (response: any): LLMResponse => ({
+    parseResponse: (response: unknown): LLMResponse => ({
       text: response.choices[0].message.content,
       tokens: {
         input: response.usage?.prompt_tokens || 0,
@@ -442,7 +442,7 @@ export class LLMManager {
     return inputCost + outputCost
   }
 
-  compareProviders(responses: Record<string, LLMResponse>, criteria: string[] = ["speed", "cost", "quality"]): any {
+  compareProviders(responses: Record<string, LLMResponse>, _criteria: string[] = ["speed", "cost", "quality"]): unknown {
     const comparison = {
       fastest: null,
       cheapest: null,

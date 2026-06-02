@@ -87,7 +87,7 @@ export default function LLMWorkbench() {
   const [showParams, setShowParams] = useState(false)
   const [history, setHistory] = useState<{ prompt: string; timestamp: Date }[]>([])
 
-  const allModels = getAllModels()
+  const _allModels = getAllModels()
 
   const toggleModel = (modelId: string) => {
     setSelectedModels((prev) => (prev.includes(modelId) ? prev.filter((id) => id !== modelId) : [...prev, modelId]))

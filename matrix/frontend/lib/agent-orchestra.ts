@@ -26,8 +26,8 @@ export interface Task {
   dependencies: string[]
   assignedAgent?: string
   status: TaskStatus
-  input: any
-  output?: any
+  input: unknown
+  output?: unknown
   startTime?: Date
   endTime?: Date
   estimatedDuration: number
@@ -57,7 +57,7 @@ export interface Workflow {
   startTime?: Date
   endTime?: Date
   estimatedDuration: number
-  results?: any
+  results?: unknown
 }
 
 export type WorkflowStatus = "idle" | "running" | "paused" | "completed" | "failed"
@@ -185,7 +185,7 @@ export class AgentOrchestrator {
   createTask(
     type: TaskType,
     description: string,
-    input: any,
+    input: unknown,
     priority: Priority = "medium",
     dependencies: string[] = [],
   ): Task {
@@ -398,7 +398,7 @@ export class AgentOrchestrator {
     task.output = this.generateMockTaskOutput(task, agent)
   }
 
-  private generateMockTaskOutput(task: Task, agent: Agent): any {
+  private generateMockTaskOutput(task: Task, agent: Agent): unknown {
     const outputs = {
       "code-analysis": {
         issues: Math.floor(Math.random() * 10) + 1,
@@ -471,7 +471,7 @@ export class AgentOrchestrator {
     )
   }
 
-  createAPIWorkflow(apiSpec: any): Workflow {
+  createAPIWorkflow(apiSpec: unknown): Workflow {
     return this.createWorkflow(
       "API Development Workflow",
       "End-to-end API development with testing and documentation",
@@ -513,7 +513,7 @@ export class AgentOrchestrator {
   }
 
   // Analytics and Monitoring
-  getWorkflowStats(): any {
+  getWorkflowStats(): unknown {
     const allWorkflows = Array.from(this.workflows.values())
     const completedWorkflows = allWorkflows.filter((w) => w.status === "completed")
 
@@ -532,7 +532,7 @@ export class AgentOrchestrator {
     }
   }
 
-  getAgentStats(): any {
+  getAgentStats(): unknown {
     const agents = this.getAllAgents()
 
     return {

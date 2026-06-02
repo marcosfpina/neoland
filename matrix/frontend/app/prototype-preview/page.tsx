@@ -40,9 +40,9 @@ import Link from "next/link"
 
 export default function PrototypePreview() {
   const [selectedDevice, setSelectedDevice] = useState("desktop")
-  const [previewMode, setPreviewMode] = useState("design")
+  const [_previewMode, _setPreviewMode] = useState("design")
   const [selectedComponent, setSelectedComponent] = useState(null)
-  const [components, setComponents] = useState([])
+  const [_components, _setComponents] = useState([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [zoom, setZoom] = useState([100])
   const [gridVisible, setGridVisible] = useState(true)
@@ -716,7 +716,7 @@ export default function PrototypePreview() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-1">
-                  {currentPrototype.components.map((component, index) => (
+                  {currentPrototype.components.map((component, _index) => (
                     <div
                       key={component.id}
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
