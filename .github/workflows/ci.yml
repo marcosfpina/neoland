@@ -72,3 +72,9 @@ jobs:
 
       - name: Validate ADRs
         run: bash scripts/validate-adr.sh
+
+  sops-verify:
+    name: SOPS secrets integrity
+    uses: ./.github/workflows/reusable-sops-verify.yml
+    secrets:
+      SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}

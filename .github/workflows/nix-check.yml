@@ -23,5 +23,28 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Extract Cachix token from SOPS
+        id: sops-cachix
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          if [[ -z "$SOPS_AGE_KEY" ]]; then
+            echo "token=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p ~/.config/sops/age
+          printf '%s' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+          token=$(nix run nixpkgs#sops -- --decrypt --extract '["CACHIX_AGENT_TOKEN"]' secrets/cachix.sops.yaml)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          rm -f ~/.config/sops/age/keys.txt
+
+      - uses: cachix/cachix-action@v15
+        if: steps.sops-cachix.outputs.token != ''
+        with:
+          name: neoland
+          authToken: ${{ steps.sops-cachix.outputs.token }}
+
       - name: Flake check
         run: nix flake check --no-build
