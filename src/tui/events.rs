@@ -9,6 +9,7 @@ pub enum Action {
     TogglePipeline,     // ^p
     OpenMatrix,         // ^m
     CancelTask,         // ^x
+    CycleProvider,      // ^6 — cycle through deepseek/gemini/groq/llamacpp/local
     FocusNextPanel,     // tab
     FocusPrevPanel,     // shift+tab
     ResolveBreakpoint { resolution: String, instruction: Option<String> }, /* Enter/Esc during

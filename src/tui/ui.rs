@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    app::{AppState, ConnectionStatus, StageStatus, TaskStatus, ToolStatus},
+    app::{AppState, ConnectionStatus, LlmProvider, StageStatus, TaskStatus, ToolStatus},
     presets::QueryConfig,
 };
 
@@ -74,13 +74,20 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         ConnectionStatus::Unknown => ("󰤣", colors::MUTED),
     };
 
-    let backend = app.active_backend.as_deref().unwrap_or("pipeline");
+    let provider_label = app.active_provider.label();
+    let (provider_icon, provider_color) = match app.active_provider {
+        LlmProvider::Local => ("󰍉", colors::SUCCESS),
+        LlmProvider::Deepseek => ("󱁆", colors::CYAN),
+        LlmProvider::Gemini => ("󰊭", colors::PRIMARY),
+        LlmProvider::Groq => ("󰚌", colors::ACCENT),
+        LlmProvider::Llamacpp => ("󰏗", colors::WARNING),
+    };
+
     let active_id = app
         .active_task_id
         .map(|id| format!(" 󰡱 {}", &id.to_string()[..6]))
         .unwrap_or_default();
 
-    // Uma header finíssima
     let header_spans = vec![
         Span::styled(
             "  󰚌 neoland ",
@@ -88,13 +95,21 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         ),
         Span::styled(" │ ", Style::default().fg(colors::MUTED)),
         Span::styled(format!("{} ", dot), Style::default().fg(dot_color)),
-        Span::styled(format!("{} ", backend), Style::default().fg(colors::FG_DIM)),
+        Span::styled(" │ ", Style::default().fg(colors::MUTED)),
+        Span::styled(
+            format!("{} {} ", provider_icon, provider_label),
+            Style::default().fg(provider_color).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" │ ", Style::default().fg(colors::MUTED)),
         Span::styled(
             format!("󰔎 {}ms", app.last_latency_ms),
             Style::default().fg(colors::FG_DIM).add_modifier(Modifier::ITALIC),
         ),
         Span::styled(active_id, Style::default().fg(colors::ACCENT)),
+        Span::styled(
+            "  ^6 provider",
+            Style::default().fg(colors::MUTED),
+        ),
     ];
 
     let block = Block::default()
@@ -296,11 +311,25 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     let cursor = app.cursor_pos;
     let busy = app.active_task_id.is_some();
     let preset = preset_name(&app.config);
+    let provider = app.active_provider.label();
+
+    let (p_icon, p_color) = match app.active_provider {
+        LlmProvider::Local => ("L", colors::SUCCESS),
+        LlmProvider::Deepseek => ("D", colors::CYAN),
+        LlmProvider::Gemini => ("G", colors::PRIMARY),
+        LlmProvider::Groq => ("R", colors::ACCENT),
+        LlmProvider::Llamacpp => ("C", colors::WARNING),
+    };
 
     let mut spans = vec![
         Span::styled(
+            format!(" {} {} ", p_icon, provider),
+            Style::default().fg(p_color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("│ ", Style::default().fg(colors::MUTED)),
+        Span::styled(
             format!(" 󰢱 {} ", preset),
-            Style::default().fg(colors::MUTED).add_modifier(Modifier::BOLD),
+            Style::default().fg(colors::MUTED),
         ),
         Span::styled("│ ", Style::default().fg(colors::MUTED)),
         Span::styled(

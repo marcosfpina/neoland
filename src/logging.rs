@@ -9,10 +9,19 @@ use tracing::Level;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// Initialize the OpenTelemetry tracer with OTLP exporter
+/// Initialize the OpenTelemetry tracer with OTLP exporter.
+///
+/// OTEL_EXPORTER_OTLP_ENDPOINT — OTLP collector gRPC address.
+///   Default: http://localhost:4317
+///   Owasaka shared collector: set to the same endpoint configured in
+///   owasaka's observability.traces.endpoint (configs/examples/default.yaml).
+///   Prometheus scrape: owasaka/deploy/prometheus/prometheus.yml covers both.
 fn init_tracer() -> anyhow::Result<sdktrace::Tracer> {
     let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
+
+    let service_name = std::env::var("OTEL_SERVICE_NAME")
+        .unwrap_or_else(|_| "neoland".to_string());
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
@@ -21,11 +30,11 @@ fn init_tracer() -> anyhow::Result<sdktrace::Tracer> {
 
     let provider = sdktrace::TracerProvider::builder()
         .with_batch_exporter(exporter, runtime::Tokio)
-        .with_resource(Resource::new(vec![KeyValue::new("service.name", "neoland")]))
+        .with_resource(Resource::new(vec![KeyValue::new("service.name", service_name.clone())]))
         .build();
 
     opentelemetry::global::set_tracer_provider(provider.clone());
-    Ok(provider.tracer("neoland"))
+    Ok(provider.tracer(service_name))
 }
 
 /// Logging configuration for different environments

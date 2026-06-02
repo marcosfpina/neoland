@@ -3,6 +3,42 @@ use uuid::Uuid;
 
 use super::presets::QueryConfig;
 
+// ── LLM provider selection ─────────────────────────────────────────────
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum LlmProvider {
+    Local,    // ml-offload only, no external key needed
+    Deepseek,
+    Gemini,
+    Groq,
+    Llamacpp,
+}
+
+impl LlmProvider {
+    pub const ALL: &'static [LlmProvider] = &[
+        LlmProvider::Local,
+        LlmProvider::Deepseek,
+        LlmProvider::Gemini,
+        LlmProvider::Groq,
+        LlmProvider::Llamacpp,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            LlmProvider::Local => "local",
+            LlmProvider::Deepseek => "deepseek",
+            LlmProvider::Gemini => "gemini",
+            LlmProvider::Groq => "groq",
+            LlmProvider::Llamacpp => "llamacpp",
+        }
+    }
+
+    pub fn next(&self) -> LlmProvider {
+        let pos = Self::ALL.iter().position(|p| p == self).unwrap_or(0);
+        Self::ALL[(pos + 1) % Self::ALL.len()].clone()
+    }
+}
+
 // ── Agent workstation types
 // ───────────────────────────────────────────────────
 
@@ -104,6 +140,7 @@ pub struct AppState {
     pub active_session: Uuid,
     pub input_history: Vec<String>,
     pub history_idx: Option<usize>,
+    pub active_provider: LlmProvider,
 }
 
 #[derive(Clone)]
@@ -122,6 +159,15 @@ pub enum MessageRole {
 
 impl AppState {
     pub fn new(server_url: String, neoland_gateway_url: String) -> Self {
+        // Respect SECURELLM_PROVIDER env var as initial provider, default to local
+        let active_provider = match std::env::var("SECURELLM_PROVIDER").as_deref() {
+            Ok("deepseek") => LlmProvider::Deepseek,
+            Ok("gemini") => LlmProvider::Gemini,
+            Ok("groq") => LlmProvider::Groq,
+            Ok("llamacpp") => LlmProvider::Llamacpp,
+            _ => LlmProvider::Local,
+        };
+
         Self {
             messages: Vec::new(),
             pending_message: None,
@@ -152,7 +198,13 @@ impl AppState {
             active_session: Uuid::new_v4(),
             input_history: Vec::new(),
             history_idx: None,
+            active_provider,
         }
+    }
+
+    pub fn cycle_provider(&mut self) {
+        self.active_provider = self.active_provider.next();
+        self.add_system_message(&format!("provider → {}", self.active_provider.label()));
     }
 
     // ── Agent workstation methods ─────────────────────────────────────

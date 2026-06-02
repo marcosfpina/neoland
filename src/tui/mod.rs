@@ -16,7 +16,7 @@ pub mod events;
 pub mod presets;
 pub mod ui;
 
-use app::{AppState, ConnectionStatus, StageStatus, TaskStatus};
+use app::{AppState, ConnectionStatus, LlmProvider, StageStatus, TaskStatus};
 use events::Action;
 use ui::render;
 
@@ -260,7 +260,8 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                 let ml_url = app.neoland_gateway_url.clone();
                                 let srv_url = app.server_url.clone();
                                 let cfg = app.config.clone();
-                                tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, tx));
+                                let provider = app.active_provider.clone();
+                                tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, provider, tx));
                             }
 
                             Action::TogglePipeline => {
@@ -285,6 +286,10 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                     app.complete_task(id, false);
                                     app.output_text = "task cancelled".to_string();
                                 }
+                            }
+
+                            Action::CycleProvider => {
+                                app.cycle_provider();
                             }
 
                             Action::None => {}
@@ -365,6 +370,7 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         (KeyCode::Char('p'), KeyModifiers::CONTROL) => return Action::TogglePipeline,
         (KeyCode::Char('m'), KeyModifiers::CONTROL) => return Action::OpenMatrix,
         (KeyCode::Char('x'), KeyModifiers::CONTROL) => return Action::CancelTask,
+        (KeyCode::Char('6'), KeyModifiers::CONTROL) => return Action::CycleProvider,
 
         // ── Clear ─────────────────────────────────────────────────────
         (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
@@ -720,6 +726,7 @@ async fn run_llm(
     config: presets::QueryConfig,
     neoland_gateway_url: String,
     server_url: String,
+    provider: LlmProvider,
     tx: mpsc::Sender<LlmEvent>,
 ) {
     let start = std::time::Instant::now();
@@ -732,10 +739,15 @@ async fn run_llm(
         },
     };
 
-    let securellm_provider = std::env::var("SECURELLM_PROVIDER").ok().map(|p| {
-        let key = std::env::var(format!("{}_API_KEY", p.to_uppercase())).ok();
-        (p.leak() as &str, key)
-    });
+    // Build securellm_provider from TUI selection — Local skips external backend
+    let securellm_provider = match &provider {
+        LlmProvider::Local => None,
+        p => {
+            let name = p.label();
+            let key = std::env::var(format!("{}_API_KEY", name.to_uppercase())).ok();
+            Some((name, key))
+        },
+    };
 
     let client = match crate::llm::UnifiedLLMClient::new_local_first(
         neoland_gateway_url,
@@ -746,7 +758,14 @@ async fn run_llm(
     {
         Ok(c) => c,
         Err(e) => {
-            tx.send(LlmEvent::Error(format!("llm client: {}", e))).await.ok();
+            // If external provider key is missing, fall back to local instead of
+            // hard-failing — gives a clearer error and keeps the TUI usable
+            let fallback_msg = format!(
+                "provider '{}' unavailable ({}). Usando local.",
+                provider.label(),
+                e
+            );
+            tx.send(LlmEvent::Error(fallback_msg)).await.ok();
             return;
         },
     };
