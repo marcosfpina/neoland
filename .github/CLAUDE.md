@@ -11,7 +11,6 @@ Localização: `~/master/neoland`
 |--------|-----------|
 | Control plane | Rust (tokio, axum, tonic, sqlx) |
 | Agent pipeline | Python 3.13 + DSPy + FastAPI |
-| Frontend | Next.js 14 (`matrix/frontend/`) |
 | Storage | PostgreSQL + pgvector |
 | Infra | NixOS modules declarativos |
 | Secrets | HashiCorp Vault + sops-nix |
@@ -19,38 +18,33 @@ Localização: `~/master/neoland`
 
 ## Comandos Essenciais
 
+`neoland <cmd>` é a interface canônica. `just` é conveniência para dev.
+
 ```bash
 # SEMPRE dentro do dev shell — fora o linker quebra
 nix develop
 
-# Rust
+# Binário principal
+neoland server                             # gRPC :50051 + REST :3001
+neoland client                             # TUI
+neoland doctor --json                      # diagnóstico completo (JSON)
+neoland test --json                        # health check
+neoland restart                            # kill + restart
+
+# Aliases de dev shell (atalhos para o binário)
+nsrv                                       # == neoland server
+ncli                                       # == neoland client
+
+# Rust (dev loop)
 cargo check --lib                          # validação rápida
-cargo test --lib                           # testes (sem mocks)
+cargo test --lib                           # testes unitários (sem mocks)
 cargo test agent_ -- --test-threads=1     # testes do control plane
 cargo build --release
 
-# God Mode — sobe control plane + DSPy pipeline + TUI de uma vez
-neoland-up
-
-# Aliases rápidos
-nsrv                                       # == neoland server
-ncli                                       # == neoland client
-neoland-test                               # == neoland test
-neoland-doctor                             # diagnóstico do stack
-neoland-restart                            # restart dos serviços
-neoland-secrets                            # abre sops env file
-
-# Frontend (matrix/frontend)
-frontend-install                           # npm install
-frontend-dev                               # next dev em 127.0.0.1:3006
-frontend-build                             # next build
-
 # Python pipeline
-cd agents
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-uvicorn neoland_agents.app:app --reload --port 8001   # start pipeline
-pytest tests/ -m contract -v              # testes sem LLM
-pytest tests/ -m integration -v          # testes com LLM real (requer LLM_API_KEY)
+agents-start                               # uvicorn :8001 (--reload) — alias do dev shell
+cd agents && poetry run pytest tests/ -m contract -v      # testes sem LLM
+cd agents && poetry run pytest tests/ -m integration -v  # requer LLM_API_KEY
 
 # DB migrations
 sqlx migrate run --database-url "$DATABASE_URL"
@@ -59,8 +53,8 @@ sqlx migrate run --database-url "$DATABASE_URL"
 ## Arquitetura do Pipeline Multi-Agent
 
 ```
-Browser / matrix/frontend (Next.js :3006)
-    │  (REST + SSE)
+neoland client (TUI)
+    │  gRPC :50051 / REST :3001
     ▼
 src/server/mod.rs  (axum REST :3001 / gRPC :50051)
     │
@@ -130,11 +124,6 @@ neoland/
 │       ├── schemas/api.py   # Pydantic ↔ Rust mirror types
 │       ├── ipc/flags.py     # AgentFlags mmap reader/writer
 │       └── rag/retriever.py
-│
-├── matrix/frontend/         # Next.js 14 frontend (Ciclo 3)
-│   └── app/
-│       ├── api/neoland/     # BFF routes (pipeline, stats, sessions, events, adr)
-│       └── sessions/        # Session registry + snapshot viewer
 │
 ├── modules/applications/    # NixOS modules externos (Ciclo 3)
 │   ├── ml-ops-api.nix       # services.ml-ops-api — inference bridge
@@ -215,19 +204,13 @@ Cada decisão do Tech-Leader gera um arquivo JSON em `/var/lib/neoland/checkpoin
 
 ### Python
 1. Validar schemas com pytest `-m contract` (sem LLM) primeiro
-2. `dspy.Assert` nos campos `confidence` (float) e `risk_level` (enum) — não remover
-3. RAG context limitado: 5 docs × 500 chars — não aumentar sem medir impacto no context window
+2. RAG context limitado: 5 docs × 500 chars — não aumentar sem medir impacto no context window
 4. FastAPI escuta em `127.0.0.1:8001` — nunca `0.0.0.0` sem configuração explícita
 
 ### NixOS Modules
 1. Todo config dos agentes via `services.neoland-agents.*` — não hardcodar valores
 2. Secrets via sops-nix — nunca inline em `.nix`
 3. `nix flake check` em `/etc/nixos` após qualquer mudança nos módulos
-
-### Frontend (matrix/frontend)
-1. BFF routes em `app/api/neoland/` consomem o control plane via `lib/neoland/server.ts`
-2. `NEXT_PUBLIC_BACKEND_URL` aponta para o control plane (padrão `http://127.0.0.1:3001`)
-3. `frontend-dev` serve em `127.0.0.1:3006` — nunca expor `0.0.0.0` em dev
 
 ## Variáveis de Ambiente
 
@@ -249,8 +232,6 @@ Cada decisão do Tech-Leader gera um arquivo JSON em `/var/lib/neoland/checkpoin
 | `NEOLAND_MATRIX_URL` | — | URL do Matrix metrics backend (Ciclo 3) |
 | `NEOLAND_MATRIX_ENABLED` | `false` | Habilita envio de métricas ao Matrix (Ciclo 3) |
 | `NEOLAND_FRONTEND_HOST` | `127.0.0.1` | Bind do frontend Next.js |
-| `NEOLAND_FRONTEND_PORT` | `3006` | Porta do frontend Next.js |
-| `NEXT_PUBLIC_BACKEND_URL` | `http://127.0.0.1:3001` | URL do control plane para o browser |
 
 ## Fases do Projeto (Ciclo 0 — fechado 2026-04-07)
 

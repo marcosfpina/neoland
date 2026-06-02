@@ -126,15 +126,25 @@ just smoke
 
 ## CLI reference
 
-### Server mode
+`neoland` is the unified binary. All commands run through it.
 
-```bash
-neoland server                        # gRPC :50051 + REST :3001
-neoland server --grpc-port 50052 --rest-port 3002
-nix develop --command neoland-server  # via dev shell alias
+```
+neoland server     # gRPC :50051 + REST :3001
+neoland client     # TUI
+neoland doctor     # environment diagnostics
+neoland test       # health checks
+neoland restart    # kill + restart server
 ```
 
-### Client mode (TUI)
+### server
+
+```bash
+neoland server
+neoland server --grpc-port 50052 --rest-port 3002
+neoland server --log-level debug
+```
+
+### client (TUI)
 
 ```bash
 neoland client
@@ -145,28 +155,28 @@ neoland client --server-url http://[::1]:50051
 TUI features: braille spinner · Tokyo Night · readline cursor (Ctrl+←/→, Ctrl+W/U/K) ·
 auto-scroll · 5 preset profiles (Ctrl+1-5)
 
-### Diagnostics
+### doctor
 
 ```bash
-neoland doctor --json          # full layer-by-layer check
-neoland test --json            # alias for health check
-just smoke                     # full-stack 9-layer smoke
-just preflight                 # all 6 release gates
-just validate-slo              # load test against SLO targets (requires hey)
+neoland doctor           # human-readable
+neoland doctor --json    # machine-readable — reports each layer separately
 ```
 
 ### Bootstrap order
 
 ```
-1.  just server          # control plane  :3001 / :50051
-2.  just agents-start    # DSPy pipeline  :8001
-3.  (docker) securellm-bridge  :8080
+1.  neoland server                   # control plane  :3001 / :50051
+2.  agents-start                     # DSPy pipeline  :8001  (dev shell alias)
+3.  (docker) securellm-bridge :8080
     cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
-4.  (docker) ml-ops-api        :8083
+4.  (docker) ml-ops-api       :8083
     cd ../ml-ops-api && docker compose up -d
-5.  just doctor          # confirm all layers
-6.  just smoke           # full 9-layer verification
+5.  neoland doctor --json            # confirm all layers
+6.  bash scripts/smoke-full-stack.sh # full 9-layer verification
 ```
+
+`just` recipes exist for convenience (`just server`, `just smoke`, etc.) but are
+wrappers — `neoland <cmd>` is the canonical interface.
 
 ### SOPS secrets
 
