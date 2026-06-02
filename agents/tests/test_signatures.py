@@ -20,10 +20,8 @@ from neoland_agents.signatures.decision import TechLeaderDecision
 
 @pytest.fixture(scope="module")
 def lm():
-    provider = os.getenv("NEOLAND_LLM_PROVIDER", "openai")
-    model = os.getenv("NEOLAND_LLM_MODEL", "gpt-4o-mini")
-    api_key = os.getenv("LLM_API_KEY")
-    return dspy.LM(model=f"{provider}/{model}", api_key=api_key)
+    from neoland_agents.config import settings
+    return settings.dspy_lm()
 
 
 @pytest.mark.integration
