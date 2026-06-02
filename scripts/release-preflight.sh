@@ -55,26 +55,8 @@ else
   fail "Python contract tests failed"
 fi
 
-# ── Gate 5: Frontend lint ────────────────────────────────────────────────
-section "Gate 5: Frontend lint"
-
-if nix develop --command bash -c "cd matrix/frontend && npm run lint" 2>&1 | tee -a "$LOG"; then
-  ok "Frontend lint clean"
-else
-  fail "Frontend lint failed"
-fi
-
-# ── Gate 6: Frontend build ───────────────────────────────────────────────
-section "Gate 6: Frontend build"
-
-if nix develop --command bash -c "cd matrix/frontend && npm run build" 2>&1 | tee -a "$LOG"; then
-  ok "Frontend build succeeded"
-else
-  fail "Frontend build failed"
-fi
-
-# ── Gate 7: neoland doctor ──────────────────────────────────────────────
-section "Gate 7: neoland doctor --json"
+# ── Gate 5: neoland doctor ──────────────────────────────────────────────
+section "Gate 5: neoland doctor --json"
 
 DOCTOR=$(nix develop --command cargo run --bin neoland --quiet -- doctor --json 2>/dev/null || echo "")
 if [ -n "$DOCTOR" ]; then
@@ -84,8 +66,8 @@ else
   fail "doctor failed to respond"
 fi
 
-# ── Gate 8: Full stack smoke ─────────────────────────────────────────────
-section "Gate 8: Full stack smoke"
+# ── Gate 6: Full stack smoke ─────────────────────────────────────────────
+section "Gate 6: Full stack smoke"
 
 if bash scripts/smoke-full-stack.sh 2>&1 | tee -a "$LOG"; then
   ok "Full stack smoke passed"

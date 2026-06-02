@@ -105,24 +105,6 @@ doctor-raw:
 agents-start:
     cd agents && poetry run uvicorn neoland_agents.app:app --reload --port 8001
 
-# ─── Frontend ─────────────────────────────────────────────────────────────
-
-# Start Next.js dev server
-frontend-dev:
-    nix develop --command frontend-dev
-
-# Production frontend build
-frontend-build:
-    nix develop --command frontend-build
-
-# Lint frontend
-frontend-lint:
-    nix develop --command frontend-lint
-
-# Full stack health check
-frontend-stack:
-    nix develop --command frontend-stack
-
 # ─── Secrets ──────────────────────────────────────────────────────────────
 
 # Edit encrypted secrets via SOPS

@@ -10,16 +10,16 @@
 
 Neoland is the orchestration layer that wires a local AI stack together.
 It exposes a unified REST/gRPC API, runs a four-stage DSPy multi-agent pipeline
-(Junior → Senior → Architect → TechLeader), and renders the whole thing in a
-Next.js operator workbench and a Rust TUI. Everything boots from a single Nix
-dev shell — no Docker required for the control plane itself.
+(Junior → Senior → Architect → TechLeader), and surfaces everything through a
+Rust TUI. Everything boots from a single Nix dev shell — no Docker required for
+the control plane itself.
 
 **Topology**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     Operator                            │
-│          TUI (ratatui)   ·   Workbench (:3006)          │
+│                     TUI (ratatui)                        │
 └────────────────────┬────────────────────────────────────┘
                      │ REST :3001 / gRPC :50051
          ┌───────────▼───────────┐
@@ -54,12 +54,10 @@ dev shell — no Docker required for the control plane itself.
 | Clippy | ✅ 0 warnings/errors | `cargo clippy --all-targets -- -D warnings` |
 | E2E REST tests | ✅ 22/22 passed | `cargo test --test rest_api_test` |
 | Python contracts | ✅ 26/26 passed | `pytest -m contract` |
-| Frontend lint | ✅ 0 errors | `npm run lint` |
-| Frontend build | ✅ 25 routes | `npm run build` |
 | Doctor | ✅ `ok: true` | `just doctor` |
 | Full-stack smoke | ✅ 9/9 layers | `just smoke` |
 
-**Last preflight**: 2026-06-02 · `just preflight` → PASS 8/8
+**Last preflight**: 2026-06-02 · `just preflight` → PASS 6/6
 
 ---
 
@@ -153,8 +151,21 @@ auto-scroll · 5 preset profiles (Ctrl+1-5)
 neoland doctor --json          # full layer-by-layer check
 neoland test --json            # alias for health check
 just smoke                     # full-stack 9-layer smoke
-just preflight                 # all 8 release gates
+just preflight                 # all 6 release gates
 just validate-slo              # load test against SLO targets (requires hey)
+```
+
+### Bootstrap order
+
+```
+1.  just server          # control plane  :3001 / :50051
+2.  just agents-start    # DSPy pipeline  :8001
+3.  (docker) securellm-bridge  :8080
+    cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
+4.  (docker) ml-ops-api        :8083
+    cd ../ml-ops-api && docker compose up -d
+5.  just doctor          # confirm all layers
+6.  just smoke           # full 9-layer verification
 ```
 
 ### SOPS secrets
@@ -221,12 +232,6 @@ agents/neoland_agents/
 ├── schemas/api.py     Pydantic ↔ Rust mirror types
 └── ipc/flags.py       SharedFlags mmap reader/writer
 ```
-
-### Operator workbench (Next.js 15)
-
-25 routes: pipeline view, session inspector, ADR browser, LLM playground,
-service dashboard, agent analytics, and more. BFF routes in `app/api/neoland/`
-consume the control plane via `lib/neoland/server.ts`.
 
 ---
 
