@@ -7,7 +7,7 @@ use super::presets::QueryConfig;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum LlmProvider {
-    Local,    // ml-offload only, no external key needed
+    Local, // ml-offload only, no external key needed
     Deepseek,
     Gemini,
     Groq,

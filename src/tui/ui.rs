@@ -106,10 +106,7 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
             Style::default().fg(colors::FG_DIM).add_modifier(Modifier::ITALIC),
         ),
         Span::styled(active_id, Style::default().fg(colors::ACCENT)),
-        Span::styled(
-            "  ^6 provider",
-            Style::default().fg(colors::MUTED),
-        ),
+        Span::styled("  ^6 provider", Style::default().fg(colors::MUTED)),
     ];
 
     let block = Block::default()
@@ -327,10 +324,7 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
             Style::default().fg(p_color).add_modifier(Modifier::BOLD),
         ),
         Span::styled("│ ", Style::default().fg(colors::MUTED)),
-        Span::styled(
-            format!(" 󰢱 {} ", preset),
-            Style::default().fg(colors::MUTED),
-        ),
+        Span::styled(format!(" 󰢱 {} ", preset), Style::default().fg(colors::MUTED)),
         Span::styled("│ ", Style::default().fg(colors::MUTED)),
         Span::styled(
             if busy { "󰑮 " } else { "  " },

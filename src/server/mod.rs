@@ -973,7 +973,11 @@ pub(crate) async fn submit_agent_task(
                 Ok(v) => (StatusCode::OK, Json(v)).into_response(),
                 Err(e) => {
                     tracing::error!(error = %e, session_id = %session_id, "Failed to serialize agent task result");
-                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize result"}))).into_response()
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"error": "Failed to serialize result"})),
+                    )
+                        .into_response()
                 },
             }
         },
@@ -1067,7 +1071,11 @@ pub(crate) async fn get_agent_session(
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
             Err(e) => {
                 tracing::error!(error = %e, session_id = %id, "Failed to serialize session");
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize session"}))).into_response()
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to serialize session"})),
+                )
+                    .into_response()
             },
         },
         Err(e) => {
@@ -1117,7 +1125,11 @@ pub(crate) async fn list_agent_sessions(
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
             Err(e) => {
                 tracing::error!(error = %e, "Failed to serialize session list");
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to serialize sessions"}))).into_response()
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to serialize sessions"})),
+                )
+                    .into_response()
             },
         },
         Err(e) => {

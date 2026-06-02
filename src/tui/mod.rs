@@ -760,11 +760,8 @@ async fn run_llm(
         Err(e) => {
             // If external provider key is missing, fall back to local instead of
             // hard-failing — gives a clearer error and keeps the TUI usable
-            let fallback_msg = format!(
-                "provider '{}' unavailable ({}). Usando local.",
-                provider.label(),
-                e
-            );
+            let fallback_msg =
+                format!("provider '{}' unavailable ({}). Usando local.", provider.label(), e);
             tx.send(LlmEvent::Error(fallback_msg)).await.ok();
             return;
         },

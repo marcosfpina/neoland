@@ -46,9 +46,7 @@ fn spawn_server_thread() {
             .build()
             .expect("failed to build server runtime")
             .block_on(async {
-                if let Err(e) =
-                    neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await
-                {
+                if let Err(e) = neoland::server::run_server(TEST_GRPC_PORT, TEST_REST_PORT).await {
                     eprintln!("[TEST SERVER] run_server failed: {e}");
                 }
             });
