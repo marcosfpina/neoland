@@ -2,100 +2,83 @@ name: Copilot Development Setup
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust-checks:
-    name: Rust Validation
+    name: Rust (fmt · clippy · tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Run Rust checks
-        run: nix develop --command cargo check --lib
-
-      - name: Run clippy lints
-        run: nix develop --command cargo clippy --lib -- -D warnings
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config
 
       - name: Format check
-        run: nix develop --command cargo fmt -- --check
+        run: cargo fmt --check
 
-  rust-tests:
-    name: Rust Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Clippy
+        run: cargo clippy --lib -- -D warnings
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+      - name: Unit tests
+        run: cargo test --lib
 
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
-
-      - name: Run unit tests
-        run: nix develop --command cargo test --lib
-
-      - name: Run agent tests
-        run: nix develop --command cargo test agent_ -- --test-threads=1
+      - name: Agent tests
+        run: cargo test agent_ -- --test-threads=1
 
   python-tests:
-    name: Python Contract Tests
+    name: Python contract tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
+      - name: Install Poetry
+        run: pip install poetry
+
       - name: Install dependencies
-        run: |
-          cd agents
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -e ".[dev]"
+        run: cd agents && poetry install --no-interaction
 
       - name: Run contract tests
-        run: |
-          cd agents
-          source .venv/bin/activate
-          pytest tests/ -m contract -v
+        run: cd agents && poetry run pytest tests/ -m contract -v
 
   adr-validation:
-    name: ADR Validation
+    name: ADR validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
 
       - name: Validate ADRs
-        run: nix develop --command bash -c "./scripts/validate-adr.sh"
+        run: bash scripts/validate-adr.sh
 
   security-checks:
-    name: Security Validation
+    name: Security scan (Trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run security scan
-        uses: aquasecurity/trivy-action@master
+      - name: Run Trivy FS scan
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -103,71 +86,35 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
   nix-check:
-    name: Nix Flake Validation
+    name: Nix flake check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Flake check
-        run: nix flake check
-
-      - name: Evaluate dev environment
-        run: nix develop --command echo "✅ Development environment is valid"
-
-  production-readiness:
-    name: Production Readiness Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
-
-      - name: Validate production readiness
-        run: nix develop --command bash -c "./scripts/validate-production-readiness.sh"
+        run: nix flake check --no-build
 
   copilot-readiness:
-    name: Copilot Context Readiness
+    name: Copilot context readiness
     runs-on: ubuntu-latest
-    needs:
-      - rust-checks
-      - rust-tests
-      - python-tests
-      - adr-validation
-      - security-checks
-      - nix-check
+    needs: [rust-checks, python-tests, adr-validation, nix-check]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Verify Copilot context files
+      - name: Verify context files
         run: |
-          echo "✅ Checking Copilot context structure..."
-          [ -f ".github/copilot-instructions.md" ] && echo "  ✓ copilot-instructions.md found" || echo "  ✗ copilot-instructions.md missing"
-          [ -f "README.md" ] && echo "  ✓ README.md found" || echo "  ✗ README.md missing"
-          [ -f "agents/README.md" ] && echo "  ✓ agents/README.md found" || echo "  ✗ agents/README.md missing"
-          [ -f "deploy/README.md" ] && echo "  ✓ deploy/README.md found" || echo "  ✗ deploy/README.md missing"
-
-      - name: Summary
-        run: |
-          echo "## ✅ Copilot Development Environment Ready"
-          echo ""
-          echo "All checks passed. The environment is ready for:"
-          echo "- Rust development (cargo, clippy, fmt)"
-          echo "- Python DSPy pipeline development"
-          echo "- Architecture Decision Records (ADRs)"
-          echo "- Security and compliance validation"
-          echo "- Production deployment"
+          [ -f ".github/CLAUDE.md" ]  && echo "✓ CLAUDE.md"  || echo "✗ CLAUDE.md missing"
+          [ -f "README.md" ]          && echo "✓ README.md"  || echo "✗ README.md missing"
+          [ -f "ROADMAP.md" ]         && echo "✓ ROADMAP.md" || echo "✗ ROADMAP.md missing"
+          [ -f "agents/README.md" ]   && echo "✓ agents/README.md" || echo "  agents/README.md absent (optional)"

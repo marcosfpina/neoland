@@ -17,6 +17,10 @@
       url = "git+ssh://git@github.com/marcosfpina/ai-agent-os?rev=f583d013400a67d87d9f20232fcf0521c10d4b26";
       flake = false;
     };
+    phantom = {
+      url = "github:VoidNxSEC/phantom";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =

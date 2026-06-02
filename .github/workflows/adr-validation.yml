@@ -11,19 +11,23 @@ env:
   PYTHON_BIN: python3.13
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-adrs:
     name: Validate Architecture Decision Records
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -92,14 +96,14 @@ jobs:
 
   chain-integrity:
     name: Chain & Merkle Integrity
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -156,11 +160,11 @@ jobs:
 
   enforcement-smoke:
     name: Enforcement Layer Smoke Test (OPA authz)
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install OPA
         uses: open-policy-agent/setup-opa@v2
@@ -172,17 +176,17 @@ jobs:
 
   detect-features:
     name: Feature Detection & Integration Check
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     if: github.event_name == 'push'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -218,7 +222,7 @@ jobs:
 
   sync-knowledge-base:
     name: Synchronize Knowledge Base
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     needs: validate-adrs
@@ -226,10 +230,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -254,14 +258,14 @@ jobs:
 
   stf-compliance-check:
     name: STF Protocol Compliance Check
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -295,11 +299,11 @@ jobs:
 
   code-quality:
     name: Code Quality Checks
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check for TODO/FIXME in critical files
         run: |
@@ -319,7 +323,7 @@ jobs:
 
   summary:
     name: Validation Summary
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: [validate-adrs, chain-integrity, enforcement-smoke, detect-features, stf-compliance-check, code-quality]
     if: always()
 
