@@ -19,18 +19,17 @@
     "aiAgentOs": {
       "flake": false,
       "locked": {
-        "lastModified": 1769339602,
-        "narHash": "sha256-hbs8nHdXzbK2XLBREhAmwJXWkM09bBMYuKlWFvx6agk=",
-        "ref": "refs/heads/main",
-        "rev": "f583d013400a67d87d9f20232fcf0521c10d4b26",
-        "revCount": 10,
-        "type": "git",
-        "url": "ssh://git@github.com/marcosfpina/ai-agent-os"
+        "lastModified": 1778963617,
+        "narHash": "sha256-ZTHvrj1RF0CXiip261C0V9eWkTFeSRQI2e/dvXTJHyU=",
+        "owner": "VoidNxSEC",
+        "repo": "ai-agent-os",
+        "rev": "3f6ff84b9dbc76e8ad2bff80848d3e68953de93c",
+        "type": "github"
       },
       "original": {
-        "rev": "f583d013400a67d87d9f20232fcf0521c10d4b26",
-        "type": "git",
-        "url": "ssh://git@github.com/marcosfpina/ai-agent-os"
+        "owner": "VoidNxSEC",
+        "repo": "ai-agent-os",
+        "type": "github"
       }
     },
     "crane": {
@@ -131,15 +130,15 @@
       "locked": {
         "lastModified": 1778963838,
         "narHash": "sha256-7sjm5LALOg7x3yT/ceRivIK5IBD1j6HwmSkupElo3TY=",
-        "ref": "refs/heads/main",
+        "owner": "VoidNxSEC",
+        "repo": "ml-ops-api",
         "rev": "f685ab124b592c731f88b0b37bec328c1dde5c8d",
-        "revCount": 31,
-        "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
+        "owner": "VoidNxSEC",
+        "repo": "ml-ops-api",
+        "type": "github"
       }
     },
     "nixpkgs": {
@@ -325,17 +324,17 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1779917500,
-        "narHash": "sha256-OsbS2Aw7pQdpMHHSBvLCV84HSI4C8nq5U7nyG4pOt5o=",
-        "ref": "refs/heads/main",
-        "rev": "f24c360feb267b8ba92e949f678add9a8bac893a",
-        "revCount": 101,
-        "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
+        "lastModified": 1780429011,
+        "narHash": "sha256-5zulmcjAAOZQ4qkBclzew3S1dFkZSWFZqNg2/yjLIaY=",
+        "owner": "VoidNxSEC",
+        "repo": "securellm-bridge",
+        "rev": "9d8e04d19452e8f97d2a1e56e1e5e05b6c4c9e19",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
+        "owner": "VoidNxSEC",
+        "repo": "securellm-bridge",
+        "type": "github"
       }
     },
     "systems": {

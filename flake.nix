@@ -6,15 +6,15 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
     securellmBridge = {
-      url = "git+ssh://git@github.com/VoidNxSEC/securellm-bridge";
+      url = "github:VoidNxSEC/securellm-bridge";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     mlOpsApi = {
-      url = "git+ssh://git@github.com/VoidNxSEC/ml-ops-api";
+      url = "github:VoidNxSEC/ml-ops-api";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     aiAgentOs = {
-      url = "git+ssh://git@github.com/marcosfpina/ai-agent-os?rev=f583d013400a67d87d9f20232fcf0521c10d4b26";
+      url = "github:VoidNxSEC/ai-agent-os";
       flake = false;
     };
     phantom = {
