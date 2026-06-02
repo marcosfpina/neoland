@@ -9,7 +9,7 @@
 **Frontend build**: `npm run build` → ✅ passou
 **Python contracts**: `pytest -m contract` → 26/26 passed (incluindo `test_signatures.py`)
 
-> Source-of-truth único. Os arquivos `docs/neoland-roadmap.md` e `docs/neoland-progress.md` são histórico.
+> Documento de planejamento e registro de entregas. Os arquivos `docs/neoland-roadmap.md` e `docs/neoland-progress.md` são contexto histórico.
 
 ---
 

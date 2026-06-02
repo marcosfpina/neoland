@@ -164,6 +164,10 @@ roadmap:
 smoke:
     bash scripts/smoke-full-stack.sh
 
+# SLO validation: load test /live and /health against defined targets (requires hey)
+validate-slo:
+    bash scripts/validate-slo.sh
+
 # Release preflight: all gates (tests, lint, build, smoke, doctor)
 preflight:
     bash scripts/release-preflight.sh
