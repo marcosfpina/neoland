@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://neoland.dev/schema/stf.schema.json",
+  "title": "Secure Transformation Framework (STF) Protocol Schema",
+  "type": "object",
+  "required": ["protocol", "stf_version", "mode"],
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "description": "Protocol identifier"
+    },
+    "stf_version": {
+      "type": "string",
+      "description": "STF specification version"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["strict", "advisory", "audit"],
+      "description": "Enforcement mode"
+    },
+    "directives": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "chain": [
+    {
+      "block_number": 0,
+      "adr_id": "genesis",
+      "content_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "note": "Genesis block — no ADR content"
+    }
+  ]
+}

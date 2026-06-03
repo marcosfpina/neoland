@@ -1,0 +1,59 @@
+---
+protocol: neutron
+stf_version: "1.0"
+mode: strict
+description: Secure Transformation Framework — Neoland agent pipeline governance
+---
+<directives>
+  <directive id="STF-D1" name="input-sanitization" enforcement="required">
+    All user inputs MUST be sanitized before passing to LLM providers.
+    Prompt injection patterns trigger quarantine and ADR gate.
+  </directive>
+
+  <directive id="STF-D2" name="adr-gate" enforcement="required">
+    Architectural changes MUST pass ADR gate before deployment.
+    Bypassing ADR gate requires explicit override with justification.
+  </directive>
+
+  <directive id="STF-D3" name="secret-isolation" enforcement="required">
+    Secrets MUST be loaded via SOPS/age at runtime.
+    Inline env vars and hardcoded credentials are prohibited.
+  </directive>
+
+  <directive id="STF-D4" name="provider-transparency" enforcement="required">
+    LLM provider selection, model ID, and inference parameters MUST be
+    logged with each request for audit and reproducibility.
+  </directive>
+
+  <directive id="STF-D5" name="chain-integrity" enforcement="advisory">
+    Accepted ADRs SHOULD be hash-signed in the chain. Tampering triggers
+    a re-sign requirement before next deployment.
+  </directive>
+</directives>
+
+<constraints>
+  <constraint id="STF-C1" name="no-direct-db-mutation" scope="agents">
+    Agent pipelines MUST NOT mutate the database directly.
+    All writes go through the validated storage layer.
+  </constraint>
+
+  <constraint id="STF-C2" name="rate-limit-enforcement" scope="api">
+    API endpoints MUST enforce per-token rate limits.
+    Burst allowance: 10× nominal rate, max 30 seconds.
+  </constraint>
+
+  <constraint id="STF-C3" name="session-isolation" scope="tui,server">
+    Session state MUST be isolated per user context.
+    Cross-session data access requires explicit capability grant.
+  </constraint>
+
+  <constraint id="STF-C4" name="audit-log-immutability" scope="logging">
+    Audit log entries MUST be append-only.
+    Deletion or mutation of existing entries triggers a compliance alert.
+  </constraint>
+
+  <constraint id="STF-C5" name="dependency-pinning" scope="build">
+    All dependencies MUST be pinned to exact versions in Cargo.lock / flake.lock.
+    Floating ranges are prohibited in production builds.
+  </constraint>
+</constraints>

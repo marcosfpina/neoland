@@ -25,8 +25,6 @@ chain_width = 80
 
 # Function formatting
 fn_params_layout = "Tall"
-brace_style = "SameLineWhere"
-control_brace_style = "AlwaysSameLine"
 
 # Match formatting
 match_arm_blocks = true
@@ -39,10 +37,6 @@ trailing_semicolon = true
 # Comments
 normalize_comments = true
 wrap_comments = true
-format_code_in_doc_comments = true
-
-# Strings
-format_strings = true
 
 # Misc
 remove_nested_parens = true
