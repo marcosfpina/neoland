@@ -16,6 +16,28 @@ set positional-arguments
 # TUI client — alias for `client` (loads SOPS)
 tui: client
 
+# Dev stack: sobe servidor, aguarda /health, abre TUI. Ctrl+C mata tudo.
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill $(jobs -p) 2>/dev/null; wait 2>/dev/null || true' EXIT INT TERM
+    echo "→ Iniciando servidor Neoland..."
+    bash scripts/neoland-run.sh server &
+    SERVER_PID=$!
+    echo "→ Aguardando servidor em :3001..."
+    until curl -sf http://localhost:3001/health >/dev/null 2>&1; do
+        sleep 0.3
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "✗ Servidor encerrou antes de ficar ready."
+            exit 1
+        fi
+    done
+    echo "✓ Servidor pronto. Abrindo TUI..."
+    bash scripts/neoland-run.sh client
+
+# Servidor standalone — cliente roda em outro terminal (ncli ou just tui)
+serve: server
+
 # CI pipeline: check → fmt-check → clippy → test (all must pass)
 ci: check fmt-check clippy test
 

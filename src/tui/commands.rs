@@ -37,6 +37,8 @@ pub enum Command {
     Stream(String),
     /// Start a new conversation session.
     NewSession,
+    /// Set a custom nickname for pipeline slot 1-4.
+    Name(usize, String),
     /// Unknown / malformed command.
     Unknown(String),
 }
@@ -48,7 +50,7 @@ pub enum Command {
 /// Sorted list of completable command names (no leading `/`).
 /// Used by `AppState::tab_complete_command` for Tab-completion.
 pub const COMPLETABLE_COMMANDS: &[&str] = &[
-    "cancel", "clear", "dequeue", "exit", "help", "new",
+    "cancel", "clear", "dequeue", "exit", "help", "name", "new",
     "preset", "provider", "queue", "search", "steer", "stream", "theme", "why",
 ];
 
@@ -139,6 +141,18 @@ pub fn parse_command(input: &str) -> Option<Command> {
                 Command::Stream(args.to_string())
             }
         },
+        "name" => {
+            let parts: Vec<&str> = args.splitn(2, char::is_whitespace).collect();
+            match (parts.first(), parts.get(1)) {
+                (Some(n), Some(name)) => match n.parse::<usize>() {
+                    Ok(slot) if (1..=4).contains(&slot) => {
+                        Command::Name(slot, name.trim().to_string())
+                    }
+                    _ => Command::Unknown(format!("slot inválido: '{}'. Use 1-4.", n)),
+                },
+                _ => Command::Unknown("uso: /name <1-4> <apelido>".into()),
+            }
+        },
         other => Command::Unknown(format!("unknown command: /{other}. Try /help")),
     };
 
@@ -163,6 +177,7 @@ pub const HELP_TEXT: &str = "\
   /steer <msg>      Send steering instruction
   /theme <name>     Switch theme (tokyo-night, neon-glass, ...)
   /stream <mode>    Reveal mode (line, typewriter, thinking)
+  /name <1-4> <id>  Nomear agente do pipeline (persiste)
 
  ── Keybindings ───────────────────────────────────────────────
   Tab / Shift+Tab   Cycle panels

@@ -1,6 +1,7 @@
 /// Key processing result — returned by process_key in mod.rs
 use super::commands::Command;
 
+#[derive(Debug)]
 pub enum Action {
     None,
     Quit,

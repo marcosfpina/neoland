@@ -1,6 +1,5 @@
 //! User preferences persisted to `$XDG_CONFIG_HOME/neoland/prefs.json`
-//! (fallback `$HOME/.config/neoland/`). Currently: theme + streaming mode.
-//! No external crate for the config dir — resolved via `std::env`.
+//! (fallback `$HOME/.config/neoland/`). No external crate for config dir.
 
 use std::path::PathBuf;
 
@@ -12,6 +11,11 @@ pub struct Prefs {
     pub theme: Option<String>,
     #[serde(default)]
     pub stream_mode: Option<String>,
+    /// Custom agent names for pipeline slots 0-3.
+    /// `None` = pick randomly from the pool at task start.
+    /// Set via `/name <1-4> <apelido>` inside the TUI.
+    #[serde(default)]
+    pub agent_names: [Option<String>; 4],
 }
 
 /// `$XDG_CONFIG_HOME/neoland` or `$HOME/.config/neoland`.

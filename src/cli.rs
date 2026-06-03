@@ -28,12 +28,13 @@ pub enum Commands {
 
     /// Inicia o cliente TUI (Terminal User Interface)
     Client {
-        /// URL do servidor gRPC
-        #[arg(long, default_value = "http://localhost:3001")]
+        /// URL do servidor REST. Também lido de $NEOLAND_SERVER_URL.
+        #[arg(long, env = "NEOLAND_SERVER_URL", default_value = "http://localhost:3001")]
         server_url: String,
 
-        /// URL do gateway LLM principal (SecureLLM Bridge API)
-        #[arg(long = "neoland-gateway-url", default_value = "http://localhost:8080")]
+        /// URL do gateway LLM principal. Também lido de $NEOLAND_GATEWAY_URL.
+        #[arg(long = "neoland-gateway-url", env = "NEOLAND_GATEWAY_URL",
+              default_value = "http://localhost:8080")]
         neoland_gateway_url: String,
     },
 
@@ -174,7 +175,12 @@ mod tests {
 
     #[test]
     fn parses_global_log_level_before_subcommand() {
-        let cli = Cli::try_parse_from(["neoland", "--log-level", "trace", "client"])
+        // Isolate from NEOLAND_SERVER_URL / NEOLAND_GATEWAY_URL env vars that
+        // the devShell sets — we only care that log-level and the subcommand
+        // are parsed correctly, not the specific URL values.
+        let cli = Cli::try_parse_from(["neoland", "--log-level", "trace", "client",
+            "--server-url", "http://localhost:3001",
+            "--neoland-gateway-url", "http://localhost:8080"])
             .expect("client parses");
 
         match cli.command {

@@ -475,6 +475,13 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                         app.new_session();
                                         app.add_notification(NotificationLevel::Info, "nova sessão");
                                     }
+                                    Command::Name(slot, name) => {
+                                        app.set_agent_name(slot - 1, name.clone());
+                                        app.add_notification(
+                                            NotificationLevel::Success,
+                                            format!("agente {} → {}", slot, name),
+                                        );
+                                    }
                                     Command::Unknown(msg) => {
                                         app.output_text = msg;
                                         app.auto_scroll = true;
@@ -505,7 +512,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
 
 // ── Key → Action ──────────────────────────────────────────────────────
 
-fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action {
+pub(super) fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action {
     match (code, mods) {
         // ── Quit ──────────────────────────────────────────────────────
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Action::Quit,
@@ -1151,3 +1158,6 @@ async fn check_server_health(app: &mut AppState) {
         },
     }
 }
+
+#[cfg(test)]
+mod behavior_tests;

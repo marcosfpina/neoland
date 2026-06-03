@@ -210,7 +210,7 @@ pub struct ToolCall {
     pub status: ToolStatus,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Panel {
     Sessions,     // left sidebar
     Conversation, // center
@@ -580,9 +580,14 @@ impl AppState {
         }
         self.active_task_id = Some(id);
 
-        // Pick 4 unique character nicknames seeded from the task UUID bytes.
+        // Pick 4 unique character nicknames — user overrides from prefs take
+        // precedence; random pool fills any unset slots.
+        let prefs = super::prefs::load();
         let nicks = pick_stage_nicknames(id);
-        let mk = |name, nick: &str| PipelineStage {
+        let effective = |i: usize, random: &str| -> String {
+            prefs.agent_names[i].clone().unwrap_or_else(|| random.to_string())
+        };
+        let mk = |name, nick: String| PipelineStage {
             name,
             nickname: nick.to_string(),
             status: StageStatus::Pending,
@@ -592,10 +597,10 @@ impl AppState {
             started_at: None,
         };
         self.pipeline_stages = vec![
-            mk("junior",      &nicks[0]),
-            mk("senior",      &nicks[1]),
-            mk("architect",   &nicks[2]),
-            mk("tech-leader", &nicks[3]),
+            mk("junior",      effective(0, &nicks[0])),
+            mk("senior",      effective(1, &nicks[1])),
+            mk("architect",   effective(2, &nicks[2])),
+            mk("tech-leader", effective(3, &nicks[3])),
         ];
         self.tool_calls.clear();
         self.output_text.clear();
@@ -788,6 +793,20 @@ impl AppState {
                 } else {
                     name
                 };
+            }
+        }
+    }
+
+    /// Set a custom nickname for pipeline slot `slot` (0-based).
+    /// Persists to `prefs.json` so it survives restarts. Also renames the
+    /// stage inline if the pipeline is currently active.
+    pub fn set_agent_name(&mut self, slot: usize, name: String) {
+        let mut prefs = super::prefs::load();
+        if slot < 4 {
+            prefs.agent_names[slot] = Some(name.clone());
+            super::prefs::save(&prefs);
+            if let Some(stage) = self.pipeline_stages.get_mut(slot) {
+                stage.nickname = name;
             }
         }
     }
