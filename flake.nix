@@ -21,6 +21,14 @@
       url = "github:VoidNxSEC/phantom";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    owasaka = {
+    url = "github:VoidNxSEC/O.W.A.S.A.K.A.";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    spectre = {
+    url = "github:VoidNxSEC/spectre";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -33,7 +41,7 @@
     }@inputs:
     let
       moduleInputs = {
-        inherit (inputs) securellmBridge mlOpsApi;
+        inherit (inputs) securellmBridge mlOpsApi spectre owasaka;
       };
 
       neolandModule = import ./modules/applications/neoland.nix;
@@ -43,10 +51,31 @@
       mlOpsApiModule = import ./modules/applications/ml-ops-api.nix {
         inputs = moduleInputs;
       };
-      neolandLlmSuiteModule = import ./modules/applications/neoland-llm-suite.nix;
+      neolandLlmSuiteModule    = import ./modules/applications/neoland-llm-suite.nix;
+      spectreEventBusModule    = import ./modules/applications/spectre-event-bus.nix {
+        inputs = moduleInputs;
+      };
+      owasakaModule            = import ./modules/applications/owasaka.nix {
+        inputs = moduleInputs;
+      };
+      neolandStackModule       = import ./modules/applications/neoland-stack.nix {
+        inputs = moduleInputs;
+      };
     in
     {
       nixosModules = {
+        # ── Individual service modules ────────────────────────────────
+        neoland          = neolandModule;
+        securellmBridgeApi = securellmBridgeApiModule;
+        mlOpsApi         = mlOpsApiModule;
+        llmSuite         = neolandLlmSuiteModule;
+        spectreEventBus  = spectreEventBusModule;
+        owasaka          = owasakaModule;
+
+        # ── Composite: full stack in one import ───────────────────────
+        stack            = neolandStackModule;
+
+        # ── Default: all individual modules (no stack opinions) ───────
         default =
           { ... }:
           {
@@ -55,12 +84,10 @@
               securellmBridgeApiModule
               mlOpsApiModule
               neolandLlmSuiteModule
+              spectreEventBusModule
+              owasakaModule
             ];
           };
-        neoland = neolandModule;
-        securellmBridgeApi = securellmBridgeApiModule;
-        mlOpsApi = mlOpsApiModule;
-        llmSuite = neolandLlmSuiteModule;
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -285,6 +312,14 @@
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+            # Spectre event bus — NATS already running via Docker (spectre-nats:4222).
+            # Override to point at a different bus if needed.
+            export NEOLAND_NATS_URL="''${NEOLAND_NATS_URL:-nats://127.0.0.1:4222}"
+
+            # Spectre observability endpoints (for `just doctor` / tracing)
+            export SPECTRE_JAEGER_URL="''${SPECTRE_JAEGER_URL:-http://127.0.0.1:16686}"
+            export OTEL_EXPORTER_OTLP_ENDPOINT="''${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}"
+
             # Make ai-agent-os available at the expected relative path for cargo path overrides.
             # .cargo/config.toml patches hyprland-ipc via ../ai-agent-os/crates/hyprland-ipc.
             _ai_agent_os_link="$(dirname "$NEOLAND_PROJECT_ROOT")/ai-agent-os"
@@ -341,12 +376,18 @@
               echo "  just visual            # ASCII preview do TUI"
               echo "  just fix               # fmt + clippy --fix"
               echo ""
-              echo "  TUI commands once inside:  /why  /steer  /search  /help"
+              echo "  TUI commands once inside:  /why  /steer  /search  /name  /help"
               echo ""
               echo "  Agents:"
               echo "    agents-start           # DSPy :8001 (uvicorn --reload)"
               echo "    agents-test-contract   # pytest -m contract"
               echo ""
+              echo "  Spectre stack (Docker):"
+              echo "    NATS    nats://127.0.0.1:4222  (event bus)"
+              echo "    Jaeger  http://127.0.0.1:16686  (tracing)"
+              echo "    Grafana http://127.0.0.1:3005   (metrics)"
+              echo ""
+              echo "  NixOS modules: neoland · spectreEventBus · owasaka · stack"
               echo "  Run 'just' to list all recipes."
               echo ""
             fi
