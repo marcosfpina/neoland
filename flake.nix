@@ -263,6 +263,7 @@
             [
               rustToolchain
               cargo-audit # supply-chain CVE scanning — `cargo audit` no CI e local
+              cargo-watch # `just watch` — hot-reload check on save
               openssl
               sops
               age
@@ -315,30 +316,36 @@
             agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m contract -v "$@"); }
             agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m integration -v "$@"); }
 
+            # Short aliases: nd = doctor, nt = test (no SOPS)
+            alias nd="neoland-doctor"
+            alias nt="cargo test --lib"
+
             if [[ $- == *i* ]]; then
               echo ""
-              echo "┌─────────────────────────────────────────────────────────────────┐"
-              echo "│  Neoland Dev Shell (v0.1.0-rc.1)                               │"
-              echo "└─────────────────────────────────────────────────────────────────┘"
+              echo "  ╭─────────────────────────────────────────────────────────────╮"
+              echo "  │  Neoland dev shell                                          │"
+              echo "  ╰─────────────────────────────────────────────────────────────╯"
               echo ""
-              echo "  neoland server              # gRPC :50051 + REST :3001"
-              echo "  neoland client              # TUI"
-              echo "  neoland doctor --json       # diagnose all layers"
-              echo "  neoland test --json         # health check"
-              echo "  neoland restart             # kill + restart server"
+              echo "  Run                    Alias"
+              echo "  ─────────────────────  ──────"
+              echo "  neoland client  / TUI  ncli"
+              echo "  neoland server         nsrv"
+              echo "  neoland doctor         nd"
+              echo "  cargo test --lib       nt"
+              echo ""
+              echo "  just tui               # same as ncli (TUI shortcut)"
+              echo "  just ci                # check → fmt → clippy → test"
+              echo "  just watch             # cargo-watch re-check on save"
+              echo "  just visual            # ASCII preview of TUI layout"
+              echo "  just fix               # fmt + clippy --fix"
+              echo ""
+              echo "  TUI commands once inside:  /why  /steer  /search  /help"
               echo ""
               echo "  Agents:"
-              echo "    agents-start              # DSPy pipeline :8001 (uvicorn --reload)"
-              echo "    agents-test-contract      # pytest -m contract (no LLM)"
-              echo "    agents-test-integration   # pytest -m integration"
+              echo "    agents-start           # DSPy :8001 (uvicorn --reload)"
+              echo "    agents-test-contract   # pytest -m contract"
               echo ""
-              echo "  Dev:"
-              echo "    just check / test / clippy / build"
-              echo "    just smoke     # full 9-layer stack smoke"
-              echo "    just preflight # all release gates"
-              echo "    just secrets-edit / secrets-view"
-              echo ""
-              echo "  Run 'just' for the full recipe list."
+              echo "  Run 'just' to list all recipes."
               echo ""
             fi
           '';
