@@ -166,18 +166,33 @@ impl StageStatus {
     }
 }
 
+/// Pool of character names drawn randomly at task start.
+/// Internal stage keys ("junior", "senior", etc.) remain unchanged for SSE
+/// matching; these nicknames are purely a display persona — no job titles.
+pub const STAGE_NICKNAMES: &[&str] = &[
+    "Vega", "Orion", "Nova", "Atlas", "Coda", "Wren",
+    "Kael", "Mira", "Zeph", "Nox", "Flux", "Rook",
+    "Drift", "Lux", "Sage", "Apex", "Void", "Echo",
+    "Ghost", "Cipher", "Storm", "Root", "Lyra", "Dusk",
+    "Fern", "Gale", "Haze", "Jade", "Fuse", "Crest",
+    "Pike", "Rune", "Sable", "Thorn", "Vale", "Ward",
+];
+
 #[derive(Clone)]
 pub struct PipelineStage {
+    /// Internal key matching SSE event `stage` field (e.g. "junior").
     pub name: &'static str,
+    /// Display persona — a random character name from `STAGE_NICKNAMES`.
+    pub nickname: String,
     pub status: StageStatus,
     pub confidence: Option<f32>,
     pub output: Option<String>,
     /// Provenance anchor (RWA token / signed attestation ref) backing this
     /// stage's decision. `None` until the backend emits a chain anchor; the
-    /// reasoning column shows `⛓ <ref>` when present. See plan follow-up.
+    /// reasoning column shows `⛓ <ref>` when present.
     pub provenance: Option<String>,
     /// Wall-clock moment when this stage entered Running state — used to
-    /// render elapsed time next to the spinner (e.g. "architect ▸ 4.2s").
+    /// render elapsed time next to the spinner (e.g. "Vega ▸ 4.2s").
     pub started_at: Option<Instant>,
 }
 
@@ -253,6 +268,29 @@ impl Session {
 
 /// Default name given to a fresh session until the first task renames it.
 pub const DEFAULT_SESSION_NAME: &str = "Nova sessão";
+
+/// Pick 4 unique character nicknames from `STAGE_NICKNAMES` using the task
+/// UUID bytes as a deterministic entropy source — no `rand` crate needed.
+/// Same task → same names, so `/why` always shows the same cast.
+fn pick_stage_nicknames(task_id: Uuid) -> [String; 4] {
+    let bytes = task_id.as_bytes();
+    let n = STAGE_NICKNAMES.len();
+    let mut chosen: Vec<usize> = Vec::with_capacity(4);
+    let mut b = 0usize;
+    while chosen.len() < 4 {
+        let idx = (bytes[b % 16] as usize ^ (b >> 4)) % n;
+        if !chosen.contains(&idx) {
+            chosen.push(idx);
+        }
+        b += 1;
+    }
+    [
+        STAGE_NICKNAMES[chosen[0]].to_string(),
+        STAGE_NICKNAMES[chosen[1]].to_string(),
+        STAGE_NICKNAMES[chosen[2]].to_string(),
+        STAGE_NICKNAMES[chosen[3]].to_string(),
+    ]
+}
 
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
@@ -541,39 +579,23 @@ impl AppState {
             self.active_session = t.session_id;
         }
         self.active_task_id = Some(id);
+
+        // Pick 4 unique character nicknames seeded from the task UUID bytes.
+        let nicks = pick_stage_nicknames(id);
+        let mk = |name, nick: &str| PipelineStage {
+            name,
+            nickname: nick.to_string(),
+            status: StageStatus::Pending,
+            confidence: None,
+            output: None,
+            provenance: None,
+            started_at: None,
+        };
         self.pipeline_stages = vec![
-            PipelineStage {
-                name: "junior",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-                provenance: None,
-                started_at: None,
-            },
-            PipelineStage {
-                name: "senior",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-                provenance: None,
-                started_at: None,
-            },
-            PipelineStage {
-                name: "architect",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-                provenance: None,
-                started_at: None,
-            },
-            PipelineStage {
-                name: "tech-leader",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-                provenance: None,
-                started_at: None,
-            },
+            mk("junior",      &nicks[0]),
+            mk("senior",      &nicks[1]),
+            mk("architect",   &nicks[2]),
+            mk("tech-leader", &nicks[3]),
         ];
         self.tool_calls.clear();
         self.output_text.clear();

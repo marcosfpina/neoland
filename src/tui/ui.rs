@@ -552,16 +552,11 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
         )]));
         lines.push(Line::from(""));
 
-        // Per-stage colours mirror pipeline roles
-        let stage_color = |name: &str| match name {
-            "junior" => pal.cyan,
-            "senior" => pal.primary,
-            "architect" => pal.accent,
-            "tech-leader" => pal.success,
-            _ => pal.fg_dim,
-        };
+        // Per-stage colours by position (index), not by internal key name.
+        let role_colors = [pal.cyan, pal.primary, pal.accent, pal.success];
 
-        for stage in &app.pipeline_stages {
+        for (idx, stage) in app.pipeline_stages.iter().enumerate() {
+            let color = role_colors.get(idx).copied().unwrap_or(pal.fg_dim);
             let conf_str = stage
                 .confidence
                 .map(|c| format!(" ✓ {:.0}%", c * 100.0))
@@ -575,8 +570,8 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
-                    format!("🧠 {}  ", stage.name),
-                    Style::default().fg(stage_color(stage.name)).add_modifier(Modifier::BOLD),
+                    format!("◈ {}  ", stage.nickname),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("{}{}{}", stage.status.icon(), conf_str, prov_str),
@@ -672,7 +667,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                 Span::styled("├─ ", Style::default().fg(pal.muted)),
                 Span::styled(format!("{} ", s_icon), Style::default().fg(s_color)),
                 Span::styled(
-                    format!("{} ", stage.name),
+                    format!("{} ", stage.nickname),
                     Style::default()
                         .fg(if stage.status == StageStatus::Running { pal.fg } else { pal.fg_dim }),
                 ),
