@@ -180,6 +180,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                         if let Some(id) = app.active_task_id {
                             app.complete_task(id, true);
                         }
+                        app.inject_task_summary();
                         app.set_active_session_status(app::SessionStatus::Done);
                         app.persist_active_session();
                         spawn_next_queued_task(&mut app, &agent_tx, &api_key);
@@ -362,27 +363,14 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                         app.show_help = true;
                                     }
                                     Command::Why => {
-                                        app.output_text = if app.pipeline_stages.is_empty() {
-                                            "no pipeline stages to show".into()
+                                        if app.pipeline_stages.is_empty() {
+                                            app.add_notification(
+                                                NotificationLevel::Info,
+                                                "nenhum pipeline ativo para inspecionar".to_string(),
+                                            );
                                         } else {
-                                            let mut s = String::from("── Reasoning Chain ──\n");
-                                            for stage in &app.pipeline_stages {
-                                                let conf = stage.confidence
-                                                    .map(|c| format!(" ({:.0}%)", c * 100.0))
-                                                    .unwrap_or_default();
-                                                s.push_str(&format!(
-                                                    "  {} {} — {}{}\n",
-                                                    stage.name, stage.status.icon(), stage.status.label(), conf
-                                                ));
-                                                if let Some(ref out) = stage.output {
-                                                    for line in out.lines().take(5) {
-                                                        s.push_str(&format!("    {}\n", line));
-                                                    }
-                                                }
-                                            }
-                                            s
-                                        };
-                                        app.auto_scroll = true;
+                                            app.why_mode = true;
+                                        }
                                     }
                                     Command::Cancel => {
                                         if let Some(id) = app.active_task_id {
@@ -527,6 +515,24 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.insert_char('\n');
         },
 
+        // ── Breakpoint: Y/N single-keystroke (no Enter needed) ───────
+        (KeyCode::Char('y' | 'Y'), KeyModifiers::NONE)
+            if app.pending_breakpoint.is_some() && app.input_buffer.is_empty() =>
+        {
+            return Action::ResolveBreakpoint {
+                resolution: "approve".to_string(),
+                instruction: None,
+            };
+        },
+        (KeyCode::Char('n' | 'N'), KeyModifiers::NONE)
+            if app.pending_breakpoint.is_some() && app.input_buffer.is_empty() =>
+        {
+            return Action::ResolveBreakpoint {
+                resolution: "reject".to_string(),
+                instruction: None,
+            };
+        },
+
         // ── Submit task ───────────────────────────────────────────────
         (KeyCode::Enter, _) if app.pending_breakpoint.is_some() => {
             let msg = std::mem::take(&mut app.input_buffer);
@@ -603,7 +609,16 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         (KeyCode::Tab, KeyModifiers::SHIFT) | (KeyCode::BackTab, _) => {
             return Action::FocusPrevPanel;
         },
-        (KeyCode::Tab, _) => return Action::FocusNextPanel,
+        (KeyCode::Tab, _) => {
+            if app.input_buffer.starts_with('/') {
+                app.tab_complete_command();
+                return Action::None;
+            }
+            return Action::FocusNextPanel;
+        },
+        (KeyCode::Esc, _) if app.why_mode => {
+            app.why_mode = false;
+        },
         (KeyCode::Esc, _) if app.confirm_quit => {
             app.confirm_quit = false;
         },

@@ -176,6 +176,9 @@ pub struct PipelineStage {
     /// stage's decision. `None` until the backend emits a chain anchor; the
     /// reasoning column shows `⛓ <ref>` when present. See plan follow-up.
     pub provenance: Option<String>,
+    /// Wall-clock moment when this stage entered Running state — used to
+    /// render elapsed time next to the spinner (e.g. "architect ▸ 4.2s").
+    pub started_at: Option<Instant>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -310,6 +313,9 @@ pub struct AppState {
     // ── Sessions ──────────────────────────────────────────────────────
     pub sessions: Vec<Session>,
     pub active_session_idx: usize,
+    /// When true, the reasoning panel renders the full `/why` chain instead of
+    /// the live pipeline tree. Cleared by Esc or on new task start.
+    pub why_mode: bool,
 }
 
 #[derive(Clone)]
@@ -415,6 +421,7 @@ impl AppState {
             notifications: Vec::new(),
             sessions,
             active_session_idx: 0,
+            why_mode: false,
         }
     }
 
@@ -541,6 +548,7 @@ impl AppState {
                 confidence: None,
                 output: None,
                 provenance: None,
+                started_at: None,
             },
             PipelineStage {
                 name: "senior",
@@ -548,6 +556,7 @@ impl AppState {
                 confidence: None,
                 output: None,
                 provenance: None,
+                started_at: None,
             },
             PipelineStage {
                 name: "architect",
@@ -555,6 +564,7 @@ impl AppState {
                 confidence: None,
                 output: None,
                 provenance: None,
+                started_at: None,
             },
             PipelineStage {
                 name: "tech-leader",
@@ -562,18 +572,23 @@ impl AppState {
                 confidence: None,
                 output: None,
                 provenance: None,
+                started_at: None,
             },
         ];
         self.tool_calls.clear();
         self.output_text.clear();
         self.adr_title = None;
         self.adr_status = None;
+        self.why_mode = false;
         self.auto_scroll = true;
     }
 
     pub fn update_stage(&mut self, name: &str, status: StageStatus, confidence: Option<f32>) {
         let normalized = name.replace('_', "-");
         if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
+            if matches!(status, StageStatus::Running) && s.started_at.is_none() {
+                s.started_at = Some(Instant::now());
+            }
             s.status = status;
             if confidence.is_some() {
                 s.confidence = confidence;
@@ -740,11 +755,99 @@ impl AppState {
         }
     }
 
-    /// Name the active session from its first task, if still unnamed.
+    /// Name the active session from its first task description, if still unnamed.
+    /// Truncates to 24 chars with a trailing "…" so the sidebar stays readable.
     pub fn name_active_session_from(&mut self, task: &str) {
         if let Some(s) = self.sessions.get_mut(self.active_session_idx) {
             if s.name == DEFAULT_SESSION_NAME || s.name.is_empty() {
-                s.name = task.chars().take(40).collect();
+                let name: String = task.chars().take(24).collect();
+                s.name = if task.chars().count() > 24 {
+                    format!("{}…", name)
+                } else {
+                    name
+                };
+            }
+        }
+    }
+
+    /// Inject a compact task-completion summary into the conversation so the
+    /// cadence has a clear milestone marker. Called after `PipelineDone`.
+    pub fn inject_task_summary(&mut self) {
+        let adr_part = match (&self.adr_status, &self.adr_title) {
+            (Some(status), Some(title)) => format!("  ·  ADR {} — {}", status, title),
+            (Some(status), None) => format!("  ·  ADR {}", status),
+            _ => String::new(),
+        };
+        let avg_conf = {
+            let done: Vec<f32> = self
+                .pipeline_stages
+                .iter()
+                .filter_map(|s| {
+                    if matches!(s.status, StageStatus::Done { .. }) {
+                        s.confidence
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if done.is_empty() {
+                String::new()
+            } else {
+                format!("  ·  avg {:.0}% conf", done.iter().sum::<f32>() / done.len() as f32)
+            }
+        };
+        let latency_part = if self.last_latency_ms > 0 {
+            format!("  ·  {:.1}s", self.last_latency_ms as f32 / 1000.0)
+        } else {
+            String::new()
+        };
+        self.add_system_message(&format!(
+            "✓  Pipeline concluído{}{}{}",
+            adr_part, avg_conf, latency_part
+        ));
+    }
+
+    /// Tab-complete a `/command` prefix in `input_buffer`. Returns `true` when
+    /// the buffer was changed. On a single match, appends a trailing space ready
+    /// for args. On multiple matches, cycles alphabetically and fires a
+    /// notification listing candidates.
+    pub fn tab_complete_command(&mut self) -> bool {
+        if !self.input_buffer.starts_with('/') {
+            return false;
+        }
+        let partial = self.input_buffer[1..].to_lowercase();
+        if partial.contains(' ') {
+            return false; // don't complete inside args
+        }
+        use crate::tui::commands::COMPLETABLE_COMMANDS;
+        let matches: Vec<&str> = COMPLETABLE_COMMANDS
+            .iter()
+            .copied()
+            .filter(|cmd| cmd.starts_with(partial.as_str()))
+            .collect();
+        match matches.len() {
+            0 => false,
+            1 => {
+                self.input_buffer = format!("/{} ", matches[0]);
+                self.cursor_pos = self.input_buffer.len();
+                true
+            }
+            _ => {
+                // Cycle: find next command alphabetically after current partial
+                let next = matches
+                    .iter()
+                    .find(|&&cmd| cmd > partial.as_str())
+                    .or_else(|| matches.first())
+                    .copied()
+                    .unwrap_or(matches[0]);
+                self.input_buffer = format!("/{}", next);
+                self.cursor_pos = self.input_buffer.len();
+                let list = matches.join(", /");
+                self.add_notification(
+                    NotificationLevel::Info,
+                    format!("{} matches: /{}", matches.len(), list),
+                );
+                true
             }
         }
     }

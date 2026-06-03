@@ -179,12 +179,11 @@ pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
 /// Normal TUI layout (no overlays).
 fn render_normal(f: &mut Frame<'_>, ui_area: Rect, app: &mut AppState) {
     let notif_height: u16 = if app.notifications.is_empty() { 0 } else { 1 };
-    let [header, notif, canvas, _input_spacer, input] = Layout::vertical([
-        Constraint::Length(2),            // Header top
+    let [header, notif, canvas, input] = Layout::vertical([
+        Constraint::Length(2),            // Header
         Constraint::Length(notif_height), // Notification bar
-        Constraint::Min(0),               // Main Timeline
-        Constraint::Length(1),            // Spacer invisível
-        Constraint::Length(3),            // Floating Input
+        Constraint::Min(0),               // 3-column canvas
+        Constraint::Length(4),            // Floating input (2 lines: text + hints)
     ])
     .areas(ui_area);
 
@@ -384,6 +383,7 @@ fn render_panel_content(
     app: &mut AppState,
     panel: Panel,
     title: &str,
+    attention: bool,
     mut lines: Vec<Line<'_>>,
 ) {
     let pal = app.theme.palette();
@@ -417,8 +417,25 @@ fn render_panel_content(
         lines.push(Line::from(vec![Span::styled(indicator, Style::default().fg(pal.muted))]));
     }
 
-    let border_color = if focused { pal.primary } else { pal.muted };
-    let title_color = if focused { pal.primary } else { pal.fg_dim };
+    // Attention pulse: alternate warning ↔ border every tick so the panel
+    // "calls" for the user's eye even when not focused.
+    let pulsing = attention && !focused && app.tick % 2 == 0;
+    let border_color = if focused {
+        pal.primary
+    } else if pulsing {
+        pal.warning
+    } else if attention {
+        pal.border
+    } else {
+        pal.muted
+    };
+    let title_color = if focused {
+        pal.primary
+    } else if attention {
+        pal.warning
+    } else {
+        pal.fg_dim
+    };
     let block = Block::default()
         .title(Span::styled(
             title,
@@ -502,20 +519,112 @@ fn render_sessions_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
         lines.push(Line::from(""));
     }
 
-    render_panel_content(f, area, app, Panel::Sessions, " 󰙯 Sessions ", lines);
+    render_panel_content(f, area, app, Panel::Sessions, " 󰙯 Sessions ", false, lines);
 }
 
-/// Pipeline panel — shows active task's pipeline tree with stages, tools, ADR.
+/// Pipeline/reasoning panel. In normal mode shows the live pipeline tree with
+/// confidence badges, elapsed timers and RWA anchors. When `app.why_mode` is
+/// true, renders the full reasoning chain coloured by stage role (Esc to exit).
 fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
     let pal = app.theme.palette();
     let spin = SPINNER[(app.tick as usize) % SPINNER.len()];
-    let mut lines = Vec::new();
+    let mut lines: Vec<Line<'_>> = Vec::new();
     lines.push(Line::from(""));
 
+    // ── Compute attention (any done/failed stage with confidence < 50%) ──
+    let low_confidence = app.pipeline_stages.iter().any(|s| {
+        matches!(s.status, StageStatus::Done { .. } | StageStatus::Failed)
+            && s.confidence.map(|c| c < 0.5).unwrap_or(false)
+    });
+    let title = if low_confidence && app.focused_panel != Panel::Reasoning {
+        " 󰒝 Reasoning ⚠ "
+    } else if app.why_mode {
+        " 󰒝 Reasoning — /why "
+    } else {
+        " 󰒝 Reasoning "
+    };
+
+    // ── Why-mode: full reasoning chain coloured by stage ─────────────────
+    if app.why_mode {
+        lines.push(Line::from(vec![Span::styled(
+            "  ── Reasoning Chain ─────────────────",
+            Style::default().fg(pal.muted),
+        )]));
+        lines.push(Line::from(""));
+
+        // Per-stage colours mirror pipeline roles
+        let stage_color = |name: &str| match name {
+            "junior" => pal.cyan,
+            "senior" => pal.primary,
+            "architect" => pal.accent,
+            "tech-leader" => pal.success,
+            _ => pal.fg_dim,
+        };
+
+        for stage in &app.pipeline_stages {
+            let conf_str = stage
+                .confidence
+                .map(|c| format!(" ✓ {:.0}%", c * 100.0))
+                .unwrap_or_default();
+            let prov_str = stage
+                .provenance
+                .as_deref()
+                .map(|p| format!("  ⛓ {}", p))
+                .unwrap_or_default();
+
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!("🧠 {}  ", stage.name),
+                    Style::default().fg(stage_color(stage.name)).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{}{}{}", stage.status.icon(), conf_str, prov_str),
+                    Style::default().fg(pal.fg_dim),
+                ),
+            ]));
+
+            if let Some(ref out) = stage.output {
+                for text in out.lines().take(6) {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled("│  ", Style::default().fg(pal.muted)),
+                        Span::styled(text.to_string(), Style::default().fg(pal.fg_dim)),
+                    ]));
+                }
+            }
+            lines.push(Line::from(""));
+        }
+
+        if let (Some(status), Some(title_adr)) = (&app.adr_status, &app.adr_title) {
+            let color = match status.as_str() {
+                "approve" | "accepted" => pal.success,
+                "reject" | "rejected" => pal.error,
+                _ => pal.warning,
+            };
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!("ADR {}  ", status),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(title_adr.to_string(), Style::default().fg(pal.fg_dim)),
+            ]));
+        }
+        lines.push(Line::from(vec![Span::styled(
+            "  ── Esc para fechar ─────────────────",
+            Style::default().fg(pal.muted),
+        )]));
+
+        return render_panel_content(
+            f, area, app, Panel::Reasoning, title, false, lines,
+        );
+    }
+
+    // ── Normal mode: live pipeline tree ──────────────────────────────────
     let active_task = app.tasks.iter().find(|t| app.active_task_id == Some(t.id));
 
     if let Some(task) = active_task {
-        // Task header
         lines.push(Line::from(vec![
             Span::raw("  "),
             Span::styled(
@@ -525,8 +634,9 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
         ]));
         lines.push(Line::from(""));
 
-        // Pipeline stages
-        for stage in &app.pipeline_stages {
+        // Iterate with index so we can compute confidence delta from prev stage
+        let stages: Vec<_> = app.pipeline_stages.iter().collect();
+        for (i, stage) in stages.iter().enumerate() {
             let (s_icon, s_color) = match stage.status {
                 StageStatus::Running => (spin, pal.primary),
                 StageStatus::Done { .. } => ("󰄬", pal.muted),
@@ -536,24 +646,54 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             };
 
             let confidence_badge = stage.confidence.map(|c| confidence_span(c, &pal));
+
+            // Confidence delta relative to the previous done/skipped stage
+            let delta_span: Option<Span> = if let Some(cur_c) = stage.confidence {
+                // Find last preceding stage that has confidence
+                let prev_c = stages[..i]
+                    .iter()
+                    .rev()
+                    .find_map(|s| s.confidence);
+                prev_c.map(|p| {
+                    let d = (cur_c - p) * 100.0;
+                    let (arrow, color) = if d >= 0.0 {
+                        (format!("▲{:.0} ", d), pal.success)
+                    } else {
+                        (format!("▼{:.0} ", d.abs()), pal.error)
+                    };
+                    Span::styled(arrow, Style::default().fg(color))
+                })
+            } else {
+                None
+            };
+
             let mut spans: Vec<Span> = vec![
                 Span::raw("    "),
                 Span::styled("├─ ", Style::default().fg(pal.muted)),
                 Span::styled(format!("{} ", s_icon), Style::default().fg(s_color)),
                 Span::styled(
                     format!("{} ", stage.name),
-                    Style::default().fg(if stage.status == StageStatus::Running {
-                        pal.fg
-                    } else {
-                        pal.fg_dim
-                    }),
+                    Style::default()
+                        .fg(if stage.status == StageStatus::Running { pal.fg } else { pal.fg_dim }),
                 ),
             ];
             if let Some(badge) = confidence_badge {
                 spans.push(badge);
             }
-            // RWA provenance anchor — concrete, verifiable backing for the
-            // stage's confidence (⛓ <ref>).
+            if let Some(delta) = delta_span {
+                spans.push(delta);
+            }
+            // Elapsed timer on running stage
+            if matches!(stage.status, StageStatus::Running) {
+                if let Some(started) = stage.started_at {
+                    let secs = started.elapsed().as_secs_f32();
+                    spans.push(Span::styled(
+                        format!("{:.1}s ", secs),
+                        Style::default().fg(pal.muted),
+                    ));
+                }
+            }
+            // RWA provenance anchor
             if let Some(ref anchor) = stage.provenance {
                 spans.push(Span::styled(
                     format!("⛓ {} ", anchor),
@@ -562,7 +702,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             }
             lines.push(Line::from(spans));
 
-            // Tool calls for running stages
+            // Tool calls + condensed output for the running stage
             if stage.status == StageStatus::Running {
                 for tool in &app.tool_calls {
                     let (t_icon, t_color) = match tool.status {
@@ -571,7 +711,6 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                         ToolStatus::Failed => ("󰅖", pal.error),
                     };
                     let args: String = tool.args_summary.chars().take(60).collect();
-
                     lines.push(Line::from(vec![
                         Span::raw("    "),
                         Span::styled("│  ", Style::default().fg(pal.muted)),
@@ -584,8 +723,6 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                         ),
                     ]));
                 }
-
-                // Stage output (condensed — 2 lines; full text lives in conversation)
                 if let Some(output) = &stage.output {
                     for text in output.lines().take(2) {
                         lines.push(Line::from(vec![
@@ -599,9 +736,8 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             }
         }
 
-        // ADR decision — with "verified" annotation when any stage carries a
-        // provenance anchor (RWA-backed decision).
-        if let (Some(status), Some(title)) = (&app.adr_status, &app.adr_title) {
+        // ADR footer
+        if let (Some(status), Some(adr_title)) = (&app.adr_status, &app.adr_title) {
             let color = match status.as_str() {
                 "approve" | "accepted" => pal.success,
                 "reject" | "rejected" => pal.error,
@@ -627,7 +763,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             lines.push(Line::from(adr_spans));
             lines.push(Line::from(vec![
                 Span::raw("       "),
-                Span::styled(title.to_string(), Style::default().fg(pal.fg_dim)),
+                Span::styled(adr_title.to_string(), Style::default().fg(pal.fg_dim)),
             ]));
         }
     } else {
@@ -640,7 +776,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
         ]));
     }
 
-    render_panel_content(f, area, app, Panel::Reasoning, " 󰒝 Reasoning ", lines);
+    render_panel_content(f, area, app, Panel::Reasoning, title, low_confidence, lines);
 }
 
 /// Conversation panel — renders the message history as themed chat bubbles.
@@ -683,7 +819,7 @@ fn render_conversation_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) 
         }
     }
 
-    render_panel_content(f, area, app, Panel::Conversation, " 󰭹 Conversation ", lines);
+    render_panel_content(f, area, app, Panel::Conversation, " 󰭹 Conversation ", false, lines);
 }
 
 /// Branded welcome card shown when the conversation is empty.
@@ -929,8 +1065,39 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         spans.push(Span::raw(after));
     }
 
-    // Input "Flutuante" no bottom com rounded borders de alta qualidade e margin
-    // lateral
+    // ── Context-sensitive hint line (coloured: keys accent, text muted) ───
+    let hint_spans: Vec<Span> = {
+        // Each hint entry is (key_label, description) pairs joined by "·"
+        let entries: &[(&str, &str)] = if app.search_term.is_some() {
+            &[("n", "próximo"), ("N", "anterior"), ("Esc", "limpar")]
+        } else if app.why_mode {
+            &[("Esc", "fechar why")]
+        } else if app.pending_breakpoint.is_some() {
+            &[("Y", "aprovar"), ("N", "rejeitar"), ("/steer", "instruções")]
+        } else if busy {
+            &[("Enter", "steer"), ("Ctrl+X", "cancelar"), ("/why", "raciocínio")]
+        } else if buf.starts_with('/') {
+            &[("Tab", "completar"), ("/help", "ver tudo")]
+        } else {
+            &[("Enter", "enviar"), ("Tab", "painéis"), ("?", "help")]
+        };
+        let mut s: Vec<Span> = vec![Span::raw("  ")];
+        for (i, (key, desc)) in entries.iter().enumerate() {
+            if i > 0 {
+                s.push(Span::styled("  ·  ", Style::default().fg(pal.muted)));
+            }
+            s.push(Span::styled(
+                key.to_string(),
+                Style::default().fg(pal.accent).add_modifier(Modifier::BOLD),
+            ));
+            s.push(Span::styled(
+                format!(" {}", desc),
+                Style::default().fg(pal.muted),
+            ));
+        }
+        s
+    };
+
     let padded_area = Rect::new(area.x + 2, area.y, area.width.saturating_sub(4), area.height);
 
     let block = Block::default()
@@ -945,7 +1112,10 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         }))
         .style(Style::default().bg(pal.glass_bg_dim));
 
-    f.render_widget(Paragraph::new(Line::from(spans)).block(block), padded_area);
+    f.render_widget(
+        Paragraph::new(vec![Line::from(spans), Line::from(hint_spans)]).block(block),
+        padded_area,
+    );
 }
 
 fn count_visual_lines(lines: &[Line<'_>], width: u16) -> usize {
