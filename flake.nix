@@ -248,7 +248,7 @@
           neoland = neolandPackage;
         };
 
-        formatter = pkgs.nixfmt-rfc-style;
+        formatter = pkgs.nixfmt-tree;
 
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [

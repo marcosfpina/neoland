@@ -76,4 +76,6 @@ allow-git = []
 # Allow specific git sources (for dependencies not on crates.io)
 # [[sources.allow-git]]
 # name = "securellm-core"
-# repo = "https://github.com/org/securellm-bridge"
+# repo = "https://github.com/VoidNxSEC/securellm-bridge"
+
+# Repos are allowed by the audit from the VoidNxSEC Team.

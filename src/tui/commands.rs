@@ -3,7 +3,6 @@
 /// Parsed from user input that starts with `/`.
 /// Returns `None` if the input is not a valid command
 /// (allowing normal Send flow).
-
 use super::app::LlmProvider;
 
 // ── Command enum ────────────────────────────────────────────────────────────
@@ -75,7 +74,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
                     _ => Command::Unknown(format!("invalid position: {args}")),
                 }
             }
-        }
+        },
         "provider" | "model" => {
             if args.is_empty() {
                 let names: Vec<&str> = LlmProvider::ALL.iter().map(|p| p.label()).collect();
@@ -86,7 +85,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
             } else {
                 Command::Provider(args.to_string())
             }
-        }
+        },
         "preset" => {
             if args.is_empty() {
                 Command::Unknown(
@@ -96,7 +95,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
             } else {
                 Command::Preset(args.to_string())
             }
-        }
+        },
         "exit" | "quit" => Command::Exit,
         "new" => Command::NewSession,
         "clear" | "cls" => Command::Clear,
@@ -106,14 +105,14 @@ pub fn parse_command(input: &str) -> Option<Command> {
             } else {
                 Command::Search(args.to_string())
             }
-        }
+        },
         "steer" | "st" => {
             if args.is_empty() {
                 Command::Unknown("usage: /steer <message>".into())
             } else {
                 Command::Steer(args.to_string())
             }
-        }
+        },
         "theme" => {
             if args.is_empty() {
                 Command::Unknown(
@@ -123,7 +122,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
             } else {
                 Command::Theme(args.to_string())
             }
-        }
+        },
         "stream" | "streaming" => {
             if args.is_empty() {
                 Command::Unknown(
@@ -132,7 +131,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
             } else {
                 Command::Stream(args.to_string())
             }
-        }
+        },
         other => Command::Unknown(format!("unknown command: /{other}. Try /help")),
     };
 
@@ -210,7 +209,10 @@ mod tests {
 
     #[test]
     fn steer_with_args() {
-        assert_eq!(parse_command("/steer focus on tests"), Some(Command::Steer("focus on tests".into())));
+        assert_eq!(
+            parse_command("/steer focus on tests"),
+            Some(Command::Steer("focus on tests".into()))
+        );
         assert_eq!(parse_command("/st use verbose"), Some(Command::Steer("use verbose".into())));
     }
 
