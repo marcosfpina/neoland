@@ -180,11 +180,11 @@ pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
 fn render_normal(f: &mut Frame<'_>, ui_area: Rect, app: &mut AppState) {
     let notif_height: u16 = if app.notifications.is_empty() { 0 } else { 1 };
     let [header, notif, canvas, _input_spacer, input] = Layout::vertical([
-        Constraint::Length(2),              // Header top
-        Constraint::Length(notif_height),    // Notification bar
-        Constraint::Min(0),                  // Main Timeline
-        Constraint::Length(1),               // Spacer invisível
-        Constraint::Length(3),               // Floating Input
+        Constraint::Length(2),            // Header top
+        Constraint::Length(notif_height), // Notification bar
+        Constraint::Min(0),               // Main Timeline
+        Constraint::Length(1),            // Spacer invisível
+        Constraint::Length(3),            // Floating Input
     ])
     .areas(ui_area);
 
@@ -231,10 +231,7 @@ fn render_confirm_quit(f: &mut Frame<'_>, area: Rect, pal: &Palette) {
             "   ^c ou /exit novamente para confirmar",
             Style::default().fg(pal.muted),
         )),
-        Line::from(Span::styled(
-            "   Esc para cancelar",
-            Style::default().fg(pal.muted),
-        )),
+        Line::from(Span::styled("   Esc para cancelar", Style::default().fg(pal.muted))),
         Line::from(""),
     ];
 
@@ -285,10 +282,7 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
 
     let header_spans = vec![
         // Moon logo + brand (mockup).
-        Span::styled(
-            "  󰽥 Neoland ",
-            Style::default().fg(pal.primary).add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("  󰽥 Neoland ", Style::default().fg(pal.primary).add_modifier(Modifier::BOLD)),
         Span::styled(" │ ", Style::default().fg(pal.muted)),
         Span::styled(format!("{} ", dot), Style::default().fg(dot_color)),
         Span::styled(" │ ", Style::default().fg(pal.muted)),
@@ -420,10 +414,7 @@ fn render_panel_content(
             parts.push(format!("▼ {} more", below));
         }
         let indicator = format!(" {} ", parts.join(" · "));
-        lines.push(Line::from(vec![Span::styled(
-            indicator,
-            Style::default().fg(pal.muted),
-        )]));
+        lines.push(Line::from(vec![Span::styled(indicator, Style::default().fg(pal.muted))]));
     }
 
     let border_color = if focused { pal.primary } else { pal.muted };
@@ -460,10 +451,7 @@ fn render_sessions_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
     // "New Chat" affordance.
     lines.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled(
-            "✚ New Chat",
-            Style::default().fg(pal.cyan).add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("✚ New Chat", Style::default().fg(pal.cyan).add_modifier(Modifier::BOLD)),
         Span::styled("  ^n", Style::default().fg(pal.muted)),
     ]));
     lines.push(Line::from(""));
@@ -495,9 +483,13 @@ fn render_sessions_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             Span::styled(format!("{} ", dot), Style::default().fg(dot_color)),
             Span::styled(
                 name,
-                Style::default()
-                    .fg(if active { pal.fg } else { pal.fg_dim })
-                    .add_modifier(if active { Modifier::BOLD } else { Modifier::empty() }),
+                Style::default().fg(if active { pal.fg } else { pal.fg_dim }).add_modifier(
+                    if active {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    },
+                ),
             ),
         ]));
         lines.push(Line::from(vec![
@@ -520,10 +512,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
     let mut lines = Vec::new();
     lines.push(Line::from(""));
 
-    let active_task = app
-        .tasks
-        .iter()
-        .find(|t| app.active_task_id == Some(t.id));
+    let active_task = app.tasks.iter().find(|t| app.active_task_id == Some(t.id));
 
     if let Some(task) = active_task {
         // Task header
@@ -531,9 +520,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             Span::raw("  "),
             Span::styled(
                 task.description.clone(),
-                Style::default()
-                    .fg(pal.fg)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(pal.fg).add_modifier(Modifier::BOLD),
             ),
         ]));
         lines.push(Line::from(""));
@@ -589,19 +576,11 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                         Span::raw("    "),
                         Span::styled("│  ", Style::default().fg(pal.muted)),
                         Span::styled("├─ ", Style::default().fg(pal.muted)),
-                        Span::styled(
-                            format!("{} ", t_icon),
-                            Style::default().fg(t_color),
-                        ),
-                        Span::styled(
-                            format!("{} ", tool.name),
-                            Style::default().fg(pal.muted),
-                        ),
+                        Span::styled(format!("{} ", t_icon), Style::default().fg(t_color)),
+                        Span::styled(format!("{} ", tool.name), Style::default().fg(pal.muted)),
                         Span::styled(
                             args,
-                            Style::default()
-                                .fg(pal.muted)
-                                .add_modifier(Modifier::ITALIC),
+                            Style::default().fg(pal.muted).add_modifier(Modifier::ITALIC),
                         ),
                     ]));
                 }
@@ -613,10 +592,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                             Span::raw("    "),
                             Span::styled("│  ", Style::default().fg(pal.muted)),
                             Span::styled("│ ", Style::default().fg(pal.muted)),
-                            Span::styled(
-                                text.to_string(),
-                                Style::default().fg(pal.fg_dim),
-                            ),
+                            Span::styled(text.to_string(), Style::default().fg(pal.fg_dim)),
                         ]));
                     }
                 }
@@ -659,9 +635,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             Span::raw("  "),
             Span::styled(
                 "󰬺 Sem tarefa ativa.",
-                Style::default()
-                    .fg(pal.muted)
-                    .add_modifier(Modifier::ITALIC),
+                Style::default().fg(pal.muted).add_modifier(Modifier::ITALIC),
             ),
         ]));
     }
@@ -725,10 +699,7 @@ fn render_welcome(lines: &mut Vec<Line<'static>>, app: &AppState, pal: &Palette)
     // Moon logo.
     push_c(
         lines,
-        vec![Span::styled(
-            "󰽥",
-            Style::default().fg(pal.accent).add_modifier(Modifier::BOLD),
-        )],
+        vec![Span::styled("󰽥", Style::default().fg(pal.accent).add_modifier(Modifier::BOLD))],
     );
     lines.push(Line::from(""));
     // Brand + tagline.
@@ -736,10 +707,7 @@ fn render_welcome(lines: &mut Vec<Line<'static>>, app: &AppState, pal: &Palette)
         lines,
         vec![
             Span::styled("Welcome to ", Style::default().fg(pal.fg_dim)),
-            Span::styled(
-                "Neoland",
-                Style::default().fg(pal.cyan).add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("Neoland", Style::default().fg(pal.cyan).add_modifier(Modifier::BOLD)),
         ],
     );
     push_c(
@@ -752,10 +720,7 @@ fn render_welcome(lines: &mut Vec<Line<'static>>, app: &AppState, pal: &Palette)
     lines.push(Line::from(""));
     push_c(
         lines,
-        vec![Span::styled(
-            "How can I assist you today?",
-            Style::default().fg(pal.fg),
-        )],
+        vec![Span::styled("How can I assist you today?", Style::default().fg(pal.fg))],
     );
     lines.push(Line::from(""));
     lines.push(Line::from(""));
@@ -822,7 +787,11 @@ fn push_bubble(
     } else {
         (pal.agent_bubble_bg, pal.agent_bubble_fg)
     };
-    let border_color = if highlight { pal.warning } else { pal.bubble_border };
+    let border_color = if highlight {
+        pal.warning
+    } else {
+        pal.bubble_border
+    };
 
     let indent = 2usize;
     let max_box = inner_w.saturating_sub(indent + 1).max(14);
@@ -932,11 +901,7 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         Span::styled("│ ", Style::default().fg(pal.muted)),
         Span::styled(
             if busy { "󰑮 " } else { "  " },
-            Style::default().fg(if busy {
-                pal.accent
-            } else {
-                pal.primary
-            }),
+            Style::default().fg(if busy { pal.accent } else { pal.primary }),
         ),
     ];
 
@@ -957,10 +922,8 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
 
         spans.push(Span::raw(before));
         match at_char {
-            Some(c) => spans.push(Span::styled(
-                c.to_string(),
-                Style::default().bg(pal.fg).fg(pal.cursor_bg),
-            )),
+            Some(c) => spans
+                .push(Span::styled(c.to_string(), Style::default().bg(pal.fg).fg(pal.cursor_bg))),
             None => spans.push(Span::styled(" ", Style::default().bg(pal.fg))),
         };
         spans.push(Span::raw(after));
@@ -1032,10 +995,7 @@ fn confidence_span(confidence: f32, pal: &Palette) -> Span<'static> {
     } else {
         pal.error
     };
-    Span::styled(
-        format!("[{}%] ", pct),
-        Style::default().fg(color).add_modifier(Modifier::BOLD),
-    )
+    Span::styled(format!("[{}%] ", pct), Style::default().fg(color).add_modifier(Modifier::BOLD))
 }
 
 #[cfg(test)]
@@ -1046,13 +1006,7 @@ mod tests {
 
     /// Collect the full TestBackend buffer into a single string of cell symbols.
     fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
-        terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(|c| c.symbol())
-            .collect()
+        terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect()
     }
 
     fn render_to_string(app: &mut AppState, w: u16, h: u16) -> String {
@@ -1137,9 +1091,7 @@ mod tests {
         let (t1, _) = app.enqueue_task("Refatorar módulo de auth".into());
         app.start_task(t1);
         app.add_user_message("Otimiza esse script Python pra performance");
-        app.add_assistant_message(
-            "Sugiro multiprocessing:\n```python\nPool().map(f, xs)\n```",
-        );
+        app.add_assistant_message("Sugiro multiprocessing:\n```python\nPool().map(f, xs)\n```");
         app.update_stage("junior", StageStatus::Done { latency_ms: 120 }, Some(0.92));
         app.set_stage_provenance("junior", "0xA3F".into());
         app.update_stage("senior", StageStatus::Done { latency_ms: 200 }, Some(0.88));

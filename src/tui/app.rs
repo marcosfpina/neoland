@@ -357,11 +357,7 @@ impl AppState {
 
         // Load persisted preferences (theme, etc.) — defaults if absent.
         let prefs = super::prefs::load();
-        let theme = prefs
-            .theme
-            .as_deref()
-            .and_then(Theme::from_label)
-            .unwrap_or(Theme::TokyoNight);
+        let theme = prefs.theme.as_deref().and_then(Theme::from_label).unwrap_or(Theme::TokyoNight);
         let stream_mode = prefs
             .stream_mode
             .as_deref()
@@ -962,11 +958,7 @@ impl AppState {
             .filter(|(_, line)| line.to_lowercase().contains(&lower))
             .map(|(i, _)| i)
             .collect();
-        self.search_idx = if self.search_matches.is_empty() {
-            0
-        } else {
-            0
-        };
+        self.search_idx = if self.search_matches.is_empty() { 0 } else { 0 };
     }
 
     /// Move to the next search match.

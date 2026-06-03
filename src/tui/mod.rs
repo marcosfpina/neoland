@@ -30,25 +30,59 @@ use ui::render;
 // ── Agent stream events (TUI-internal) ───────────────────────────────
 
 enum AgentStreamEvent {
-    StageStarted { stage: String },
+    StageStarted {
+        stage: String,
+    },
     StageDone {
         stage: String,
         confidence: Option<f32>,
         latency_ms: u64,
         provenance: Option<String>,
     },
-    StageSkipped { stage: String },
-    StageOutput { stage: String, content: String },
-    ToolCallStarted { tool: String, args_summary: String },
-    ToolCallDone { tool: String, duration_ms: u64 },
-    ToolCallFailed { tool: String },
-    BreakpointHit { tool: String, args_summary: String },
-    BreakpointResolved { tool: String, resolution: String },
-    AdrCheckpoint { status: String, title: String },
-    PipelineDone { latency_ms: u64 },
-    PipelineError { error: String },
-    FinalResult { rationale: String, adr_title: String, adr_status: String },
-    SteeringReceived { message: String },
+    StageSkipped {
+        stage: String,
+    },
+    StageOutput {
+        stage: String,
+        content: String,
+    },
+    ToolCallStarted {
+        tool: String,
+        args_summary: String,
+    },
+    ToolCallDone {
+        tool: String,
+        duration_ms: u64,
+    },
+    ToolCallFailed {
+        tool: String,
+    },
+    BreakpointHit {
+        tool: String,
+        args_summary: String,
+    },
+    BreakpointResolved {
+        tool: String,
+        resolution: String,
+    },
+    AdrCheckpoint {
+        status: String,
+        title: String,
+    },
+    PipelineDone {
+        latency_ms: u64,
+    },
+    PipelineError {
+        error: String,
+    },
+    FinalResult {
+        rationale: String,
+        adr_title: String,
+        adr_status: String,
+    },
+    SteeringReceived {
+        message: String,
+    },
 }
 
 // ── Legacy LLM channel events (kept for fallback) ─────────────────────
@@ -624,10 +658,14 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         },
 
         // ── Search navigation (n / N) ──────────────────────────────────
-        (KeyCode::Char('n'), KeyModifiers::NONE) if app.search_term.is_some() && app.input_buffer.is_empty() => {
+        (KeyCode::Char('n'), KeyModifiers::NONE)
+            if app.search_term.is_some() && app.input_buffer.is_empty() =>
+        {
             app.next_search_match();
         },
-        (KeyCode::Char('N'), KeyModifiers::SHIFT) if app.search_term.is_some() && app.input_buffer.is_empty() => {
+        (KeyCode::Char('N'), KeyModifiers::SHIFT)
+            if app.search_term.is_some() && app.input_buffer.is_empty() =>
+        {
             app.prev_search_match();
         },
 
@@ -1098,4 +1136,3 @@ async fn check_server_health(app: &mut AppState) {
         },
     }
 }
-

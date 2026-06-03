@@ -1,5 +1,4 @@
- /// Key processing result — returned by process_key in mod.rs
-
+/// Key processing result — returned by process_key in mod.rs
 use super::commands::Command;
 
 pub enum Action {
@@ -14,7 +13,10 @@ pub enum Action {
     CycleProvider,      // ^6 — cycle through deepseek/gemini/groq/llamacpp/local
     FocusNextPanel,     // tab
     FocusPrevPanel,     // shift+tab
-    ResolveBreakpoint { resolution: String, instruction: Option<String> }, /* Enter/Esc during
+    ResolveBreakpoint {
+        resolution: String,
+        instruction: Option<String>,
+    }, /* Enter/Esc during
                          * Breakpoint */
     /// Execute a parsed `/` command.
     ExecuteCommand(Command),
