@@ -1,16 +1,33 @@
 //! NATS publisher for neoland agent pipeline events.
 //!
-//! Publishes structured events to NATS via spectre-events after each pipeline
-//! run. Connection is optional — if NATS is unavailable, events are dropped
-//! with a warn log.
+//! Publishes structured events to NATS via spectre-events.
+//! Connection is optional — if NATS is unavailable, events are dropped
+//! with a warn log (never panic, never block the SSE path).
 //!
 //! ## Subjects
 //!
-//! | Subject                          | Trigger                              |
-//! |---------------------------------|--------------------------------------|
+//! ### Granular real-time stream (every AgentEvent → NATS)
+//! | Subject                              | Trigger                      |
+//! |--------------------------------------|------------------------------|
+//! | `neoland.pipeline.started.v1`        | Pipeline begins              |
+//! | `neoland.pipeline.stage.started.v1`  | Stage enters Running         |
+//! | `neoland.pipeline.stage.done.v1`     | Stage completes (+ conf)     |
+//! | `neoland.pipeline.stage.skipped.v1`  | Stage skipped                |
+//! | `neoland.pipeline.stage.output.v1`   | Stage reasoning text         |
+//! | `neoland.pipeline.tool.started.v1`   | Tool call begins             |
+//! | `neoland.pipeline.tool.done.v1`      | Tool call succeeds           |
+//! | `neoland.pipeline.tool.failed.v1`    | Tool call fails              |
+//! | `neoland.pipeline.breakpoint.hit.v1` | Human approval required      |
+//! | `neoland.pipeline.breakpoint.resolved.v1` | Human decision made     |
+//! | `neoland.pipeline.adr.v1`            | ADR checkpoint               |
+//! | `neoland.pipeline.done.v1`           | Pipeline complete            |
+//! | `neoland.pipeline.error.v1`          | Pipeline failed              |
+//! | `neoland.pipeline.steering.v1`       | Steering instruction applied |
+//!
+//! ### High-level summaries (existing)
 //! | `neoland.task.completed.v1`     | Every pipeline completion            |
 //! | `neoland.task.escalated.v1`     | When `start_from == Architect`       |
-//! | `neoland.pipeline.output.v1`    | Full text output — Phantom scan (D)  |
+//! | `neoland.pipeline.output.v1`    | Full text output — Phantom scan      |
 
 use anyhow::Result;
 use serde_json::json;
@@ -18,7 +35,7 @@ use spectre_events::{Event, EventBus, EventType, ServiceId};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::config::NatsConfig;
+use crate::{agents::events::AgentEvent, config::NatsConfig};
 
 const SERVICE_ID: &str = "neoland-control-plane";
 
@@ -138,6 +155,50 @@ impl NatsPublisher {
         if let Err(e) = self.bus.publish(&event).await {
             warn!(error = %e, subject = "neoland.task.escalated.v1", "NATS publish failed");
         }
+    }
+
+    /// Publish a single `AgentEvent` to its canonical NATS subject.
+    ///
+    /// Called from `AgentOrchestrator::publish()` for every event — this is
+    /// the granular real-time stream that Spectre, OWASAKA and other consumers
+    /// can subscribe to. Fire-and-forget: errors are logged, never propagated.
+    pub async fn publish_agent_event(&self, event: &AgentEvent) {
+        let subject = agent_event_subject(event);
+        let payload = match serde_json::to_value(event) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(error = %e, subject, "AgentEvent serialization failed — skipping NATS publish");
+                return;
+            }
+        };
+        let nats_event = Event::new(
+            EventType::Custom(subject.to_string()),
+            ServiceId::new(SERVICE_ID),
+            payload,
+        );
+        if let Err(e) = self.bus.publish(&nats_event).await {
+            warn!(error = %e, subject, "NATS publish failed");
+        }
+    }
+}
+
+/// Map each `AgentEvent` variant to its NATS subject string.
+fn agent_event_subject(event: &AgentEvent) -> &'static str {
+    match event {
+        AgentEvent::PipelineStarted { .. }     => "neoland.pipeline.started.v1",
+        AgentEvent::StageStarted { .. }        => "neoland.pipeline.stage.started.v1",
+        AgentEvent::StageDone { .. }           => "neoland.pipeline.stage.done.v1",
+        AgentEvent::StageSkipped { .. }        => "neoland.pipeline.stage.skipped.v1",
+        AgentEvent::StageOutput { .. }         => "neoland.pipeline.stage.output.v1",
+        AgentEvent::ToolCallStarted { .. }     => "neoland.pipeline.tool.started.v1",
+        AgentEvent::ToolCallDone { .. }        => "neoland.pipeline.tool.done.v1",
+        AgentEvent::ToolCallFailed { .. }      => "neoland.pipeline.tool.failed.v1",
+        AgentEvent::BreakpointHit { .. }       => "neoland.pipeline.breakpoint.hit.v1",
+        AgentEvent::BreakpointResolved { .. }  => "neoland.pipeline.breakpoint.resolved.v1",
+        AgentEvent::AdrCheckpoint { .. }       => "neoland.pipeline.adr.v1",
+        AgentEvent::PipelineDone { .. }        => "neoland.pipeline.done.v1",
+        AgentEvent::PipelineError { .. }       => "neoland.pipeline.error.v1",
+        AgentEvent::SteeringReceived { .. }    => "neoland.pipeline.steering.v1",
     }
 }
 
