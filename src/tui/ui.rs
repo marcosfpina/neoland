@@ -419,7 +419,7 @@ fn render_panel_content(
 
     // Attention pulse: alternate warning ↔ border every tick so the panel
     // "calls" for the user's eye even when not focused.
-    let pulsing = attention && !focused && app.tick % 2 == 0;
+    let pulsing = attention && !focused && app.tick.is_multiple_of(2);
     let border_color = if focused {
         pal.primary
     } else if pulsing {
@@ -557,15 +557,10 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
 
         for (idx, stage) in app.pipeline_stages.iter().enumerate() {
             let color = role_colors.get(idx).copied().unwrap_or(pal.fg_dim);
-            let conf_str = stage
-                .confidence
-                .map(|c| format!(" ✓ {:.0}%", c * 100.0))
-                .unwrap_or_default();
-            let prov_str = stage
-                .provenance
-                .as_deref()
-                .map(|p| format!("  ⛓ {}", p))
-                .unwrap_or_default();
+            let conf_str =
+                stage.confidence.map(|c| format!(" ✓ {:.0}%", c * 100.0)).unwrap_or_default();
+            let prov_str =
+                stage.provenance.as_deref().map(|p| format!("  ⛓ {}", p)).unwrap_or_default();
 
             lines.push(Line::from(vec![
                 Span::raw("  "),
@@ -611,9 +606,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             Style::default().fg(pal.muted),
         )]));
 
-        return render_panel_content(
-            f, area, app, Panel::Reasoning, title, false, lines,
-        );
+        return render_panel_content(f, area, app, Panel::Reasoning, title, false, lines);
     }
 
     // ── Normal mode: live pipeline tree ──────────────────────────────────
@@ -645,10 +638,7 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
             // Confidence delta relative to the previous done/skipped stage
             let delta_span: Option<Span> = if let Some(cur_c) = stage.confidence {
                 // Find last preceding stage that has confidence
-                let prev_c = stages[..i]
-                    .iter()
-                    .rev()
-                    .find_map(|s| s.confidence);
+                let prev_c = stages[..i].iter().rev().find_map(|s| s.confidence);
                 prev_c.map(|p| {
                     let d = (cur_c - p) * 100.0;
                     let (arrow, color) = if d >= 0.0 {
@@ -668,8 +658,11 @@ fn render_reasoning_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) {
                 Span::styled(format!("{} ", s_icon), Style::default().fg(s_color)),
                 Span::styled(
                     format!("{} ", stage.nickname),
-                    Style::default()
-                        .fg(if stage.status == StageStatus::Running { pal.fg } else { pal.fg_dim }),
+                    Style::default().fg(if stage.status == StageStatus::Running {
+                        pal.fg
+                    } else {
+                        pal.fg_dim
+                    }),
                 ),
             ];
             if let Some(badge) = confidence_badge {
@@ -1085,10 +1078,7 @@ fn render_floating_input(f: &mut Frame<'_>, area: Rect, app: &AppState) {
                 key.to_string(),
                 Style::default().fg(pal.accent).add_modifier(Modifier::BOLD),
             ));
-            s.push(Span::styled(
-                format!(" {}", desc),
-                Style::default().fg(pal.muted),
-            ));
+            s.push(Span::styled(format!(" {}", desc), Style::default().fg(pal.muted)));
         }
         s
     };

@@ -50,8 +50,8 @@ pub enum Command {
 /// Sorted list of completable command names (no leading `/`).
 /// Used by `AppState::tab_complete_command` for Tab-completion.
 pub const COMPLETABLE_COMMANDS: &[&str] = &[
-    "cancel", "clear", "dequeue", "exit", "help", "name", "new",
-    "preset", "provider", "queue", "search", "steer", "stream", "theme", "why",
+    "cancel", "clear", "dequeue", "exit", "help", "name", "new", "preset", "provider", "queue",
+    "search", "steer", "stream", "theme", "why",
 ];
 
 /// Returns `None` if the input does not start with `/`.
@@ -147,7 +147,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
                 (Some(n), Some(name)) => match n.parse::<usize>() {
                     Ok(slot) if (1..=4).contains(&slot) => {
                         Command::Name(slot, name.trim().to_string())
-                    }
+                    },
                     _ => Command::Unknown(format!("slot inválido: '{}'. Use 1-4.", n)),
                 },
                 _ => Command::Unknown("uso: /name <1-4> <apelido>".into()),

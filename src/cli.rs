@@ -33,8 +33,11 @@ pub enum Commands {
         server_url: String,
 
         /// URL do gateway LLM principal. Também lido de $NEOLAND_GATEWAY_URL.
-        #[arg(long = "neoland-gateway-url", env = "NEOLAND_GATEWAY_URL",
-              default_value = "http://localhost:8080")]
+        #[arg(
+            long = "neoland-gateway-url",
+            env = "NEOLAND_GATEWAY_URL",
+            default_value = "http://localhost:8080"
+        )]
         neoland_gateway_url: String,
     },
 
@@ -178,10 +181,17 @@ mod tests {
         // Isolate from NEOLAND_SERVER_URL / NEOLAND_GATEWAY_URL env vars that
         // the devShell sets — we only care that log-level and the subcommand
         // are parsed correctly, not the specific URL values.
-        let cli = Cli::try_parse_from(["neoland", "--log-level", "trace", "client",
-            "--server-url", "http://localhost:3001",
-            "--neoland-gateway-url", "http://localhost:8080"])
-            .expect("client parses");
+        let cli = Cli::try_parse_from([
+            "neoland",
+            "--log-level",
+            "trace",
+            "client",
+            "--server-url",
+            "http://localhost:3001",
+            "--neoland-gateway-url",
+            "http://localhost:8080",
+        ])
+        .expect("client parses");
 
         match cli.command {
             Commands::Client { server_url, neoland_gateway_url } => {

@@ -169,13 +169,10 @@ impl NatsPublisher {
             Err(e) => {
                 warn!(error = %e, subject, "AgentEvent serialization failed — skipping NATS publish");
                 return;
-            }
+            },
         };
-        let nats_event = Event::new(
-            EventType::Custom(subject.to_string()),
-            ServiceId::new(SERVICE_ID),
-            payload,
-        );
+        let nats_event =
+            Event::new(EventType::Custom(subject.to_string()), ServiceId::new(SERVICE_ID), payload);
         if let Err(e) = self.bus.publish(&nats_event).await {
             warn!(error = %e, subject, "NATS publish failed");
         }
@@ -185,20 +182,20 @@ impl NatsPublisher {
 /// Map each `AgentEvent` variant to its NATS subject string.
 fn agent_event_subject(event: &AgentEvent) -> &'static str {
     match event {
-        AgentEvent::PipelineStarted { .. }     => "neoland.pipeline.started.v1",
-        AgentEvent::StageStarted { .. }        => "neoland.pipeline.stage.started.v1",
-        AgentEvent::StageDone { .. }           => "neoland.pipeline.stage.done.v1",
-        AgentEvent::StageSkipped { .. }        => "neoland.pipeline.stage.skipped.v1",
-        AgentEvent::StageOutput { .. }         => "neoland.pipeline.stage.output.v1",
-        AgentEvent::ToolCallStarted { .. }     => "neoland.pipeline.tool.started.v1",
-        AgentEvent::ToolCallDone { .. }        => "neoland.pipeline.tool.done.v1",
-        AgentEvent::ToolCallFailed { .. }      => "neoland.pipeline.tool.failed.v1",
-        AgentEvent::BreakpointHit { .. }       => "neoland.pipeline.breakpoint.hit.v1",
-        AgentEvent::BreakpointResolved { .. }  => "neoland.pipeline.breakpoint.resolved.v1",
-        AgentEvent::AdrCheckpoint { .. }       => "neoland.pipeline.adr.v1",
-        AgentEvent::PipelineDone { .. }        => "neoland.pipeline.done.v1",
-        AgentEvent::PipelineError { .. }       => "neoland.pipeline.error.v1",
-        AgentEvent::SteeringReceived { .. }    => "neoland.pipeline.steering.v1",
+        AgentEvent::PipelineStarted { .. } => "neoland.pipeline.started.v1",
+        AgentEvent::StageStarted { .. } => "neoland.pipeline.stage.started.v1",
+        AgentEvent::StageDone { .. } => "neoland.pipeline.stage.done.v1",
+        AgentEvent::StageSkipped { .. } => "neoland.pipeline.stage.skipped.v1",
+        AgentEvent::StageOutput { .. } => "neoland.pipeline.stage.output.v1",
+        AgentEvent::ToolCallStarted { .. } => "neoland.pipeline.tool.started.v1",
+        AgentEvent::ToolCallDone { .. } => "neoland.pipeline.tool.done.v1",
+        AgentEvent::ToolCallFailed { .. } => "neoland.pipeline.tool.failed.v1",
+        AgentEvent::BreakpointHit { .. } => "neoland.pipeline.breakpoint.hit.v1",
+        AgentEvent::BreakpointResolved { .. } => "neoland.pipeline.breakpoint.resolved.v1",
+        AgentEvent::AdrCheckpoint { .. } => "neoland.pipeline.adr.v1",
+        AgentEvent::PipelineDone { .. } => "neoland.pipeline.done.v1",
+        AgentEvent::PipelineError { .. } => "neoland.pipeline.error.v1",
+        AgentEvent::SteeringReceived { .. } => "neoland.pipeline.steering.v1",
     }
 }
 

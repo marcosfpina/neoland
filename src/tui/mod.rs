@@ -330,7 +330,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                 let ml_url = app.neoland_gateway_url.clone();
                                 let srv_url = app.server_url.clone();
                                 let cfg = app.config.clone();
-                                let provider = app.active_provider.clone();
+                                let provider = app.active_provider;
                                 tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, provider, tx));
                             }
 

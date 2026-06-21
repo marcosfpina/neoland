@@ -107,7 +107,7 @@ impl LlmProvider {
 
     pub fn next(&self) -> LlmProvider {
         let pos = Self::ALL.iter().position(|p| p == self).unwrap_or(0);
-        Self::ALL[(pos + 1) % Self::ALL.len()].clone()
+        Self::ALL[(pos + 1) % Self::ALL.len()]
     }
 }
 
@@ -170,12 +170,10 @@ impl StageStatus {
 /// Internal stage keys ("junior", "senior", etc.) remain unchanged for SSE
 /// matching; these nicknames are purely a display persona — no job titles.
 pub const STAGE_NICKNAMES: &[&str] = &[
-    "Vega", "Orion", "Nova", "Atlas", "Coda", "Wren",
-    "Kael", "Mira", "Zeph", "Nox", "Flux", "Rook",
-    "Drift", "Lux", "Sage", "Apex", "Void", "Echo",
-    "Ghost", "Cipher", "Storm", "Root", "Lyra", "Dusk",
-    "Fern", "Gale", "Haze", "Jade", "Fuse", "Crest",
-    "Pike", "Rune", "Sable", "Thorn", "Vale", "Ward",
+    "Vega", "Orion", "Nova", "Atlas", "Coda", "Wren", "Kael", "Mira", "Zeph", "Nox", "Flux",
+    "Rook", "Drift", "Lux", "Sage", "Apex", "Void", "Echo", "Ghost", "Cipher", "Storm", "Root",
+    "Lyra", "Dusk", "Fern", "Gale", "Haze", "Jade", "Fuse", "Crest", "Pike", "Rune", "Sable",
+    "Thorn", "Vale", "Ward",
 ];
 
 #[derive(Clone)]
@@ -597,9 +595,9 @@ impl AppState {
             started_at: None,
         };
         self.pipeline_stages = vec![
-            mk("junior",      effective(0, &nicks[0])),
-            mk("senior",      effective(1, &nicks[1])),
-            mk("architect",   effective(2, &nicks[2])),
+            mk("junior", effective(0, &nicks[0])),
+            mk("senior", effective(1, &nicks[1])),
+            mk("architect", effective(2, &nicks[2])),
             mk("tech-leader", effective(3, &nicks[3])),
         ];
         self.tool_calls.clear();
@@ -872,7 +870,7 @@ impl AppState {
                 self.input_buffer = format!("/{} ", matches[0]);
                 self.cursor_pos = self.input_buffer.len();
                 true
-            }
+            },
             _ => {
                 // Cycle: find next command alphabetically after current partial
                 let next = matches
@@ -889,7 +887,7 @@ impl AppState {
                     format!("{} matches: /{}", matches.len(), list),
                 );
                 true
-            }
+            },
         }
     }
 
@@ -1102,7 +1100,7 @@ impl AppState {
             .filter(|(_, line)| line.to_lowercase().contains(&lower))
             .map(|(i, _)| i)
             .collect();
-        self.search_idx = if self.search_matches.is_empty() { 0 } else { 0 };
+        self.search_idx = 0;
     }
 
     /// Move to the next search match.

@@ -141,7 +141,7 @@ pub fn load_all() -> Vec<Session> {
         .filter_map(|s| serde_json::from_str::<SessionRecord>(&s).ok())
         .map(SessionRecord::into_session)
         .collect();
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     sessions
 }
 

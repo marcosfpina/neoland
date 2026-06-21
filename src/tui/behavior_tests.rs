@@ -50,10 +50,10 @@ fn apply(app: &mut AppState, action: &Action) {
             if let Some(id) = app.active_task_id {
                 app.complete_task(id, false);
             }
-        }
+        },
         CycleProvider => app.cycle_provider(),
         ExecuteCommand(cmd) => apply_command(app, cmd),
-        _ => {}
+        _ => {},
     }
 }
 
@@ -69,19 +69,19 @@ fn apply_command(app: &mut AppState, cmd: &Command) {
             } else {
                 app.why_mode = true;
             }
-        }
+        },
         Command::Clear => {
             app.messages.clear();
             app.scroll_offsets = [0; 3];
-        }
+        },
         Command::NewSession => app.new_session(),
         Command::Name(slot, name) => app.set_agent_name(slot - 1, name.clone()),
         Command::Theme(name) => {
             if let Some(t) = super::app::Theme::from_label(name) {
                 app.theme = t;
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 }
 
@@ -139,7 +139,8 @@ fn breakpoint_y_approves_without_enter() {
     let action = press(&mut a, KeyCode::Char('y'));
     assert!(
         matches!(action, Action::ResolveBreakpoint { ref resolution, .. } if resolution == "approve"),
-        "expected approve, got {:?}", action
+        "expected approve, got {:?}",
+        action
     );
 }
 
@@ -148,7 +149,9 @@ fn breakpoint_capital_y_also_approves() {
     let mut a = app();
     a.trigger_breakpoint("tool".into(), "args".into());
     let action = key(&mut a, KeyCode::Char('Y'), KeyModifiers::NONE);
-    assert!(matches!(action, Action::ResolveBreakpoint { ref resolution, .. } if resolution == "approve"));
+    assert!(
+        matches!(action, Action::ResolveBreakpoint { ref resolution, .. } if resolution == "approve")
+    );
 }
 
 #[test]
@@ -156,7 +159,9 @@ fn breakpoint_n_rejects_without_enter() {
     let mut a = app();
     a.trigger_breakpoint("rm".into(), "*.rs".into());
     let action = press(&mut a, KeyCode::Char('n'));
-    assert!(matches!(action, Action::ResolveBreakpoint { ref resolution, .. } if resolution == "reject"));
+    assert!(
+        matches!(action, Action::ResolveBreakpoint { ref resolution, .. } if resolution == "reject")
+    );
 }
 
 #[test]
@@ -281,8 +286,8 @@ fn render_does_not_contain_job_titles() {
     a.start_task(id);
     a.update_stage("junior", StageStatus::Done { latency_ms: 100 }, Some(0.9));
     let out = rendered(&mut a);
-    assert!(!out.contains("junior"),    "render should not show 'junior'");
-    assert!(!out.contains("senior"),    "render should not show 'senior'");
+    assert!(!out.contains("junior"), "render should not show 'junior'");
+    assert!(!out.contains("senior"), "render should not show 'senior'");
     assert!(!out.contains("architect"), "render should not show 'architect'");
     // tech-leader is hyphenated — harder to match but let's check
     assert!(!out.contains("tech-leader"), "render should not show 'tech-leader'");
