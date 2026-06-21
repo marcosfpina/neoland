@@ -1,11 +1,83 @@
 use chrono::{DateTime, Utc};
+use std::time::Instant;
 use uuid::Uuid;
 
 use super::presets::QueryConfig;
 
+// ── Theme selection ────────────────────────────────────────────────────
+// The enum lives here (plain data); the concrete `Palette` (ratatui colors)
+// and the per-theme mapping live in `ui.rs` (`Theme::palette`).
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Theme {
+    TokyoNight,
+    NeonGlass,
+    HighContrast,
+    Monochrome,
+}
+
+impl Theme {
+    pub const ALL: &'static [Theme] =
+        &[Theme::TokyoNight, Theme::NeonGlass, Theme::HighContrast, Theme::Monochrome];
+
+    /// Canonical kebab-case name (used by `/theme`, prefs persistence).
+    pub fn label(&self) -> &'static str {
+        match self {
+            Theme::TokyoNight => "tokyo-night",
+            Theme::NeonGlass => "neon-glass",
+            Theme::HighContrast => "high-contrast",
+            Theme::Monochrome => "monochrome",
+        }
+    }
+
+    /// Parse a theme name, accepting a few aliases. Case-insensitive.
+    pub fn from_label(s: &str) -> Option<Theme> {
+        match s.trim().to_lowercase().replace([' ', '_'], "-").as_str() {
+            "tokyo-night" | "tokyo" | "tokyonight" => Some(Theme::TokyoNight),
+            "neon-glass" | "neon" | "glass" => Some(Theme::NeonGlass),
+            "high-contrast" | "contrast" | "hc" => Some(Theme::HighContrast),
+            "monochrome" | "mono" => Some(Theme::Monochrome),
+            _ => None,
+        }
+    }
+}
+
+// ── Streaming mode ─────────────────────────────────────────────────────
+// How the agent's response is revealed in the conversation. The reveal is a
+// render-time animation over the already-received text, driven by the tick.
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum StreamMode {
+    LineByLine,
+    Typewriter,
+    ThinkingReveal,
+}
+
+impl StreamMode {
+    pub const ALL: &'static [StreamMode] =
+        &[StreamMode::LineByLine, StreamMode::Typewriter, StreamMode::ThinkingReveal];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            StreamMode::LineByLine => "line",
+            StreamMode::Typewriter => "typewriter",
+            StreamMode::ThinkingReveal => "thinking",
+        }
+    }
+
+    pub fn from_label(s: &str) -> Option<StreamMode> {
+        match s.trim().to_lowercase().replace([' ', '_'], "-").as_str() {
+            "line" | "line-by-line" | "lines" => Some(StreamMode::LineByLine),
+            "typewriter" | "type" | "typing" | "char" => Some(StreamMode::Typewriter),
+            "thinking" | "thinking-reveal" | "reveal" | "think" => Some(StreamMode::ThinkingReveal),
+            _ => None,
+        }
+    }
+}
+
 // ── LLM provider selection ─────────────────────────────────────────────
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum LlmProvider {
     Local, // ml-offload only, no external key needed
     Deepseek,
@@ -69,12 +141,59 @@ pub enum StageStatus {
     Failed,
 }
 
+impl StageStatus {
+    /// Static glyph for the stage status (Running uses a static arrow — the
+    /// animated spinner is applied at render time, not here).
+    pub fn icon(&self) -> &'static str {
+        match self {
+            StageStatus::Pending => "·",
+            StageStatus::Running => "▸",
+            StageStatus::Done { .. } => "󰄬",
+            StageStatus::Skipped => "󰜎",
+            StageStatus::Failed => "󰅖",
+        }
+    }
+
+    /// Human-readable label for the stage status.
+    pub fn label(&self) -> &'static str {
+        match self {
+            StageStatus::Pending => "pending",
+            StageStatus::Running => "running",
+            StageStatus::Done { .. } => "done",
+            StageStatus::Skipped => "skipped",
+            StageStatus::Failed => "failed",
+        }
+    }
+}
+
+/// Pool of character names drawn randomly at task start.
+/// Internal stage keys ("junior", "senior", etc.) remain unchanged for SSE
+/// matching; these nicknames are purely a display persona — no job titles.
+pub const STAGE_NICKNAMES: &[&str] = &[
+    "Vega", "Orion", "Nova", "Atlas", "Coda", "Wren",
+    "Kael", "Mira", "Zeph", "Nox", "Flux", "Rook",
+    "Drift", "Lux", "Sage", "Apex", "Void", "Echo",
+    "Ghost", "Cipher", "Storm", "Root", "Lyra", "Dusk",
+    "Fern", "Gale", "Haze", "Jade", "Fuse", "Crest",
+    "Pike", "Rune", "Sable", "Thorn", "Vale", "Ward",
+];
+
 #[derive(Clone)]
 pub struct PipelineStage {
+    /// Internal key matching SSE event `stage` field (e.g. "junior").
     pub name: &'static str,
+    /// Display persona — a random character name from `STAGE_NICKNAMES`.
+    pub nickname: String,
     pub status: StageStatus,
     pub confidence: Option<f32>,
     pub output: Option<String>,
+    /// Provenance anchor (RWA token / signed attestation ref) backing this
+    /// stage's decision. `None` until the backend emits a chain anchor; the
+    /// reasoning column shows `⛓ <ref>` when present.
+    pub provenance: Option<String>,
+    /// Wall-clock moment when this stage entered Running state — used to
+    /// render elapsed time next to the spinner (e.g. "Vega ▸ 4.2s").
+    pub started_at: Option<Instant>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -91,12 +210,86 @@ pub struct ToolCall {
     pub status: ToolStatus,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Panel {
-    Tasks,
-    Observability,
-    Pipeline,
-    Output,
+    Sessions,     // left sidebar
+    Conversation, // center
+    Reasoning,    // right
+}
+
+impl Panel {
+    /// Stable index for per-panel state (e.g. scroll offsets).
+    /// Order matches the left→center→right column layout.
+    pub fn index(&self) -> usize {
+        match self {
+            Panel::Sessions => 0,
+            Panel::Conversation => 1,
+            Panel::Reasoning => 2,
+        }
+    }
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum SessionStatus {
+    Active,
+    Done,
+    Failed,
+    Idle,
+}
+
+/// A persisted conversation. The active session's messages live in
+/// `AppState.messages` (the working buffer) and are synced back here on
+/// switch / persist.
+#[derive(Clone)]
+pub struct Session {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub messages: Vec<ChatMessage>,
+    pub last_status: SessionStatus,
+}
+
+impl Session {
+    pub fn new(name: String) -> Self {
+        let now = Utc::now();
+        Session {
+            id: Uuid::new_v4(),
+            name,
+            created_at: now,
+            updated_at: now,
+            messages: Vec::new(),
+            last_status: SessionStatus::Idle,
+        }
+    }
+}
+
+/// Default name given to a fresh session until the first task renames it.
+pub const DEFAULT_SESSION_NAME: &str = "Nova sessão";
+
+/// Pick 4 unique character nicknames from `STAGE_NICKNAMES` using the task
+/// UUID bytes as a deterministic entropy source — no `rand` crate needed.
+/// Same task → same names, so `/why` always shows the same cast.
+fn pick_stage_nicknames(task_id: Uuid) -> [String; 4] {
+    let bytes = task_id.as_bytes();
+    let n = STAGE_NICKNAMES.len();
+    let mut chosen: Vec<usize> = Vec::with_capacity(4);
+    let mut b = 0usize;
+    while chosen.len() < 4 {
+        let idx = (bytes[b % 16] as usize ^ (b >> 4)) % n;
+        if !chosen.contains(&idx) {
+            chosen.push(idx);
+        }
+        b += 1;
+    }
+    [
+        STAGE_NICKNAMES[chosen[0]].to_string(),
+        STAGE_NICKNAMES[chosen[1]].to_string(),
+        STAGE_NICKNAMES[chosen[2]].to_string(),
+        STAGE_NICKNAMES[chosen[3]].to_string(),
+    ]
 }
 
 #[derive(Clone, PartialEq)]
@@ -118,7 +311,7 @@ pub struct AppState {
     pub sidebar_visible: bool,
     pub server_url: String,
     pub neoland_gateway_url: String,
-    pub scroll_offset: u16,
+    pub scroll_offsets: [u16; 3], // per-panel scroll, indexed by Panel::index()
     pub auto_scroll: bool,
     pub is_thinking: bool,
     pub connection_status: ConnectionStatus,
@@ -141,6 +334,26 @@ pub struct AppState {
     pub input_history: Vec<String>,
     pub history_idx: Option<usize>,
     pub active_provider: LlmProvider,
+    pub theme: Theme,
+    // ── Streaming reveal ──────────────────────────────────────────────
+    pub stream_mode: StreamMode,
+    pub streaming: bool,
+    pub stream_target: String,
+    pub stream_revealed: usize, // chars of stream_target currently revealed
+    pub show_help: bool,
+    pub confirm_quit: bool,
+    // ── Search ────────────────────────────────────────────────────────
+    pub search_term: Option<String>,
+    pub search_matches: Vec<usize>,
+    pub search_idx: usize,
+    // ── Notifications ─────────────────────────────────────────────────
+    pub notifications: Vec<Notification>,
+    // ── Sessions ──────────────────────────────────────────────────────
+    pub sessions: Vec<Session>,
+    pub active_session_idx: usize,
+    /// When true, the reasoning panel renders the full `/why` chain instead of
+    /// the live pipeline tree. Cleared by Esc or on new task start.
+    pub why_mode: bool,
 }
 
 #[derive(Clone)]
@@ -150,11 +363,29 @@ pub struct ChatMessage {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum MessageRole {
     User,
     Assistant,
     System,
+}
+
+// ── Notification system ──────────────────────────────────────────────
+
+#[derive(Clone, PartialEq)]
+pub enum NotificationLevel {
+    Error,
+    Warning,
+    Info,
+    Success,
+}
+
+#[derive(Clone)]
+pub struct Notification {
+    pub level: NotificationLevel,
+    pub message: String,
+    pub dismissable: bool,
+    pub created_at: Instant,
 }
 
 impl AppState {
@@ -168,8 +399,24 @@ impl AppState {
             _ => LlmProvider::Local,
         };
 
+        // Load persisted preferences (theme, etc.) — defaults if absent.
+        let prefs = super::prefs::load();
+        let theme = prefs.theme.as_deref().and_then(Theme::from_label).unwrap_or(Theme::TokyoNight);
+        let stream_mode = prefs
+            .stream_mode
+            .as_deref()
+            .and_then(StreamMode::from_label)
+            .unwrap_or(StreamMode::Typewriter);
+
+        // Load persisted sessions (most-recent first); ensure at least one.
+        let mut sessions = super::sessions::load_all();
+        if sessions.is_empty() {
+            sessions.push(Session::new(DEFAULT_SESSION_NAME.to_string()));
+        }
+        let messages = sessions[0].messages.clone();
+
         Self {
-            messages: Vec::new(),
+            messages,
             pending_message: None,
             input_buffer: String::new(),
             cursor_pos: 0,
@@ -177,7 +424,7 @@ impl AppState {
             sidebar_visible: false,
             server_url,
             neoland_gateway_url,
-            scroll_offset: 0,
+            scroll_offsets: [0; 3],
             auto_scroll: true,
             is_thinking: false,
             connection_status: ConnectionStatus::Unknown,
@@ -191,7 +438,7 @@ impl AppState {
             active_task_id: None,
             output_text: String::new(),
             pipeline_visible: true,
-            focused_panel: Panel::Output,
+            focused_panel: Panel::Conversation,
             adr_title: None,
             pending_breakpoint: None,
             adr_status: None,
@@ -199,12 +446,116 @@ impl AppState {
             input_history: Vec::new(),
             history_idx: None,
             active_provider,
+            theme,
+            stream_mode,
+            streaming: false,
+            stream_target: String::new(),
+            stream_revealed: 0,
+            show_help: false,
+            confirm_quit: false,
+            search_term: None,
+            search_matches: Vec::new(),
+            search_idx: 0,
+            notifications: Vec::new(),
+            sessions,
+            active_session_idx: 0,
+            why_mode: false,
         }
     }
 
     pub fn cycle_provider(&mut self) {
         self.active_provider = self.active_provider.next();
         self.add_system_message(&format!("provider → {}", self.active_provider.label()));
+    }
+
+    /// Switch theme and persist the preference.
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+        self.save_prefs();
+    }
+
+    /// Switch streaming mode and persist the preference.
+    pub fn set_stream_mode(&mut self, mode: StreamMode) {
+        self.stream_mode = mode;
+        self.save_prefs();
+    }
+
+    /// Persist current preferences (theme, stream mode), merging into any
+    /// existing file so unrelated keys are preserved.
+    pub fn save_prefs(&self) {
+        let mut prefs = super::prefs::load();
+        prefs.theme = Some(self.theme.label().to_string());
+        prefs.stream_mode = Some(self.stream_mode.label().to_string());
+        super::prefs::save(&prefs);
+    }
+
+    // ── Streaming reveal ──────────────────────────────────────────────
+
+    /// Begin revealing the agent's response. For `ThinkingReveal` the spinner
+    /// already played during the pipeline, so the message is committed at once;
+    /// otherwise an animated reveal starts (advanced by the tick loop).
+    pub fn begin_stream(&mut self, text: String) {
+        if text.is_empty() {
+            return;
+        }
+        if matches!(self.stream_mode, StreamMode::ThinkingReveal) {
+            self.add_assistant_message(&text);
+            self.streaming = false;
+            self.persist_active_session();
+            return;
+        }
+        self.stream_target = text;
+        self.stream_revealed = 0;
+        self.streaming = true;
+        self.auto_scroll = true;
+    }
+
+    /// Advance the reveal by one tick. Commits the message once fully revealed.
+    pub fn advance_stream(&mut self) {
+        if !self.streaming {
+            return;
+        }
+        let chars: Vec<char> = self.stream_target.chars().collect();
+        let total = chars.len();
+        match self.stream_mode {
+            StreamMode::Typewriter => {
+                self.stream_revealed = (self.stream_revealed + 8).min(total);
+            },
+            StreamMode::LineByLine => {
+                let mut i = self.stream_revealed;
+                while i < total && chars[i] != '\n' {
+                    i += 1;
+                }
+                if i < total {
+                    i += 1; // consume the newline
+                }
+                self.stream_revealed = i;
+            },
+            StreamMode::ThinkingReveal => {
+                self.stream_revealed = total;
+            },
+        }
+        self.auto_scroll = true;
+        if self.stream_revealed >= total {
+            let text = std::mem::take(&mut self.stream_target);
+            self.add_assistant_message(&text);
+            self.streaming = false;
+            self.stream_revealed = 0;
+            self.persist_active_session();
+        }
+    }
+
+    /// The portion of the streaming text revealed so far.
+    pub fn streamed_text(&self) -> String {
+        self.stream_target.chars().take(self.stream_revealed).collect()
+    }
+
+    /// True when a task is running and the user's message has no response yet
+    /// (drives the "thinking" bubble in `ThinkingReveal` mode).
+    pub fn awaiting_response(&self) -> bool {
+        self.active_task_id.is_some()
+            && !self.streaming
+            && self.messages.last().map(|m| m.role == MessageRole::User).unwrap_or(false)
     }
 
     // ── Agent workstation methods ─────────────────────────────────────
@@ -228,42 +579,43 @@ impl AppState {
             self.active_session = t.session_id;
         }
         self.active_task_id = Some(id);
+
+        // Pick 4 unique character nicknames — user overrides from prefs take
+        // precedence; random pool fills any unset slots.
+        let prefs = super::prefs::load();
+        let nicks = pick_stage_nicknames(id);
+        let effective = |i: usize, random: &str| -> String {
+            prefs.agent_names[i].clone().unwrap_or_else(|| random.to_string())
+        };
+        let mk = |name, nick: String| PipelineStage {
+            name,
+            nickname: nick.to_string(),
+            status: StageStatus::Pending,
+            confidence: None,
+            output: None,
+            provenance: None,
+            started_at: None,
+        };
         self.pipeline_stages = vec![
-            PipelineStage {
-                name: "junior",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-            },
-            PipelineStage {
-                name: "senior",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-            },
-            PipelineStage {
-                name: "architect",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-            },
-            PipelineStage {
-                name: "tech-leader",
-                status: StageStatus::Pending,
-                confidence: None,
-                output: None,
-            },
+            mk("junior",      effective(0, &nicks[0])),
+            mk("senior",      effective(1, &nicks[1])),
+            mk("architect",   effective(2, &nicks[2])),
+            mk("tech-leader", effective(3, &nicks[3])),
         ];
         self.tool_calls.clear();
         self.output_text.clear();
         self.adr_title = None;
         self.adr_status = None;
+        self.why_mode = false;
         self.auto_scroll = true;
     }
 
     pub fn update_stage(&mut self, name: &str, status: StageStatus, confidence: Option<f32>) {
         let normalized = name.replace('_', "-");
         if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
+            if matches!(status, StageStatus::Running) && s.started_at.is_none() {
+                s.started_at = Some(Instant::now());
+            }
             s.status = status;
             if confidence.is_some() {
                 s.confidence = confidence;
@@ -275,6 +627,14 @@ impl AppState {
         let normalized = stage.replace('_', "-");
         if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
             s.output = Some(content);
+        }
+    }
+
+    /// Attach a provenance anchor (RWA token / attestation ref) to a stage.
+    pub fn set_stage_provenance(&mut self, stage: &str, anchor: String) {
+        let normalized = stage.replace('_', "-");
+        if let Some(s) = self.pipeline_stages.iter_mut().find(|s| s.name == normalized) {
+            s.provenance = Some(anchor);
         }
     }
 
@@ -338,20 +698,205 @@ impl AppState {
 
     pub fn focus_next_panel(&mut self) {
         self.focused_panel = match self.focused_panel {
-            Panel::Tasks => Panel::Observability,
-            Panel::Observability => Panel::Pipeline,
-            Panel::Pipeline => Panel::Output,
-            Panel::Output => Panel::Tasks,
+            Panel::Sessions => Panel::Conversation,
+            Panel::Conversation => Panel::Reasoning,
+            Panel::Reasoning => Panel::Sessions,
         };
     }
 
     pub fn focus_prev_panel(&mut self) {
         self.focused_panel = match self.focused_panel {
-            Panel::Tasks => Panel::Output,
-            Panel::Observability => Panel::Tasks,
-            Panel::Pipeline => Panel::Observability,
-            Panel::Output => Panel::Pipeline,
+            Panel::Sessions => Panel::Reasoning,
+            Panel::Reasoning => Panel::Conversation,
+            Panel::Conversation => Panel::Sessions,
         };
+    }
+
+    /// Scroll offset of the currently focused panel (mutable).
+    pub fn focused_scroll_mut(&mut self) -> &mut u16 {
+        &mut self.scroll_offsets[self.focused_panel.index()]
+    }
+
+    // ── Sessions ──────────────────────────────────────────────────────
+
+    pub fn active_session(&self) -> &Session {
+        &self.sessions[self.active_session_idx]
+    }
+
+    /// Mirror the live message buffer back into the active session record.
+    fn sync_active_session(&mut self) {
+        let idx = self.active_session_idx;
+        if let Some(s) = self.sessions.get_mut(idx) {
+            s.messages = self.messages.clone();
+            s.updated_at = Utc::now();
+        }
+    }
+
+    /// Sync the live buffer into the active session and persist it to disk.
+    pub fn persist_active_session(&mut self) {
+        self.sync_active_session();
+        if let Some(s) = self.sessions.get(self.active_session_idx) {
+            super::sessions::save(s);
+        }
+    }
+
+    /// Start a fresh session (persisting the current one first).
+    pub fn new_session(&mut self) {
+        self.persist_active_session();
+        self.sessions.insert(0, Session::new(DEFAULT_SESSION_NAME.to_string()));
+        self.active_session_idx = 0;
+        self.messages.clear();
+        self.output_text.clear();
+        self.pipeline_stages.clear();
+        self.adr_title = None;
+        self.adr_status = None;
+        self.auto_scroll = true;
+    }
+
+    /// Switch to session `idx`, loading its messages into the live buffer.
+    pub fn switch_session(&mut self, idx: usize) {
+        if idx >= self.sessions.len() || idx == self.active_session_idx {
+            return;
+        }
+        self.persist_active_session();
+        self.active_session_idx = idx;
+        self.messages = self.sessions[idx].messages.clone();
+        self.auto_scroll = true;
+    }
+
+    pub fn select_session_next(&mut self) {
+        if self.sessions.len() > 1 {
+            let n = (self.active_session_idx + 1) % self.sessions.len();
+            self.switch_session(n);
+        }
+    }
+
+    pub fn select_session_prev(&mut self) {
+        if self.sessions.len() > 1 {
+            let n = if self.active_session_idx == 0 {
+                self.sessions.len() - 1
+            } else {
+                self.active_session_idx - 1
+            };
+            self.switch_session(n);
+        }
+    }
+
+    /// Name the active session from its first task description, if still unnamed.
+    /// Truncates to 24 chars with a trailing "…" so the sidebar stays readable.
+    pub fn name_active_session_from(&mut self, task: &str) {
+        if let Some(s) = self.sessions.get_mut(self.active_session_idx) {
+            if s.name == DEFAULT_SESSION_NAME || s.name.is_empty() {
+                let name: String = task.chars().take(24).collect();
+                s.name = if task.chars().count() > 24 {
+                    format!("{}…", name)
+                } else {
+                    name
+                };
+            }
+        }
+    }
+
+    /// Set a custom nickname for pipeline slot `slot` (0-based).
+    /// Persists to `prefs.json` so it survives restarts. Also renames the
+    /// stage inline if the pipeline is currently active.
+    pub fn set_agent_name(&mut self, slot: usize, name: String) {
+        let mut prefs = super::prefs::load();
+        if slot < 4 {
+            prefs.agent_names[slot] = Some(name.clone());
+            super::prefs::save(&prefs);
+            if let Some(stage) = self.pipeline_stages.get_mut(slot) {
+                stage.nickname = name;
+            }
+        }
+    }
+
+    /// Inject a compact task-completion summary into the conversation so the
+    /// cadence has a clear milestone marker. Called after `PipelineDone`.
+    pub fn inject_task_summary(&mut self) {
+        let adr_part = match (&self.adr_status, &self.adr_title) {
+            (Some(status), Some(title)) => format!("  ·  ADR {} — {}", status, title),
+            (Some(status), None) => format!("  ·  ADR {}", status),
+            _ => String::new(),
+        };
+        let avg_conf = {
+            let done: Vec<f32> = self
+                .pipeline_stages
+                .iter()
+                .filter_map(|s| {
+                    if matches!(s.status, StageStatus::Done { .. }) {
+                        s.confidence
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if done.is_empty() {
+                String::new()
+            } else {
+                format!("  ·  avg {:.0}% conf", done.iter().sum::<f32>() / done.len() as f32)
+            }
+        };
+        let latency_part = if self.last_latency_ms > 0 {
+            format!("  ·  {:.1}s", self.last_latency_ms as f32 / 1000.0)
+        } else {
+            String::new()
+        };
+        self.add_system_message(&format!(
+            "✓  Pipeline concluído{}{}{}",
+            adr_part, avg_conf, latency_part
+        ));
+    }
+
+    /// Tab-complete a `/command` prefix in `input_buffer`. Returns `true` when
+    /// the buffer was changed. On a single match, appends a trailing space ready
+    /// for args. On multiple matches, cycles alphabetically and fires a
+    /// notification listing candidates.
+    pub fn tab_complete_command(&mut self) -> bool {
+        if !self.input_buffer.starts_with('/') {
+            return false;
+        }
+        let partial = self.input_buffer[1..].to_lowercase();
+        if partial.contains(' ') {
+            return false; // don't complete inside args
+        }
+        use crate::tui::commands::COMPLETABLE_COMMANDS;
+        let matches: Vec<&str> = COMPLETABLE_COMMANDS
+            .iter()
+            .copied()
+            .filter(|cmd| cmd.starts_with(partial.as_str()))
+            .collect();
+        match matches.len() {
+            0 => false,
+            1 => {
+                self.input_buffer = format!("/{} ", matches[0]);
+                self.cursor_pos = self.input_buffer.len();
+                true
+            }
+            _ => {
+                // Cycle: find next command alphabetically after current partial
+                let next = matches
+                    .iter()
+                    .find(|&&cmd| cmd > partial.as_str())
+                    .or_else(|| matches.first())
+                    .copied()
+                    .unwrap_or(matches[0]);
+                self.input_buffer = format!("/{}", next);
+                self.cursor_pos = self.input_buffer.len();
+                let list = matches.join(", /");
+                self.add_notification(
+                    NotificationLevel::Info,
+                    format!("{} matches: /{}", matches.len(), list),
+                );
+                true
+            }
+        }
+    }
+
+    pub fn set_active_session_status(&mut self, status: SessionStatus) {
+        if let Some(s) = self.sessions.get_mut(self.active_session_idx) {
+            s.last_status = status;
+        }
     }
 
     pub fn next_queued_task(&self) -> Option<(Uuid, Uuid, String)> {
@@ -509,6 +1054,82 @@ impl AppState {
         // Clear input to prepare for [Y/N] or Steer
         self.input_buffer.clear();
         self.cursor_pos = 0;
+    }
+
+    // ── Notification methods ─────────────────────────────────────────
+
+    /// Add a notification that auto-expires after 8 seconds.
+    pub fn add_notification(&mut self, level: NotificationLevel, message: impl Into<String>) {
+        self.notifications.push(Notification {
+            level,
+            message: message.into(),
+            dismissable: true,
+            created_at: Instant::now(),
+        });
+        // Keep at most 5 visible
+        if self.notifications.len() > 5 {
+            self.notifications.remove(0);
+        }
+    }
+
+    /// Dismiss the oldest notification.
+    pub fn dismiss_notification(&mut self) {
+        if !self.notifications.is_empty() {
+            self.notifications.remove(0);
+        }
+    }
+
+    /// Remove expired notifications (older than 8s).
+    pub fn dismiss_expired_notifications(&mut self) {
+        let now = Instant::now();
+        self.notifications.retain(|n| now.duration_since(n.created_at).as_secs() < 8);
+    }
+
+    // ── Search methods ───────────────────────────────────────────────
+
+    /// Set search term and compute matching line indices in output_text.
+    pub fn perform_search(&mut self, term: &str) {
+        if term.is_empty() {
+            self.clear_search();
+            return;
+        }
+        let lower = term.to_lowercase();
+        self.search_term = Some(term.to_string());
+        self.search_matches = self
+            .output_text
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| line.to_lowercase().contains(&lower))
+            .map(|(i, _)| i)
+            .collect();
+        self.search_idx = if self.search_matches.is_empty() { 0 } else { 0 };
+    }
+
+    /// Move to the next search match.
+    pub fn next_search_match(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+        self.search_idx = (self.search_idx + 1) % self.search_matches.len();
+    }
+
+    /// Move to the previous search match.
+    pub fn prev_search_match(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+        self.search_idx = if self.search_idx == 0 {
+            self.search_matches.len() - 1
+        } else {
+            self.search_idx - 1
+        };
+    }
+
+    /// Clear search state.
+    pub fn clear_search(&mut self) {
+        self.search_term = None;
+        self.search_matches.clear();
+        self.search_idx = 0;
     }
 }
 
@@ -733,6 +1354,72 @@ mod tests {
     }
 
     // ── apply_preset ──────────────────────────────────────────────────────────
+
+    // ── theme ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn theme_from_label_accepts_aliases() {
+        assert_eq!(Theme::from_label("neon-glass"), Some(Theme::NeonGlass));
+        assert_eq!(Theme::from_label("Neon Glass"), Some(Theme::NeonGlass));
+        assert_eq!(Theme::from_label("mono"), Some(Theme::Monochrome));
+        assert_eq!(Theme::from_label("TOKYO"), Some(Theme::TokyoNight));
+        assert_eq!(Theme::from_label("nope"), None);
+    }
+
+    #[test]
+    fn theme_label_roundtrips() {
+        for t in Theme::ALL {
+            assert_eq!(Theme::from_label(t.label()), Some(*t));
+        }
+    }
+
+    // ── streaming ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn stream_mode_label_roundtrips() {
+        for m in StreamMode::ALL {
+            assert_eq!(StreamMode::from_label(m.label()), Some(*m));
+        }
+        assert_eq!(StreamMode::from_label("type"), Some(StreamMode::Typewriter));
+        assert_eq!(StreamMode::from_label("line-by-line"), Some(StreamMode::LineByLine));
+    }
+
+    #[test]
+    fn typewriter_reveals_then_commits() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.stream_mode = StreamMode::Typewriter;
+        a.begin_stream("hello world".into()); // 11 chars
+        assert!(a.streaming);
+        // 11 chars / 8 per tick → 2 ticks to finish.
+        a.advance_stream();
+        assert_eq!(a.streamed_text(), "hello wo");
+        a.advance_stream();
+        assert!(!a.streaming, "should finish");
+        assert_eq!(a.messages.last().unwrap().content, "hello world");
+    }
+
+    #[test]
+    fn line_by_line_reveals_one_line_per_tick() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.stream_mode = StreamMode::LineByLine;
+        a.begin_stream("a\nb\nc".into());
+        a.advance_stream();
+        assert_eq!(a.streamed_text(), "a\n");
+        a.advance_stream();
+        assert_eq!(a.streamed_text(), "a\nb\n");
+        a.advance_stream();
+        assert!(!a.streaming);
+        assert_eq!(a.messages.last().unwrap().content, "a\nb\nc");
+    }
+
+    #[test]
+    fn thinking_reveal_commits_immediately() {
+        let mut a = AppState::new("u".into(), "m".into());
+        a.stream_mode = StreamMode::ThinkingReveal;
+        a.begin_stream("done".into());
+        assert!(!a.streaming, "thinking mode commits at once");
+        assert_eq!(a.messages.last().unwrap().content, "done");
+    }
 
     #[test]
     fn apply_preset_balanced() {

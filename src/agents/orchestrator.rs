@@ -33,7 +33,8 @@ pub struct AgentOrchestrator {
     client: AgentPipelineClient,
     sessions: SessionManager,
     escalation: EscalationPolicy,
-    nats: Option<NatsPublisher>,
+    // Arc so publish() can clone a handle into spawned tasks without blocking.
+    nats: Option<Arc<NatsPublisher>>,
     event_bus: Option<tokio::sync::broadcast::Sender<AgentEvent>>,
     mcp: Option<Arc<McpRegistry>>,
     matrix: Option<Arc<MatrixClient>>,
@@ -79,7 +80,7 @@ impl AgentOrchestrator {
     }
 
     pub fn with_nats(mut self, publisher: NatsPublisher) -> Self {
-        self.nats = Some(publisher);
+        self.nats = Some(Arc::new(publisher));
         self
     }
 
@@ -102,8 +103,16 @@ impl AgentOrchestrator {
     }
 
     pub fn publish(&self, event: AgentEvent) {
+        // SSE broadcast — primary path for the TUI client.
         if let Some(tx) = &self.event_bus {
-            let _ = tx.send(event);
+            let _ = tx.send(event.clone());
+        }
+        // NATS — fire-and-forget; never blocks the SSE path.
+        // Consumers: Spectre AI reactor, OWASAKA scanner, Phantom, Grafana.
+        if let Some(nats) = self.nats.clone() {
+            tokio::spawn(async move {
+                nats.publish_agent_event(&event).await;
+            });
         }
     }
 

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# scripts/adr — ADR management CLI for Neoland
+# Usage: scripts/adr <command> [args]
+#   list                     List all ADRs
+#   new  <id> <title>        Scaffold a new proposed ADR
+#   accept <id>              Move ADR to accepted/
+#   reject <id>              Move ADR to rejected/
+#   supersede <id> <new-id>  Mark ADR as superseded
+set -euo pipefail
+
+ADR_ROOT="${ADR_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ADR_DIR="$ADR_ROOT/adr"
+CMD="${1:-list}"
+
+_find_adr() {
+  local id="$1"
+  find "$ADR_DIR" -name "${id}*.md" 2>/dev/null | head -1
+}
+
+case "$CMD" in
+  list)
+    for status_dir in proposed accepted superseded rejected; do
+      dir="$ADR_DIR/$status_dir"
+      [ -d "$dir" ] || continue
+      for f in "$dir"/*.md; do
+        [ -f "$f" ] || continue
+        id=$(grep "^id:" "$f" | awk '{print $2}' | tr -d '"')
+        title=$(grep "^title:" "$f" | cut -d: -f2- | xargs)
+        printf "  %-12s %-10s %s\n" "$id" "[$status_dir]" "$title"
+      done
+    done
+    ;;
+
+  new)
+    ID="${2:?Usage: adr new <id> <title>}"
+    TITLE="${3:?Usage: adr new <id> <title>}"
+    DEST="$ADR_DIR/proposed/${ID}-$(echo "$TITLE" | tr '[:upper:] ' '[:lower:]-').md"
+    cat > "$DEST" <<TEMPLATE
+---
+id: "$ID"
+title: "$TITLE"
+status: proposed
+date: "$(date +%Y-%m-%d)"
+---
+
+## Context
+
+<!-- Describe the context and problem being addressed. -->
+
+## Decision
+
+<!-- Describe the decision made. -->
+
+## Consequences
+
+<!-- Describe the consequences, positive and negative. -->
+TEMPLATE
+    echo "✓ Created $DEST"
+    ;;
+
+  accept)
+    ID="${2:?Usage: adr accept <id>}"
+    SRC=$(_find_adr "$ID")
+    [ -n "$SRC" ] || { echo "❌ ADR '$ID' not found"; exit 1; }
+    DEST="$ADR_DIR/accepted/$(basename "$SRC")"
+    sed -i 's/^status: proposed/status: accepted/' "$SRC"
+    mv "$SRC" "$DEST"
+    echo "✓ Accepted → $DEST"
+    ;;
+
+  reject)
+    ID="${2:?Usage: adr reject <id>}"
+    SRC=$(_find_adr "$ID")
+    [ -n "$SRC" ] || { echo "❌ ADR '$ID' not found"; exit 1; }
+    DEST="$ADR_DIR/rejected/$(basename "$SRC")"
+    sed -i 's/^status: proposed/status: rejected/' "$SRC"
+    mv "$SRC" "$DEST"
+    echo "✓ Rejected → $DEST"
+    ;;
+
+  supersede)
+    ID="${2:?Usage: adr supersede <id> <new-id>}"
+    SRC=$(_find_adr "$ID")
+    [ -n "$SRC" ] || { echo "❌ ADR '$ID' not found"; exit 1; }
+    DEST="$ADR_DIR/superseded/$(basename "$SRC")"
+    sed -i 's/^status: accepted/status: superseded/' "$SRC"
+    mv "$SRC" "$DEST"
+    echo "✓ Superseded → $DEST"
+    ;;
+
+  *)
+    echo "Unknown command: $CMD" >&2
+    echo "Usage: scripts/adr <list|new|accept|reject|supersede>" >&2
+    exit 1
+    ;;
+esac

@@ -26,14 +26,14 @@ about making the integrated system honest, repeatable, and shareable.
 
 ## Current Release Blockers
 
-| Priority | Blocker | Why It Blocks |
-|----------|---------|---------------|
-| P0 | Session API fragility | session serialization can hide failures; DB row mapping is brittle |
-| P0 | Diagnostics still incomplete | `doctor` does not directly probe the DSPy pipeline layer |
-| P0 | Full runtime stack not smoked | gateway -> ml-ops -> llama.cpp path is documented but not proven end-to-end |
-| P1 | Frontend analytics can assume complete ADR payloads | partial checkpoint files can crash dashboard analytics |
-| P1 | Release ritual is not canonical | deploy, health, task, session, ADR, backup, restore, and rollback are not one short routine |
-| P2 | Historical docs still overstate readiness | older docs/runbooks remain useful but can mislead if read as current truth |
+| Priority | Blocker                                             | Why It Blocks                                                                               |
+| -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| P0       | Session API fragility                               | session serialization can hide failures; DB row mapping is brittle                          |
+| P0       | Diagnostics still incomplete                        | `doctor` does not directly probe the DSPy pipeline layer                                    |
+| P0       | Full runtime stack not smoked                       | gateway -> ml-ops -> llama.cpp path is documented but not proven end-to-end                 |
+| P1       | Frontend analytics can assume complete ADR payloads | partial checkpoint files can crash dashboard analytics                                      |
+| P1       | Release ritual is not canonical                     | deploy, health, task, session, ADR, backup, restore, and rollback are not one short routine |
+| P2       | Historical docs still overstate readiness           | older docs/runbooks remain useful but can mislead if read as current truth                  |
 
 ---
 
@@ -176,21 +176,21 @@ Work:
 
 ## Tracking Board
 
-| ID | Item | Status | Criticality |
-|----|------|--------|-------------|
-| MAP-1 | Full codebase map and source-of-truth docs | Done | High |
-| CFG-1 | Canonical `NEOLAND_GATEWAY_URL` exported in dev shell/Nix suite | Done | High |
-| SESS-1 | Explicit session serialization errors | Next | Critical |
-| SESS-2 | Named session DB row mapping | Next | Critical |
-| DOC-1 | Direct DSPy health in `doctor` | Next | Critical |
-| RT-1 | SecureLLM Bridge + ml-ops + llama full smoke | Next | Critical |
-| UI-1 | Frontend analytics optional guards | Next | High |
-| TUI-1 | SSE timeout/degraded handling | Planned | Medium |
-| OPS-1 | Canonical release preflight | Planned | High |
-| OPS-2 | Backup/restore/rollback smoke | Planned | High |
-| REL-1 | README/quickstart release honesty pass | Planned | High |
-| CLEAN-1 | Remove/archive tracked backup `.orig` files | Planned | Medium |
-| LOAD-1 | Load/SLO validation | Planned | Medium |
+| ID      | Item                                                            | Status  | Criticality |
+| ------- | --------------------------------------------------------------- | ------- | ----------- |
+| MAP-1   | Full codebase map and source-of-truth docs                      | Done    | High        |
+| CFG-1   | Canonical `NEOLAND_GATEWAY_URL` exported in dev shell/Nix suite | Done    | High        |
+| SESS-1  | Explicit session serialization errors                           | Next    | Critical    |
+| SESS-2  | Named session DB row mapping                                    | Next    | Critical    |
+| DOC-1   | Direct DSPy health in `doctor`                                  | Next    | Critical    |
+| RT-1    | SecureLLM Bridge + ml-ops + llama full smoke                    | Next    | Critical    |
+| UI-1    | Frontend analytics optional guards                              | Next    | High        |
+| TUI-1   | SSE timeout/degraded handling                                   | Planned | Medium      |
+| OPS-1   | Canonical release preflight                                     | Planned | High        |
+| OPS-2   | Backup/restore/rollback smoke                                   | Planned | High        |
+| REL-1   | README/quickstart release honesty pass                          | Planned | High        |
+| CLEAN-1 | Remove/archive tracked backup `.orig` files                     | Planned | Medium      |
+| LOAD-1  | Load/SLO validation                                             | Planned | Medium      |
 
 ---
 

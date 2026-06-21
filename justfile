@@ -1,19 +1,64 @@
 # ─── Neoland Justfile — Developer Experience ──────────────────────────────
-# Run `just` to list all commands
-# Requires: `just` and Nix dev shell or Rust toolchain.
-# Most commands work inside `nix develop` or with `direnv allow`.
+# Run `just` to list all commands.
+# Requires: `just` inside `nix develop` (or `direnv allow`).
 #
 # ⚠️  SOPS Secrets:
-#   Commands prefixed with `server` / `client` / `doctor` load secrets
-#   from `secrets/neoland.sops.env` via `scripts/neoland-run.sh`.
-#   Commands suffixed with `-raw` run cargo directly WITHOUT loading SOPS.
-#   If you don't have the age key imported, set env vars manually:
-#     export NEOLAND_ADMIN_API_KEY="..."
-#     export NEOLAND_USER_API_KEY="..."
-#     export NEOLAND_READONLY_API_KEY="..."
-#   and then use the `-raw` variants.
+#   server / client / doctor load secrets from secrets/neoland.sops.env.
+#   -raw variants skip SOPS — set env vars manually if the age key is absent:
+#     export NEOLAND_ADMIN_API_KEY="..." NEOLAND_USER_API_KEY="..."
+#
+# Short aliases available in devShell: ncli, nsrv, nd, nt
 
 set positional-arguments
+
+# ─── Quick shortcuts (most used) ──────────────────────────────────────────
+
+# TUI client — alias for `client` (loads SOPS)
+tui: client
+
+# Dev stack: sobe servidor, aguarda /health, abre TUI. Ctrl+C mata tudo.
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill $(jobs -p) 2>/dev/null; wait 2>/dev/null || true' EXIT INT TERM
+    echo "→ Iniciando servidor Neoland..."
+    bash scripts/neoland-run.sh server &
+    SERVER_PID=$!
+    echo "→ Aguardando servidor em :3001..."
+    until curl -sf http://localhost:3001/health >/dev/null 2>&1; do
+        sleep 0.3
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "✗ Servidor encerrou antes de ficar ready."
+            exit 1
+        fi
+    done
+    echo "✓ Servidor pronto. Abrindo TUI..."
+    bash scripts/neoland-run.sh client
+
+# Servidor standalone — cliente roda em outro terminal (ncli ou just tui)
+serve: server
+
+# CI pipeline: check → fmt-check → clippy → test (all must pass)
+ci: check fmt-check clippy test
+
+# Auto-fix: format + clippy suggestions applied in-place
+fix:
+    cargo fmt
+    cargo clippy --fix --allow-staged --all-targets 2>/dev/null || true
+
+# Watch mode: re-check lib on every save (requires cargo-watch in devShell)
+watch:
+    cargo watch -x 'check --lib'
+
+# ─── TUI development ──────────────────────────────────────────────────────
+
+# ASCII preview of TUI layout states (no running server needed)
+visual:
+    cargo test --lib tui::ui::tests::dump_visual -- --ignored --nocapture
+
+# TUI unit tests only (fast, no secrets)
+test-tui:
+    cargo test --lib tui::
 
 # ─── Check & Lint ─────────────────────────────────────────────────────────
 
@@ -35,9 +80,7 @@ fmt-check:
 
 # ─── Test ─────────────────────────────────────────────────────────────────
 
-# Library unit tests
-# Uses cargo directly because tests shouldn't depend on secrets
-# For integration tests that need secrets, use test-all-with-secrets
+# Library unit tests (no secrets needed)
 test:
     cargo test --lib
 

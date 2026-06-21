@@ -1,6 +1,7 @@
 use std::{io, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use commands::{parse_command, Command};
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -12,31 +13,76 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 
 pub mod app;
+pub mod commands;
 pub mod events;
+pub mod prefs;
 pub mod presets;
+pub mod sessions;
 pub mod ui;
 
-use app::{AppState, ConnectionStatus, LlmProvider, StageStatus, TaskStatus};
+use app::{
+    AppState, ConnectionStatus, LlmProvider, NotificationLevel, Panel, StageStatus, StreamMode,
+    TaskStatus, Theme,
+};
 use events::Action;
 use ui::render;
 
 // ── Agent stream events (TUI-internal) ───────────────────────────────
 
 enum AgentStreamEvent {
-    StageStarted { stage: String },
-    StageDone { stage: String, confidence: Option<f32>, latency_ms: u64 },
-    StageSkipped { stage: String },
-    StageOutput { stage: String, content: String },
-    ToolCallStarted { tool: String, args_summary: String },
-    ToolCallDone { tool: String, duration_ms: u64 },
-    ToolCallFailed { tool: String },
-    BreakpointHit { tool: String, args_summary: String },
-    BreakpointResolved { tool: String, resolution: String },
-    AdrCheckpoint { status: String, title: String },
-    PipelineDone { latency_ms: u64 },
-    PipelineError { error: String },
-    FinalResult { rationale: String, adr_title: String, adr_status: String },
-    SteeringReceived { message: String },
+    StageStarted {
+        stage: String,
+    },
+    StageDone {
+        stage: String,
+        confidence: Option<f32>,
+        latency_ms: u64,
+        provenance: Option<String>,
+    },
+    StageSkipped {
+        stage: String,
+    },
+    StageOutput {
+        stage: String,
+        content: String,
+    },
+    ToolCallStarted {
+        tool: String,
+        args_summary: String,
+    },
+    ToolCallDone {
+        tool: String,
+        duration_ms: u64,
+    },
+    ToolCallFailed {
+        tool: String,
+    },
+    BreakpointHit {
+        tool: String,
+        args_summary: String,
+    },
+    BreakpointResolved {
+        tool: String,
+        resolution: String,
+    },
+    AdrCheckpoint {
+        status: String,
+        title: String,
+    },
+    PipelineDone {
+        latency_ms: u64,
+    },
+    PipelineError {
+        error: String,
+    },
+    FinalResult {
+        rationale: String,
+        adr_title: String,
+        adr_status: String,
+    },
+    SteeringReceived {
+        message: String,
+    },
 }
 
 // ── Legacy LLM channel events (kept for fallback) ─────────────────────
@@ -75,7 +121,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
 
     let mut tick = tokio::time::interval(Duration::from_millis(80));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    loop {
+    'main: loop {
         terminal.draw(|f| render(f, &mut app))?;
 
         tokio::select! {
@@ -87,8 +133,11 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                     AgentStreamEvent::StageStarted { stage } => {
                         app.update_stage(&stage, StageStatus::Running, None);
                     }
-                    AgentStreamEvent::StageDone { stage, confidence, latency_ms } => {
+                    AgentStreamEvent::StageDone { stage, confidence, latency_ms, provenance } => {
                         app.update_stage(&stage, StageStatus::Done { latency_ms }, confidence);
+                        if let Some(anchor) = provenance {
+                            app.set_stage_provenance(&stage, anchor);
+                        }
                     }
                     AgentStreamEvent::StageSkipped { stage } => {
                         app.update_stage(&stage, StageStatus::Skipped, None);
@@ -131,6 +180,9 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                         if let Some(id) = app.active_task_id {
                             app.complete_task(id, true);
                         }
+                        app.inject_task_summary();
+                        app.set_active_session_status(app::SessionStatus::Done);
+                        app.persist_active_session();
                         spawn_next_queued_task(&mut app, &agent_tx, &api_key);
                     }
                     AgentStreamEvent::PipelineError { error } => {
@@ -138,9 +190,12 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                         if let Some(id) = app.active_task_id {
                             app.complete_task(id, false);
                         }
+                        app.set_active_session_status(app::SessionStatus::Failed);
+                        app.persist_active_session();
                         spawn_next_queued_task(&mut app, &agent_tx, &api_key);
                     }
                     AgentStreamEvent::FinalResult { rationale, adr_title, adr_status } => {
+                        app.begin_stream(rationale.clone());
                         app.output_text = rationale;
                         if !adr_title.is_empty() {
                             app.adr_title = Some(adr_title);
@@ -201,9 +256,23 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                             || key.kind == KeyEventKind::Repeat =>
                     {
                         match process_key(&mut app, key.code, key.modifiers) {
-                            Action::Quit => break,
+                            Action::Quit => {
+                                if app.confirm_quit {
+                                    break 'main;
+                                }
+                                let has_active = app.active_task_id.is_some()
+                                    || app.tasks.iter().any(|t| matches!(t.status, TaskStatus::Queued | TaskStatus::Running));
+                                if has_active {
+                                    app.confirm_quit = true;
+                                } else {
+                                    break 'main;
+                                }
+                            },
 
                             Action::SubmitTask(task) => {
+                                app.add_user_message(&task);
+                                app.name_active_session_from(&task);
+                                app.set_active_session_status(app::SessionStatus::Active);
                                 let (task_id, session_id) = app.enqueue_task(task.clone());
                                 app.start_task(task_id);
                                 let tx = agent_tx.clone();
@@ -215,6 +284,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                             }
 
                             Action::QueueTask(task) => {
+                                app.add_user_message(&task);
                                 let (task_id, _) = app.enqueue_task(task);
                                 let task_short = task_id.to_string()[..6].to_string();
                                 app.output_text = if app.output_text.is_empty() {
@@ -276,11 +346,6 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                 app.focus_prev_panel();
                             }
 
-                            Action::OpenMatrix => {
-                                let _ = std::process::Command::new("xdg-open")
-                                    .arg("http://localhost:3000")
-                                    .spawn();
-                            }
                             Action::CancelTask => {
                                 if let Some(id) = app.active_task_id {
                                     app.complete_task(id, false);
@@ -292,6 +357,138 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                 app.cycle_provider();
                             }
 
+                            Action::ExecuteCommand(cmd) => {
+                                match cmd {
+                                    Command::Help => {
+                                        app.show_help = true;
+                                    }
+                                    Command::Why => {
+                                        if app.pipeline_stages.is_empty() {
+                                            app.add_notification(
+                                                NotificationLevel::Info,
+                                                "nenhum pipeline ativo para inspecionar".to_string(),
+                                            );
+                                        } else {
+                                            app.why_mode = true;
+                                        }
+                                    }
+                                    Command::Cancel => {
+                                        if let Some(id) = app.active_task_id {
+                                            app.complete_task(id, false);
+                                            app.output_text = "task cancelled via /cancel".to_string();
+                                        }
+                                    }
+                                    Command::Queue => {
+                                        let (queued, running, done, failed) = app.task_counts();
+                                        app.output_text = format!(
+                                            "── Queue ──\n  running: {}\n  queued:  {}\n  done:    {}\n  failed:  {}",
+                                            running, queued, done, failed
+                                        );
+                                        app.auto_scroll = true;
+                                    }
+                                    Command::Dequeue(n) => {
+                                        let queued_ids: Vec<_> = app.tasks.iter()
+                                            .filter(|t| matches!(t.status, TaskStatus::Queued))
+                                            .map(|t| t.id)
+                                            .collect();
+                                        if n > 0 && n <= queued_ids.len() {
+                                            let id = queued_ids[n - 1];
+                                            app.tasks.retain(|t| t.id != id);
+                                            app.output_text = format!("removed task {} from queue", n);
+                                        } else {
+                                            app.output_text = format!("no task at position {} in queue", n);
+                                        }
+                                        app.auto_scroll = true;
+                                    }
+                                    Command::Provider(name) => {
+                                        let found = LlmProvider::ALL.iter()
+                                            .find(|p| p.label().eq_ignore_ascii_case(&name));
+                                        if let Some(&provider) = found {
+                                            app.active_provider = provider;
+                                            app.add_system_message(&format!("provider → {}", provider.label()));
+                                        } else {
+                                            let names: Vec<&str> = LlmProvider::ALL.iter().map(|p| p.label()).collect();
+                                            app.output_text = format!("unknown provider: {}. Available: {}", name, names.join(", "));
+                                            app.auto_scroll = true;
+                                        }
+                                    }
+                                    Command::Preset(name) => {
+                                        app.apply_preset(&name);
+                                        app.add_system_message(&format!("preset → {}", name));
+                                    }
+                                    Command::Exit => {
+                                        if app.confirm_quit {
+                                            break 'main;
+                                        }
+                                        let has_active = app.active_task_id.is_some()
+                                            || app.tasks.iter().any(|t| matches!(t.status, TaskStatus::Queued | TaskStatus::Running));
+                                        if has_active {
+                                            app.confirm_quit = true;
+                                        } else {
+                                            break 'main;
+                                        }
+                                    }
+                                    Command::Clear => {
+                                        app.output_text.clear();
+                                        app.messages.clear();
+                                    }
+                                    Command::Search(term) => {
+                                        app.perform_search(&term);
+                                        if app.search_matches.is_empty() {
+                                            app.add_notification(NotificationLevel::Info, format!("/search: no matches for \"{}\"", term));
+                                        } else {
+                                            app.add_notification(NotificationLevel::Success, format!("/search: {} match(es) for \"{}\"", app.search_matches.len(), term));
+                                        }
+                                    }
+                                    Command::Steer(msg) => {
+                                        let srv = app.server_url.clone();
+                                        let key = api_key.clone();
+                                        let session = app.active_session;
+                                        let err_tx = agent_tx.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = post_agent_steer(&srv, &key, session, &msg).await {
+                                                let _ = err_tx.send(AgentStreamEvent::PipelineError {
+                                                    error: format!("Steer failed: {}", e),
+                                                }).await;
+                                            }
+                                        });
+                                    }
+                                    Command::Theme(name) => {
+                                        if let Some(theme) = Theme::from_label(&name) {
+                                            app.set_theme(theme);
+                                            app.add_notification(NotificationLevel::Success, format!("theme → {}", theme.label()));
+                                        } else {
+                                            let names: Vec<&str> = Theme::ALL.iter().map(|t| t.label()).collect();
+                                            app.add_notification(NotificationLevel::Warning, format!("unknown theme: {}. Available: {}", name, names.join(", ")));
+                                        }
+                                    }
+                                    Command::Stream(name) => {
+                                        if let Some(mode) = StreamMode::from_label(&name) {
+                                            app.set_stream_mode(mode);
+                                            app.add_notification(NotificationLevel::Success, format!("stream → {}", mode.label()));
+                                        } else {
+                                            let names: Vec<&str> = StreamMode::ALL.iter().map(|m| m.label()).collect();
+                                            app.add_notification(NotificationLevel::Warning, format!("unknown stream mode: {}. Available: {}", name, names.join(", ")));
+                                        }
+                                    }
+                                    Command::NewSession => {
+                                        app.new_session();
+                                        app.add_notification(NotificationLevel::Info, "nova sessão");
+                                    }
+                                    Command::Name(slot, name) => {
+                                        app.set_agent_name(slot - 1, name.clone());
+                                        app.add_notification(
+                                            NotificationLevel::Success,
+                                            format!("agente {} → {}", slot, name),
+                                        );
+                                    }
+                                    Command::Unknown(msg) => {
+                                        app.output_text = msg;
+                                        app.auto_scroll = true;
+                                    }
+                                }
+                            }
+
                             Action::None => {}
                         }
                     }
@@ -301,6 +498,8 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
 
             _ = tick.tick() => {
                 app.tick = app.tick.wrapping_add(1);
+                app.dismiss_expired_notifications();
+                app.advance_stream();
             }
         }
     }
@@ -313,7 +512,7 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
 
 // ── Key → Action ──────────────────────────────────────────────────────
 
-fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action {
+pub(super) fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action {
     match (code, mods) {
         // ── Quit ──────────────────────────────────────────────────────
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Action::Quit,
@@ -321,6 +520,24 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         // ── Multi-line input ──────────────────────────────────────────
         (KeyCode::Enter, KeyModifiers::SHIFT) => {
             app.insert_char('\n');
+        },
+
+        // ── Breakpoint: Y/N single-keystroke (no Enter needed) ───────
+        (KeyCode::Char('y' | 'Y'), KeyModifiers::NONE)
+            if app.pending_breakpoint.is_some() && app.input_buffer.is_empty() =>
+        {
+            return Action::ResolveBreakpoint {
+                resolution: "approve".to_string(),
+                instruction: None,
+            };
+        },
+        (KeyCode::Char('n' | 'N'), KeyModifiers::NONE)
+            if app.pending_breakpoint.is_some() && app.input_buffer.is_empty() =>
+        {
+            return Action::ResolveBreakpoint {
+                resolution: "reject".to_string(),
+                instruction: None,
+            };
         },
 
         // ── Submit task ───────────────────────────────────────────────
@@ -359,6 +576,10 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             let msg = std::mem::take(&mut app.input_buffer);
             app.cursor_pos = 0;
             app.history_commit(msg.clone());
+            // Check for /command prefix before dispatching
+            if let Some(cmd) = parse_command(&msg) {
+                return Action::ExecuteCommand(cmd);
+            }
             if app.active_task_id.is_none() {
                 return Action::SubmitTask(msg);
             } else {
@@ -368,14 +589,19 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
 
         // ── Agent keybindings ─────────────────────────────────────────
         (KeyCode::Char('p'), KeyModifiers::CONTROL) => return Action::TogglePipeline,
-        (KeyCode::Char('m'), KeyModifiers::CONTROL) => return Action::OpenMatrix,
         (KeyCode::Char('x'), KeyModifiers::CONTROL) => return Action::CancelTask,
         (KeyCode::Char('6'), KeyModifiers::CONTROL) => return Action::CycleProvider,
+        (KeyCode::Char('n'), KeyModifiers::CONTROL) => app.new_session(),
+
+        // ── Help ────────────────────────────────────────────────────────
+        (KeyCode::Char('?'), _) => {
+            app.show_help = !app.show_help;
+        },
 
         // ── Clear ─────────────────────────────────────────────────────
         (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
             app.messages.clear();
-            app.scroll_offset = 0;
+            app.scroll_offsets = [0; 3];
             app.auto_scroll = true;
         },
 
@@ -390,7 +616,28 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
         (KeyCode::Tab, KeyModifiers::SHIFT) | (KeyCode::BackTab, _) => {
             return Action::FocusPrevPanel;
         },
-        (KeyCode::Tab, _) => return Action::FocusNextPanel,
+        (KeyCode::Tab, _) => {
+            if app.input_buffer.starts_with('/') {
+                app.tab_complete_command();
+                return Action::None;
+            }
+            return Action::FocusNextPanel;
+        },
+        (KeyCode::Esc, _) if app.why_mode => {
+            app.why_mode = false;
+        },
+        (KeyCode::Esc, _) if app.confirm_quit => {
+            app.confirm_quit = false;
+        },
+        (KeyCode::Esc, _) if app.show_help => {
+            app.show_help = false;
+        },
+        (KeyCode::Esc, _) if app.search_term.is_some() && app.input_buffer.is_empty() => {
+            app.clear_search();
+        },
+        (KeyCode::Esc, _) if !app.notifications.is_empty() && app.input_buffer.is_empty() => {
+            app.dismiss_notification();
+        },
         (KeyCode::Esc, _) if !app.input_buffer.is_empty() => {
             app.input_buffer.clear();
             app.cursor_pos = 0;
@@ -415,12 +662,33 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.input_buffer.truncate(app.cursor_pos);
         },
 
-        // ── History navigation (shell-like) ──────────────────────────
+        // ── Up/Down: session nav when sidebar focused & input empty,
+        //    else shell-like input history ────────────────────────────
         (KeyCode::Up, KeyModifiers::NONE) => {
-            app.history_prev();
+            if app.focused_panel == Panel::Sessions && app.input_buffer.is_empty() {
+                app.select_session_prev();
+            } else {
+                app.history_prev();
+            }
         },
         (KeyCode::Down, KeyModifiers::NONE) => {
-            app.history_next();
+            if app.focused_panel == Panel::Sessions && app.input_buffer.is_empty() {
+                app.select_session_next();
+            } else {
+                app.history_next();
+            }
+        },
+
+        // ── Search navigation (n / N) ──────────────────────────────────
+        (KeyCode::Char('n'), KeyModifiers::NONE)
+            if app.search_term.is_some() && app.input_buffer.is_empty() =>
+        {
+            app.next_search_match();
+        },
+        (KeyCode::Char('N'), KeyModifiers::SHIFT)
+            if app.search_term.is_some() && app.input_buffer.is_empty() =>
+        {
+            app.prev_search_match();
         },
 
         // ── Scroll (PageUp/PageDown + Shift+arrow) ────────────────────
@@ -428,18 +696,22 @@ fn process_key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action 
             app.auto_scroll = true;
         },
         (KeyCode::Up, KeyModifiers::SHIFT) => {
-            app.scroll_offset = app.scroll_offset.saturating_sub(3);
+            let s = app.focused_scroll_mut();
+            *s = s.saturating_sub(3);
             app.auto_scroll = false;
         },
         (KeyCode::Down, KeyModifiers::SHIFT) => {
-            app.scroll_offset = app.scroll_offset.saturating_add(3);
+            let s = app.focused_scroll_mut();
+            *s = s.saturating_add(3);
         },
         (KeyCode::PageUp, _) => {
-            app.scroll_offset = app.scroll_offset.saturating_sub(10);
+            let s = app.focused_scroll_mut();
+            *s = s.saturating_sub(10);
             app.auto_scroll = false;
         },
         (KeyCode::PageDown, _) => {
-            app.scroll_offset = app.scroll_offset.saturating_add(10);
+            let s = app.focused_scroll_mut();
+            *s = s.saturating_add(10);
         },
 
         // ── Generic char input ────────────────────────────────────────
@@ -675,6 +947,12 @@ fn parse_sse_event(val: &serde_json::Value) -> Option<AgentStreamEvent> {
             stage: val["stage"].as_str()?.to_string(),
             confidence: val["confidence"].as_f64().map(|f| f as f32),
             latency_ms: val["latency_ms"].as_u64().unwrap_or(0),
+            // RWA provenance anchor — accept `provenance` or `anchor`; absent until
+            // the backend signs each stage (chain_sign/provenance_trace).
+            provenance: val["provenance"]
+                .as_str()
+                .or_else(|| val["anchor"].as_str())
+                .map(|s| s.to_string()),
         }),
         "stage_skipped" => {
             Some(AgentStreamEvent::StageSkipped { stage: val["stage"].as_str()?.to_string() })
@@ -880,3 +1158,6 @@ async fn check_server_health(app: &mut AppState) {
         },
     }
 }
+
+#[cfg(test)]
+mod behavior_tests;

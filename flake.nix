@@ -21,6 +21,14 @@
       url = "github:VoidNxSEC/phantom";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    owasaka = {
+    url = "github:VoidNxSEC/O.W.A.S.A.K.A.";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    spectre = {
+    url = "github:VoidNxSEC/spectre";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -33,7 +41,7 @@
     }@inputs:
     let
       moduleInputs = {
-        inherit (inputs) securellmBridge mlOpsApi;
+        inherit (inputs) securellmBridge mlOpsApi spectre owasaka;
       };
 
       neolandModule = import ./modules/applications/neoland.nix;
@@ -43,10 +51,31 @@
       mlOpsApiModule = import ./modules/applications/ml-ops-api.nix {
         inputs = moduleInputs;
       };
-      neolandLlmSuiteModule = import ./modules/applications/neoland-llm-suite.nix;
+      neolandLlmSuiteModule    = import ./modules/applications/neoland-llm-suite.nix;
+      spectreEventBusModule    = import ./modules/applications/spectre-event-bus.nix {
+        inputs = moduleInputs;
+      };
+      owasakaModule            = import ./modules/applications/owasaka.nix {
+        inputs = moduleInputs;
+      };
+      neolandStackModule       = import ./modules/applications/neoland-stack.nix {
+        inputs = moduleInputs;
+      };
     in
     {
       nixosModules = {
+        # ── Individual service modules ────────────────────────────────
+        neoland          = neolandModule;
+        securellmBridgeApi = securellmBridgeApiModule;
+        mlOpsApi         = mlOpsApiModule;
+        llmSuite         = neolandLlmSuiteModule;
+        spectreEventBus  = spectreEventBusModule;
+        owasaka          = owasakaModule;
+
+        # ── Composite: full stack in one import ───────────────────────
+        stack            = neolandStackModule;
+
+        # ── Default: all individual modules (no stack opinions) ───────
         default =
           { ... }:
           {
@@ -55,12 +84,10 @@
               securellmBridgeApiModule
               mlOpsApiModule
               neolandLlmSuiteModule
+              spectreEventBusModule
+              owasakaModule
             ];
           };
-        neoland = neolandModule;
-        securellmBridgeApi = securellmBridgeApiModule;
-        mlOpsApi = mlOpsApiModule;
-        llmSuite = neolandLlmSuiteModule;
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -248,7 +275,7 @@
           neoland = neolandPackage;
         };
 
-        formatter = pkgs.nixfmt-rfc-style;
+        formatter = pkgs.nixfmt-tree;
 
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
@@ -263,6 +290,7 @@
             [
               rustToolchain
               cargo-audit # supply-chain CVE scanning — `cargo audit` no CI e local
+              cargo-watch # `just watch` — hot-reload check on save
               openssl
               sops
               age
@@ -283,6 +311,14 @@
           PKG_CONFIG_PATH = "$SHELL";
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+            # Spectre event bus — NATS already running via Docker (spectre-nats:4222).
+            # Override to point at a different bus if needed.
+            export NEOLAND_NATS_URL="''${NEOLAND_NATS_URL:-nats://127.0.0.1:4222}"
+
+            # Spectre observability endpoints (for `just doctor` / tracing)
+            export SPECTRE_JAEGER_URL="''${SPECTRE_JAEGER_URL:-http://127.0.0.1:16686}"
+            export OTEL_EXPORTER_OTLP_ENDPOINT="''${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}"
 
             # Make ai-agent-os available at the expected relative path for cargo path overrides.
             # .cargo/config.toml patches hyprland-ipc via ../ai-agent-os/crates/hyprland-ipc.
@@ -315,30 +351,44 @@
             agents-test-contract() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m contract -v "$@"); }
             agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m integration -v "$@"); }
 
+            # Short aliases: nd = doctor, nt = test (no SOPS)
+            alias nd="neoland-doctor"
+            alias nt="cargo test --lib"
+
             if [[ $- == *i* ]]; then
               echo ""
-              echo "┌─────────────────────────────────────────────────────────────────┐"
-              echo "│  Neoland Dev Shell (v0.1.0-rc.1)                               │"
-              echo "└─────────────────────────────────────────────────────────────────┘"
+              echo "  ╭─────────────────────────────────────────────────────────────╮"
+              echo "  │  Neoland dev shell                                          │"
+              echo "  ╰─────────────────────────────────────────────────────────────╯"
               echo ""
-              echo "  neoland server              # gRPC :50051 + REST :3001"
-              echo "  neoland client              # TUI"
-              echo "  neoland doctor --json       # diagnose all layers"
-              echo "  neoland test --json         # health check"
-              echo "  neoland restart             # kill + restart server"
+              echo "  Run                    Alias"
+              echo "  ─────────────────────  ──────"
+              echo "  neoland client  / TUI  ncli"
+              echo "  neoland server         nsrv"
+              echo "  neoland doctor         nd"
+              echo "  cargo test --lib       nt"
+              echo ""
+              echo "  just dev               # servidor + TUI juntos (Ctrl+C mata tudo)"
+              echo "  just serve             # só servidor (ncli em outro terminal)"
+              echo "  just tui               # TUI standalone (servidor já deve estar up)"
+              echo "  just ci                # check → fmt → clippy → test"
+              echo "  just watch             # cargo-watch re-check on save"
+              echo "  just visual            # ASCII preview do TUI"
+              echo "  just fix               # fmt + clippy --fix"
+              echo ""
+              echo "  TUI commands once inside:  /why  /steer  /search  /name  /help"
               echo ""
               echo "  Agents:"
-              echo "    agents-start              # DSPy pipeline :8001 (uvicorn --reload)"
-              echo "    agents-test-contract      # pytest -m contract (no LLM)"
-              echo "    agents-test-integration   # pytest -m integration"
+              echo "    agents-start           # DSPy :8001 (uvicorn --reload)"
+              echo "    agents-test-contract   # pytest -m contract"
               echo ""
-              echo "  Dev:"
-              echo "    just check / test / clippy / build"
-              echo "    just smoke     # full 9-layer stack smoke"
-              echo "    just preflight # all release gates"
-              echo "    just secrets-edit / secrets-view"
+              echo "  Spectre stack (Docker):"
+              echo "    NATS    nats://127.0.0.1:4222  (event bus)"
+              echo "    Jaeger  http://127.0.0.1:16686  (tracing)"
+              echo "    Grafana http://127.0.0.1:3005   (metrics)"
               echo ""
-              echo "  Run 'just' for the full recipe list."
+              echo "  NixOS modules: neoland · spectreEventBus · owasaka · stack"
+              echo "  Run 'just' to list all recipes."
               echo ""
             fi
           '';

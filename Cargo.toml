@@ -2,7 +2,7 @@
 name = "neoland"
 version = "0.1.0"
 edition = "2021"
-authors = ["voidnxlabs <dev@voidnxlabs.io>"]
+authors = ["voidnxlabs <sec@voidnxlabs.com>"]
 
 [[bin]]
 name = "neoland"
@@ -10,7 +10,7 @@ path = "src/bin/neoland.rs"
 
 [dependencies]
 # CLI & Logging
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
@@ -78,12 +78,11 @@ hf-hub = "0.3"
 # Git dependencies with pinned revisions for reproducible builds.
 # For local development, override with path in .cargo/config.toml:
 #   [patch.'ssh://git@github.com/marcosfpina/securellm-bridge.git']
-#   securellm-core = { path = "../securellm-bridge/crates/core" }
-securellm-core = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
-securellm-providers = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
-securellm-security = { git = "ssh://git@github.com/marcosfpina/securellm-bridge.git", rev = "2ab91ce", default-features = false }
-intelagent-core = { git = "ssh://git@github.com/marcosfpina/phantom.git", rev = "6089119", default-features = false }
-hyprland-ipc = { git = "ssh://git@github.com/marcosfpina/ai-agent-os.git", rev = "f583d01", default-features = false }
+securellm-core = { path = "../securellm-bridge/crates/core" }
+securellm-providers = { path = "../securellm-bridge/crates/providers" }
+securellm-security = { path = "../securellm-bridge/crates/security" }
+intelagent-core = { path = "../intelagent/crates/core" }
+hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
 
 
 [build-dependencies]

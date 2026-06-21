@@ -41,7 +41,7 @@ the control plane itself.
          └───────────────────────┘
 
          DSPy Pipeline      :8001  (Python · FastAPI)
-         ADR Ledger         Merkle chain · secp256k1 · NATS JetStream
+         ADR Ledger         Merkle chain · secp256k1 · NATS JetStream 
 ```
 
 ---
