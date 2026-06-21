@@ -238,6 +238,8 @@ Neoland está pronto para o primeiro corte público quando **todos** forem verda
 
 ---
 
+
+
 ## Score Policy
 
 Não aumentar o score sem evidência:
