@@ -158,44 +158,41 @@ pub async fn check_llm_health() -> ComponentHealth {
 
 async fn check_llm_health_with_url(base_url: &str) -> ComponentHealth {
     let start = std::time::Instant::now();
-    let probe_url = format!("{}/health", base_url.trim_end_matches('/'));
+    let base = base_url.trim_end_matches('/');
+    let probe_urls = [format!("{base}/health"), format!("{base}/api/health")];
+    let client = reqwest::Client::new();
+    let mut last_error = None;
 
-    let result = reqwest::Client::new()
-        .get(&probe_url)
-        .timeout(Duration::from_secs(2))
-        .send()
-        .await;
+    for probe_url in &probe_urls {
+        match client.get(probe_url).timeout(Duration::from_secs(2)).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                let elapsed = start.elapsed().as_millis() as u64;
+                debug!("LLM gateway health check OK in {}ms", elapsed);
+                return ComponentHealth {
+                    name: "llm_provider".to_string(),
+                    status: HealthStatus::Healthy,
+                    message: format!("SecureLLM Bridge reachable at {}", probe_url),
+                    response_time_ms: Some(elapsed),
+                };
+            },
+            Ok(resp) => {
+                last_error = Some(format!("{} returned HTTP {}", probe_url, resp.status()));
+            },
+            Err(e) => {
+                last_error = Some(format!("{} failed ({})", probe_url, e));
+            },
+        }
+    }
 
     let elapsed = start.elapsed().as_millis() as u64;
-
-    match result {
-        Ok(resp) if resp.status().is_success() => {
-            debug!("LLM gateway health check OK in {}ms", elapsed);
-            ComponentHealth {
-                name: "llm_provider".to_string(),
-                status: HealthStatus::Healthy,
-                message: format!("SecureLLM Bridge reachable at {}", base_url),
-                response_time_ms: Some(elapsed),
-            }
-        },
-        Ok(resp) => {
-            warn!("LLM gateway returned {}", resp.status());
-            ComponentHealth {
-                name: "llm_provider".to_string(),
-                status: HealthStatus::Degraded,
-                message: format!("SecureLLM Bridge returned HTTP {}", resp.status()),
-                response_time_ms: Some(elapsed),
-            }
-        },
-        Err(e) => {
-            warn!("LLM gateway unreachable: {}", e);
-            ComponentHealth {
-                name: "llm_provider".to_string(),
-                status: HealthStatus::Degraded,
-                message: format!("SecureLLM Bridge unreachable ({})", base_url),
-                response_time_ms: Some(elapsed),
-            }
-        },
+    let message =
+        last_error.unwrap_or_else(|| format!("SecureLLM Bridge unreachable ({base_url})"));
+    warn!("LLM gateway health check degraded: {}", message);
+    ComponentHealth {
+        name: "llm_provider".to_string(),
+        status: HealthStatus::Degraded,
+        message,
+        response_time_ms: Some(elapsed),
     }
 }
 

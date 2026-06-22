@@ -10,6 +10,7 @@ _PROVIDER_DEFAULTS: dict[str, str] = {
     "gemini": "gemini/gemini-1.5-flash",
     "openai": "gpt-4o-mini",
     "local": "ollama_chat/llama3.2",
+    "securellm": "llamacpp/local-model",
 }
 
 
@@ -21,15 +22,24 @@ def _resolve_api_key(provider: str) -> str:
     return os.getenv(f"{provider.upper()}_API_KEY", "")
 
 
+def _securellm_api_base() -> str:
+    """Resolve a base OpenAI-compatible do SecureLLM Bridge."""
+    raw = os.getenv("SECURELLM_BASE_URL") or os.getenv("NEOLAND_GATEWAY_URL", "http://127.0.0.1:8080")
+    base = raw.rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
+
+
 class Settings:
     dspy_url: str = os.getenv("NEOLAND_DSPY_URL", "http://localhost:8001")
     db_url: str = os.getenv("DATABASE_URL", "postgresql://localhost/neoland")
-    # Default: deepseek — funciona sem OPENAI_API_KEY.
-    # Override via NEOLAND_LLM_PROVIDER=groq|gemini|openai|local
-    llm_provider: str = os.getenv("NEOLAND_LLM_PROVIDER", "deepseek")
+    # Default: securellm — keeps the agent pipeline behind the local gateway.
+    # Override via NEOLAND_LLM_PROVIDER=securellm|groq|gemini|openai|deepseek|local
+    llm_provider: str = os.getenv("NEOLAND_LLM_PROVIDER", "securellm")
     llm_model: str = os.getenv(
         "NEOLAND_LLM_MODEL",
-        _PROVIDER_DEFAULTS.get(os.getenv("NEOLAND_LLM_PROVIDER", "deepseek"), "deepseek-chat"),
+        _PROVIDER_DEFAULTS.get(os.getenv("NEOLAND_LLM_PROVIDER", "securellm"), "llamacpp/local-model"),
     )
     checkpoint_dir: str = os.getenv("NEOLAND_CHECKPOINT_DIR", "/var/lib/neoland/checkpoints/adr")
     pipeline_port: int = int(os.getenv("NEOLAND_PIPELINE_PORT", "8001"))
@@ -47,6 +57,13 @@ class Settings:
                 model=self.llm_model,
                 api_base=ollama_base,
                 api_key="ollama",  # litellm exige valor não-vazio
+            )
+
+        if self.llm_provider == "securellm":
+            return dspy.LM(
+                model=f"openai/{self.llm_model}",
+                api_base=_securellm_api_base(),
+                api_key=api_key or "securellm-local",
             )
 
         return dspy.LM(

@@ -38,6 +38,22 @@ dev:
 # Servidor standalone — cliente roda em outro terminal (ncli ou just tui)
 serve: server
 
+# Bootstrap all-inclusive: symlink + Docker bridge + agents + server + checks + smoke
+bootstrap:
+    bash scripts/bootstrap-local.sh run
+
+# Bootstrap full validation, including long end-to-end task
+bootstrap-full:
+    bash scripts/bootstrap-local.sh full
+
+# Start local stack only
+up:
+    bash scripts/bootstrap-local.sh start
+
+# Stop local stack
+down:
+    bash scripts/bootstrap-local.sh stop
+
 # CI pipeline: check → fmt-check → clippy → test (all must pass)
 ci: check fmt-check clippy test
 
@@ -138,7 +154,7 @@ client-raw:
 
 # Environment diagnostics with SOPS secrets loaded
 doctor:
-    bash scripts/neoland-run.sh doctor -- --json
+    bash scripts/neoland-run.sh doctor --json
 
 # Cargo direct (no SOPS)
 doctor-raw:
@@ -146,7 +162,47 @@ doctor-raw:
 
 # Start DSPy agent pipeline (Python/FastAPI)
 agents-start:
-    cd agents && poetry run uvicorn neoland_agents.app:app --reload --port 8001
+    bash scripts/agents-run.sh start
+
+# Create/repair local securellm-bridge symlink
+bridge-link:
+    bash scripts/securellm-bridge-docker.sh link
+
+# Build SecureLLM Bridge Docker image
+bridge-build:
+    bash scripts/securellm-bridge-docker.sh build
+
+# Start SecureLLM Bridge Docker container
+bridge-start:
+    bash scripts/securellm-bridge-docker.sh start
+
+# Stop SecureLLM Bridge Docker container
+bridge-stop:
+    bash scripts/securellm-bridge-docker.sh stop
+
+# Show SecureLLM Bridge Docker status
+bridge-status:
+    bash scripts/securellm-bridge-docker.sh status
+
+# Probe SecureLLM Bridge health endpoint
+bridge-health:
+    bash scripts/securellm-bridge-docker.sh health
+
+# Show recent SecureLLM Bridge logs
+bridge-logs:
+    bash scripts/securellm-bridge-docker.sh logs
+
+# Start local operational stack: bridge + agents + server
+stack-start:
+    bash scripts/neoland-stack.sh start
+
+# Stop local operational stack
+stack-stop:
+    bash scripts/neoland-stack.sh stop
+
+# Show local operational stack status
+stack-status:
+    bash scripts/neoland-stack.sh status
 
 # ─── Secrets ──────────────────────────────────────────────────────────────
 
@@ -185,9 +241,13 @@ audit:
 roadmap:
     cat ROADMAP.md
 
-# Full-stack smoke: Neoland → SecureLLM → ml-ops → llama.cpp
+# Full-stack smoke: Neoland → SecureLLM → agents; ml-ops is optional by default
 smoke:
     bash scripts/smoke-full-stack.sh
+
+# Long smoke: includes POST /v1/agents/task through the full DSPy pipeline
+smoke-task:
+    bash scripts/smoke-full-stack.sh --task
 
 # SLO validation: load test /live and /health against defined targets (requires hey)
 validate-slo:

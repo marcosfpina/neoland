@@ -1150,8 +1150,7 @@ pub(crate) async fn list_agent_sessions(
     path = "/v1/agents/health",
     tag = "agents",
     responses(
-        (status = 200, description = "Pipeline up", body = AgentHealthResponse),
-        (status = 503, description = "Pipeline down or disabled", body = AgentHealthResponse),
+        (status = 200, description = "Pipeline health state", body = AgentHealthResponse),
     )
 )]
 pub(crate) async fn agent_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -1162,12 +1161,12 @@ pub(crate) async fn agent_health_handler(State(state): State<Arc<AppState>>) -> 
                     .into_response()
             },
             Ok(false) => (
-                StatusCode::SERVICE_UNAVAILABLE,
+                StatusCode::OK,
                 Json(serde_json::json!({"status": "degraded", "pipeline": "down"})),
             )
                 .into_response(),
             Err(e) => (
-                StatusCode::SERVICE_UNAVAILABLE,
+                StatusCode::OK,
                 Json(serde_json::json!({"status": "error", "error": e.to_string()})),
             )
                 .into_response(),
@@ -1467,13 +1466,25 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
                                 // Optionally attach NATS publisher (Ciclo 1 — Fase B)
                                 let orch = if cfg.nats.enabled {
                                     use crate::agents::nats::NatsPublisher;
-                                    match NatsPublisher::connect(&cfg.nats).await {
-                                        Ok(publisher) => {
+                                    match tokio::time::timeout(
+                                        Duration::from_secs(2),
+                                        NatsPublisher::connect(&cfg.nats),
+                                    )
+                                    .await
+                                    {
+                                        Ok(Ok(publisher)) => {
                                             info!(url = %cfg.nats.url, "NATS publisher attached");
                                             orch.with_nats(publisher)
                                         },
-                                        Err(e) => {
+                                        Ok(Err(e)) => {
                                             tracing::warn!(error = %e, "NATS connect failed — events disabled");
+                                            orch
+                                        },
+                                        Err(_) => {
+                                            tracing::warn!(
+                                                url = %cfg.nats.url,
+                                                "NATS connect timed out — events disabled"
+                                            );
                                             orch
                                         },
                                     }

@@ -40,6 +40,14 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 static SERVER_THREAD_STARTED: OnceLock<()> = OnceLock::new();
 
 fn spawn_server_thread() {
+    // Keep REST contract tests deterministic: do not call a live DSPy pipeline
+    // from the developer machine, and fail fast when task execution is probed.
+    unsafe {
+        std::env::set_var("NEOLAND_DSPY_URL", "http://127.0.0.1:9");
+        std::env::set_var("NEOLAND_PIPELINE_TIMEOUT_SECS", "2");
+        std::env::set_var("NEOLAND_NATS_ENABLED", "false");
+    }
+
     std::thread::spawn(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
