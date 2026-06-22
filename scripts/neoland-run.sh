@@ -23,11 +23,19 @@ load_sops_env() {
     set +a
 }
 
+apply_runtime_defaults() {
+    export NEOLAND_DSPY_URL="${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
+    export NEOLAND_GATEWAY_URL="${NEOLAND_GATEWAY_URL:-http://127.0.0.1:8080}"
+    export NEOLAND_PIPELINE_TIMEOUT_SECS="${NEOLAND_PIPELINE_TIMEOUT_SECS:-300}"
+}
+
 main() {
     local sops_env_file="${NEOLAND_SOPS_ENV_FILE:-$DEFAULT_SOPS_ENV_FILE}"
     if [[ -f "$sops_env_file" ]]; then
         load_sops_env "$sops_env_file"
     fi
+
+    apply_runtime_defaults
 
     exec cargo run --manifest-path "$PROJECT_ROOT/Cargo.toml" --bin neoland -- "$@"
 }

@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
-# Full-stack smoke: Neoland → SecureLLM Bridge → ml-ops-api → llama.cpp
+# Full-stack smoke: Neoland → SecureLLM Bridge → agents pipeline
 # Records evidence to /tmp/neoland-smoke-<timestamp>.log
 # Usage: nix develop --command bash scripts/smoke-full-stack.sh
 
 set -euo pipefail
+
+RUN_TASK="${NEOLAND_SMOKE_RUN_TASK:-0}"
+case "${1:-}" in
+  --task|task) RUN_TASK=1 ;;
+  -h|--help|help)
+    cat <<'USAGE'
+Usage: scripts/smoke-full-stack.sh [--task]
+
+Default smoke validates service reachability, SecureLLM Bridge chat, and doctor.
+Use --task to also run the long Neoland → DSPy pipeline task.
+USAGE
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "Unknown argument: $1" >&2
+    exit 2
+    ;;
+esac
 
 # Load SOPS secrets to match the running server's API key
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,10 +35,12 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOG="/tmp/neoland-smoke-${TIMESTAMP}.log"
 PASS=0
 FAIL=0
+WARN=0
 
 log() { echo "$*" | tee -a "$LOG"; }
 ok()   { log "  [OK]  $*"; PASS=$((PASS+1)); }
 fail() { log "  [FAIL] $*"; FAIL=$((FAIL+1)); }
+warn() { log "  [WARN] $*"; WARN=$((WARN+1)); }
 section() { log ""; log "── $* ──────────────────────────────────────────────────"; }
 
 NEOLAND_URL="${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
@@ -28,8 +49,10 @@ MLOPS_URL="${ML_OPS_API_URL:-http://127.0.0.1:8083}"
 LLAMACPP_URL="${LLAMACPP_URL:-http://127.0.0.1:8081}"
 DSPY_URL="${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
 API_KEY="${NEOLAND_ADMIN_API_KEY:-neoland_admin_dev_key_change_in_production}"
+REQUIRE_MLOPS="${REQUIRE_MLOPS:-0}"
+TASK_TIMEOUT_SECS="${NEOLAND_SMOKE_TASK_TIMEOUT_SECS:-180}"
 
-log "Neoland Full-Stack Smoke — ${TIMESTAMP}"
+log "Neoland SecureLLM Smoke — ${TIMESTAMP}"
 log "Log: ${LOG}"
 
 # ── 1. Control Plane ──────────────────────────────────────────────────────
@@ -75,12 +98,14 @@ else
 fi
 
 # ── 4. ml-ops-api ─────────────────────────────────────────────────────────
-section "4. ml-ops-api (${MLOPS_URL})"
+section "4. ml-ops-api (${MLOPS_URL}, optional)"
 
 if curl -sf "${MLOPS_URL}/health" -o /dev/null 2>/dev/null; then
   ok "/health reachable"
-else
+elif [[ "$REQUIRE_MLOPS" == "1" ]]; then
   fail "/health unreachable at ${MLOPS_URL} — start ml-ops-api"
+else
+  warn "/health unreachable at ${MLOPS_URL} — optional for SecureLLM Bridge workflow"
 fi
 
 # ── 5. llama.cpp ──────────────────────────────────────────────────────────
@@ -92,26 +117,55 @@ else
   fail "/health unreachable at ${LLAMACPP_URL} — start llama-server"
 fi
 
-# ── 6. End-to-end task ───────────────────────────────────────────────────
-section "6. End-to-end task (Neoland → pipeline)"
+# ── 6. SecureLLM chat completion ──────────────────────────────────────────
+section "6. SecureLLM chat completion"
 
-TASK_RESP=$(curl -s -X POST "${NEOLAND_URL}/v1/agents/task" \
-  -H "X-API-Key: ${API_KEY}" \
+BRIDGE_BODY_FILE="${LOG}.bridge-chat.json"
+: >"$BRIDGE_BODY_FILE"
+BRIDGE_STATUS=$(curl -s -o "$BRIDGE_BODY_FILE" -w "%{http_code}" -X POST "${GATEWAY_URL}/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -d '{"task":"smoke test: confirm pipeline is reachable"}' \
-  --max-time 30 2>/dev/null || echo "")
+  -d '{"model":"llamacpp/local-model","messages":[{"role":"user","content":"Say ok"}],"max_tokens":8}' \
+  --max-time 45 2>/dev/null || true)
+BRIDGE_STATUS="${BRIDGE_STATUS:-000}"
+BRIDGE_RESP="$(tr '\n' ' ' <"$BRIDGE_BODY_FILE" 2>/dev/null || true)"
 
-if [ -n "$TASK_RESP" ]; then
-  ok "POST /v1/agents/task returned response"
-  log "    response: ${TASK_RESP:0:200}..."
+if [[ "$BRIDGE_STATUS" =~ ^2[0-9][0-9]$ ]]; then
+  ok "POST /v1/chat/completions returned HTTP ${BRIDGE_STATUS}"
+  log "    response: ${BRIDGE_RESP:0:200}..."
 else
-  fail "POST /v1/agents/task failed or timed out"
+  fail "POST /v1/chat/completions returned HTTP ${BRIDGE_STATUS}"
+  log "    response: ${BRIDGE_RESP:0:400}..."
 fi
 
-# ── 7. Doctor ─────────────────────────────────────────────────────────────
-section "7. neoland doctor --json"
+# ── 7. Optional end-to-end task ───────────────────────────────────────────
+section "7. End-to-end task (optional Neoland → pipeline)"
 
-DOCTOR=$(nix develop --command cargo run --bin neoland --quiet -- doctor --json 2>/dev/null || echo "")
+TASK_BODY_FILE="${LOG}.task-response.json"
+: >"$TASK_BODY_FILE"
+if [[ "$RUN_TASK" == "1" ]]; then
+  TASK_STATUS=$(curl -s -o "$TASK_BODY_FILE" -w "%{http_code}" -X POST "${NEOLAND_URL}/v1/agents/task" \
+    -H "X-API-Key: ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"task":"smoke test: confirm pipeline is reachable"}' \
+    --max-time "$TASK_TIMEOUT_SECS" 2>/dev/null || true)
+  TASK_STATUS="${TASK_STATUS:-000}"
+  TASK_RESP="$(tr '\n' ' ' <"$TASK_BODY_FILE" 2>/dev/null || true)"
+
+  if [[ "$TASK_STATUS" =~ ^2[0-9][0-9]$ ]]; then
+    ok "POST /v1/agents/task returned HTTP ${TASK_STATUS}"
+    log "    response: ${TASK_RESP:0:200}..."
+  else
+    fail "POST /v1/agents/task returned HTTP ${TASK_STATUS}"
+    log "    response: ${TASK_RESP:0:400}..."
+  fi
+else
+  warn "skipped long task; run: just smoke-task"
+fi
+
+# ── 8. Doctor ─────────────────────────────────────────────────────────────
+section "8. neoland doctor --json"
+
+DOCTOR=$(bash scripts/neoland-run.sh doctor --json 2>/dev/null || echo "")
 if [ -n "$DOCTOR" ]; then
   ok "doctor responded"
   log "    ${DOCTOR:0:400}..."
@@ -121,7 +175,7 @@ fi
 
 # ── Summary ───────────────────────────────────────────────────────────────
 section "Summary"
-log "  PASS: ${PASS}  FAIL: ${FAIL}"
+log "  PASS: ${PASS}  WARN: ${WARN}  FAIL: ${FAIL}"
 log "  Full log: ${LOG}"
 
 if [ "$FAIL" -gt 0 ]; then
