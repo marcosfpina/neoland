@@ -2,9 +2,9 @@ name: ADR Validation & Enforcement
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 env:
   ADR_ROOT: ${{ github.workspace }}
@@ -22,14 +22,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install OPA
         uses: open-policy-agent/setup-opa@v2
@@ -100,12 +100,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install Python dependencies
         run: pip install pyyaml pynacl
@@ -164,7 +164,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install OPA
         uses: open-policy-agent/setup-opa@v2
@@ -181,14 +181,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Detect features in commit
         id: detect
@@ -230,12 +230,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install Python dependencies
         run: pip install pyyaml pynacl jsonschema
@@ -262,12 +262,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install dependencies
         run: pip install pyyaml jsonschema
@@ -324,7 +324,15 @@ jobs:
   summary:
     name: Validation Summary
     runs-on: ubuntu-latest
-    needs: [validate-adrs, chain-integrity, enforcement-smoke, detect-features, stf-compliance-check, code-quality]
+    needs:
+      [
+        validate-adrs,
+        chain-integrity,
+        enforcement-smoke,
+        detect-features,
+        stf-compliance-check,
+        code-quality,
+      ]
     if: always()
 
     steps:
