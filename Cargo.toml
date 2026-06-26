@@ -51,8 +51,8 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 memmap2 = "0.9"
 
 # NATS event bus (Ciclo 1 — Fase B)
-spectre-events = { path = "../spectre/crates/spectre-events" }
-spectre-core = { path = "../spectre/crates/spectre-core" }
+spectre-events = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548dd5652394b93b4404bf62cfb2624ab3e68" }
+spectre-core = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548dd5652394b93b4404bf62cfb2624ab3e68" }
 async-nats = "0.46"
 thiserror = "1.0"
 
@@ -76,13 +76,12 @@ hf-hub = "0.3"
 
 # Integration Dependencies
 # Git dependencies with pinned revisions for reproducible builds.
-# For local development, override with path in .cargo/config.toml:
-#   [patch.'ssh://git@github.com/marcosfpina/securellm-bridge.git']
-securellm-core = { path = "../securellm-bridge/crates/core" }
-securellm-providers = { path = "../securellm-bridge/crates/providers" }
-securellm-security = { path = "../securellm-bridge/crates/security" }
-intelagent-core = { path = "../intelagent/crates/core" }
-hyprland-ipc = { path = "../ai-agent-os/crates/hyprland-ipc" }
+# For local development, override with path in .cargo/config.toml.
+securellm-core = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
+securellm-providers = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
+securellm-security = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
+intelagent-core = { git = "https://github.com/marcosfpina/IntelAgent.git", rev = "4b340000a5f09e491264aead6d7a4a41166e421f" }
+hyprland-ipc = { git = "https://github.com/VoidNxSEC/ai-agent-os.git", rev = "3f6ff84b9dbc76e8ad2bff80848d3e68953de93c" }
 
 
 [build-dependencies]
