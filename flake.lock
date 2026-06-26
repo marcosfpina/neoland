@@ -19,11 +19,11 @@
     "aiAgentOs": {
       "flake": false,
       "locked": {
-        "lastModified": 1778963617,
-        "narHash": "sha256-ZTHvrj1RF0CXiip261C0V9eWkTFeSRQI2e/dvXTJHyU=",
+        "lastModified": 1782362170,
+        "narHash": "sha256-tE6X4npAHC5432Qs5p+iLYdAhXM4hYnOizrOv5ilhN8=",
         "owner": "VoidNxSEC",
         "repo": "ai-agent-os",
-        "rev": "3f6ff84b9dbc76e8ad2bff80848d3e68953de93c",
+        "rev": "bd395ca7af532efa7ff502da4d6a075208ef50cf",
         "type": "github"
       },
       "original": {
@@ -164,11 +164,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1778963838,
-        "narHash": "sha256-7sjm5LALOg7x3yT/ceRivIK5IBD1j6HwmSkupElo3TY=",
+        "lastModified": 1782179917,
+        "narHash": "sha256-AoFVNkKjuG7PkRub7bRnHsVclLDDPuyO7zJUAiEBsl8=",
         "owner": "VoidNxSEC",
         "repo": "ml-ops-api",
-        "rev": "f685ab124b592c731f88b0b37bec328c1dde5c8d",
+        "rev": "48be9511d33bc42667db079d63cbe768d654d1b9",
         "type": "github"
       },
       "original": {
@@ -195,11 +195,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1780243769,
-        "narHash": "sha256-x5UQuRsH3MqI0U9afaXSNqzTPSeZlRLvFAav2Ux1pNw=",
+        "lastModified": 1781577229,
+        "narHash": "sha256-lrp67w8AulE9Ks53n27I45ADSzbOCn4H+CNW1Ck8B+8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "331800de5053fcebacf6813adb5db9c9dca22a0c",
+        "rev": "567a49d1913ce81ac6e9582e3553dd90a955875f",
         "type": "github"
       },
       "original": {
@@ -249,11 +249,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779910389,
-        "narHash": "sha256-doafbnkEqFyaDJ9Ov5ajUufgRhDt0fPRB/0gzzLmSAg=",
+        "lastModified": 1782140932,
+        "narHash": "sha256-+Q83ymPiJBNf+OC8ehgnLF2VOigSPAdrDEb1Z4Cs2Go=",
         "owner": "VoidNxSEC",
         "repo": "O.W.A.S.A.K.A.",
-        "rev": "c554a60886806af49611ea2107910f85c8088eab",
+        "rev": "9c0e81896f6a602ba374bfe641daaa236353d76e",
         "type": "github"
       },
       "original": {
@@ -273,11 +273,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1780420974,
-        "narHash": "sha256-eY12e4Q2gHSwPDGcpz+I6nSC6J3re2rJuiBsPw0xleE=",
+        "lastModified": 1782180052,
+        "narHash": "sha256-OKN62zZGODx0W4jPJsJsHI9fNFUbf9dfdxTct+EYQrk=",
         "owner": "VoidNxSEC",
         "repo": "phantom",
-        "rev": "a671cf5b05a635dbde63d1d3270da4ad12d82567",
+        "rev": "22afa888d9647da3781ae06f1b50f97f37d4f6f4",
         "type": "github"
       },
       "original": {
@@ -343,11 +343,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1780370483,
-        "narHash": "sha256-7mDa7OBAaf7MU6ZovT9ENfD62kH911SsSazBb4KTDF0=",
+        "lastModified": 1782443907,
+        "narHash": "sha256-P+pADLtK7qC1mz0/5Xq9uF77oahUR4zYLTaitiHsUHg=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "4a408e1fc99ad517b4cb402fd0de7464f40c05e1",
+        "rev": "4b06ff4acf3491ff69721df852507fcc51d0a13d",
         "type": "github"
       },
       "original": {
@@ -404,11 +404,11 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1780429011,
-        "narHash": "sha256-5zulmcjAAOZQ4qkBclzew3S1dFkZSWFZqNg2/yjLIaY=",
+        "lastModified": 1782374370,
+        "narHash": "sha256-l+dlt5DluwL4ADSNi+DqLKTfahu7aiW64/EEQgXVDsw=",
         "owner": "VoidNxSEC",
         "repo": "securellm-bridge",
-        "rev": "9d8e04d19452e8f97d2a1e56e1e5e05b6c4c9e19",
+        "rev": "1135bdc13f0ec9127576ef6518949f91b26c0ff6",
         "type": "github"
       },
       "original": {
@@ -448,11 +448,11 @@
         "sops-nix": "sops-nix"
       },
       "locked": {
-        "lastModified": 1778963652,
-        "narHash": "sha256-HNAR9/G0wCy8x10U1GPvPRDZlH+RLWLon+wXcaC5Jyk=",
+        "lastModified": 1782056810,
+        "narHash": "sha256-7JS2CUGF/Vy+nXV7IZrhFyrJCxOltpciSQQkOvfoYcY=",
         "owner": "VoidNxSEC",
         "repo": "spectre",
-        "rev": "48f21c5ae14d8779b18bed100920bfe77196e8a5",
+        "rev": "7f9548dd5652394b93b4404bf62cfb2624ab3e68",
         "type": "github"
       },
       "original": {
