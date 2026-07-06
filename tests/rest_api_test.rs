@@ -46,6 +46,11 @@ fn spawn_server_thread() {
         std::env::set_var("NEOLAND_DSPY_URL", "http://127.0.0.1:9");
         std::env::set_var("NEOLAND_PIPELINE_TIMEOUT_SECS", "2");
         std::env::set_var("NEOLAND_NATS_ENABLED", "false");
+        // Avoid blocking server startup on a HuggingFace Hub download —
+        // CI runners have no cached model and may lack network access to
+        // huggingface.co, which was pushing the /health check past its
+        // 60s startup budget.
+        std::env::set_var("NEOLAND_SKIP_EMBEDDINGS", "true");
     }
 
     std::thread::spawn(|| {
