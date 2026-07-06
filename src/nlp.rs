@@ -8,9 +8,10 @@ use hf_hub::{api::sync::Api, Repo, RepoType};
 use lru::LruCache;
 use tokenizers::Tokenizer;
 
+const EMBEDDING_DIM: usize = 384;
+
 pub struct EmbeddingModel {
-    model: BertModel,
-    tokenizer: Tokenizer,
+    inner: Option<(BertModel, Tokenizer)>,
     device: Device,
 }
 
@@ -29,6 +30,14 @@ pub struct VectorStore {
 impl EmbeddingModel {
     pub fn new() -> Result<Self> {
         let device = Device::Cpu;
+
+        // Startup-critical services (health/readiness probes) must not block on
+        // a HuggingFace Hub download. Test/CI environments without network
+        // access to huggingface.co set this to use a deterministic stub instead.
+        if std::env::var("NEOLAND_SKIP_EMBEDDINGS").is_ok_and(|v| v == "1" || v == "true") {
+            println!("NEOLAND_SKIP_EMBEDDINGS set — using stub embeddings (no HF download)");
+            return Ok(Self { inner: None, device });
+        }
 
         let repo_id = "sentence-transformers/all-MiniLM-L6-v2".to_string();
         let api = Api::new()?;
@@ -49,17 +58,21 @@ impl EmbeddingModel {
         };
         let model = BertModel::load(vb, &config)?;
 
-        Ok(Self { model, tokenizer, device })
+        Ok(Self { inner: Some((model, tokenizer)), device })
     }
 
     pub fn embed(&self, text: &str) -> Result<Tensor> {
-        let tokens = self.tokenizer.encode(text, true).map_err(E::msg)?;
+        let Some((model, tokenizer)) = &self.inner else {
+            return self.stub_embed(text);
+        };
+
+        let tokens = tokenizer.encode(text, true).map_err(E::msg)?;
         let token_ids = Tensor::new(tokens.get_ids(), &self.device)?.unsqueeze(0)?;
         let token_type_ids = token_ids.zeros_like()?;
 
         // Fix: BERT forward takes 3 args: input_ids, token_type_ids, attention_mask
         // (Option)
-        let embeddings = self.model.forward(&token_ids, &token_type_ids, None)?;
+        let embeddings = model.forward(&token_ids, &token_type_ids, None)?;
 
         let (_b, t, _h) = embeddings.dims3()?;
         let sum = embeddings.sum(1)?;
@@ -68,6 +81,19 @@ impl EmbeddingModel {
         let pooled_norm = pooled.broadcast_div(&pooled.sqr()?.sum_keepdim(1)?.sqrt()?)?;
 
         Ok(pooled_norm.squeeze(0)?)
+    }
+
+    /// Deterministic, hash-based embedding used when `NEOLAND_SKIP_EMBEDDINGS`
+    /// disables the real model. Same input always yields the same vector so
+    /// cache/search behavior stays testable without network access.
+    fn stub_embed(&self, text: &str) -> Result<Tensor> {
+        let hash = text.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
+        let data: Vec<f32> = (0..EMBEDDING_DIM as u32)
+            .map(|i| (hash.wrapping_add(i) % 997) as f32 / 997.0)
+            .collect();
+        let tensor = Tensor::from_vec(data, (EMBEDDING_DIM,), &self.device)?;
+        let norm = tensor.sqr()?.sum_all()?.sqrt()?;
+        Ok(tensor.broadcast_div(&norm)?)
     }
 }
 
