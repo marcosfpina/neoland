@@ -46,5 +46,21 @@ jobs:
           name: neoland
           authToken: ${{ steps.sops-cachix.outputs.token }}
 
-      - name: Flake check
-        run: nix flake check --show-trace
+nix-check:
+  name: Nix flake check
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v7
+
+    - uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
+
+    - uses: cachix/install-nix-action@v31
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+
+    - name: Flake check
+      run: nix flake check --show-trace
