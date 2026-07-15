@@ -1,0 +1,11 @@
+{
+  "name": "neoland-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "trunk serve",
+    "build": "trunk build --release",
+    "check": "cargo check",
+    "fmt": "cargo fmt --check"
+  }
+}

@@ -252,7 +252,6 @@
             pkg-config
             protobuf
             maturin
-            uv
           ];
 
           buildInputs = with pkgs; [
@@ -299,7 +298,10 @@
               bun
               curl
               uv
+              trunk
+              cargo-wasi
               jq
+              rustup
               python313
               poetry
               # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
@@ -335,10 +337,10 @@
             export DATABASE_URL="''${DATABASE_URL:-postgresql:///neoland?host=/run/postgresql}"
 
             export NEOLAND_CONTROL_PLANE_URL="''${NEOLAND_CONTROL_PLANE_URL:-http://127.0.0.1:3001}"
-            export NEOLAND_GATEWAY_URL="''${NEOLAND_GATEWAY_URL:-''${NEOLAND_ML_API_URL:-http://127.0.0.1:8080}}"
+            export NEOLAND_GATEWAY_URL="''${NEOLAND_GATEWAY_URL:-''${NEOLAND_ML_API_URL:-http://127.0.0.1:8081}}"
             export NEOLAND_ML_API_URL="''${NEOLAND_ML_API_URL:-$NEOLAND_GATEWAY_URL}"
             export ML_OPS_API_URL="''${ML_OPS_API_URL:-http://127.0.0.1:8083}"
-            export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:8081}"
+            export LLAMACPP_URL="''${LLAMACPP_URL:-http://127.0.0.1:8080}"
             export VLLM_URL="''${VLLM_URL:-}"
             export NEOLAND_DSPY_URL="''${NEOLAND_DSPY_URL:-http://127.0.0.1:8001}"
             export NEOLAND_CHECKPOINT_DIR="''${NEOLAND_CHECKPOINT_DIR:-$HOME/.local/share/neoland/checkpoints/adr}"

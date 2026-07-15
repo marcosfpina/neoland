@@ -1,0 +1,12 @@
+[build]
+# Entry point — Trunk injects WASM/JS bindings here
+target = "index.html"
+dist = "dist"
+
+[serve]
+port = 8082
+open = true
+
+[watch]
+# Directories to watch for live reload
+ignore = ["dist", "target"]
