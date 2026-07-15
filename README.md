@@ -11,8 +11,11 @@
 Neoland is the orchestration layer that wires a local AI stack together.
 It exposes a unified REST/gRPC API, runs a four-stage DSPy multi-agent pipeline
 (Junior → Senior → Architect → TechLeader), and surfaces everything through a
-Rust TUI. Everything boots from a single Nix dev shell — no Docker required for
-the control plane itself.
+Rust TUI.
+
+**Two boot modes:**
+- **Nix dev shell** — controle plane Rust + TUI sobem sem Docker; PostgreSQL e DSPy pipeline requerem serviços externos.
+- **Docker Compose** (`deploy/docker/`) — sobe a stack completa: PostgreSQL (pgvector), NATS, DSPy pipeline e control plane num único `docker compose up -d`.
 
 **Topology**
 
@@ -105,7 +108,31 @@ The module configures `systemd.services.neoland` with state/cache/runtime/log di
 `AUDIT_LOG_PATH`, DSPy URL, and server port wiring. Use `environmentFile` for
 `DATABASE_URL` and API keys in production.
 
-### Boot the full stack
+### Boot the full stack — opção A: Docker Compose (recomendado)
+
+Sobe PostgreSQL (pgvector), NATS, DSPy pipeline e control plane juntos.
+Requer `master/spectre/` no path (o Dockerfile usa contexto `master/`).
+
+```bash
+cd deploy/docker/
+
+# Primeira vez: copie o .env e preencha LLM_API_KEY
+cp .env.example .env && $EDITOR .env   # apenas LLM_API_KEY é obrigatória
+# (as demais variáveis já têm valores de dev seguros)
+
+# Build + start (SSH agent necessário para deps privadas do GitHub)
+eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
+DOCKER_BUILDKIT=1 docker compose build --ssh default
+docker compose up -d
+
+# Verificar saúde
+docker compose ps
+curl http://localhost:3001/health | jq .
+```
+
+Portas expostas: `:3001` (REST), `:50051` (gRPC), `:4222` (NATS).
+
+### Boot the full stack — opção B: Nix dev shell
 
 ```bash
 # 1. Start DSPy pipeline
@@ -164,15 +191,25 @@ neoland doctor --json    # machine-readable — reports each layer separately
 
 ### Bootstrap order
 
+**Opção A — Docker Compose (stack completa):**
+```
+1.  cd deploy/docker && docker compose up -d   # postgres + nats + dspy + control plane
+2.  (docker) securellm-bridge :8080
+    cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
+3.  (docker) ml-ops-api       :8083
+    cd ../ml-ops-api && docker compose up -d
+4.  neoland doctor --json            # confirm all layers
+5.  bash scripts/smoke-full-stack.sh # full 9-layer verification
+```
+
+**Opção B — Nix dev shell (control plane only):**
 ```
 1.  neoland server                   # control plane  :3001 / :50051
 2.  agents-start                     # DSPy pipeline  :8001  (dev shell alias)
 3.  (docker) securellm-bridge :8080
-    cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
 4.  (docker) ml-ops-api       :8083
-    cd ../ml-ops-api && docker compose up -d
-5.  neoland doctor --json            # confirm all layers
-6.  bash scripts/smoke-full-stack.sh # full 9-layer verification
+5.  neoland doctor --json
+6.  bash scripts/smoke-full-stack.sh
 ```
 
 `just` recipes exist for convenience (`just server`, `just smoke`, etc.) but are
@@ -430,4 +467,4 @@ Part of a larger research project. External contributions not currently accepted
 Proprietary — Internal Research Project
 
 **Maintained by**: VoidNxSEC Team  
-**Last validated**: 2026-06-02 · preflight 8/8 · smoke 9/9
+**Last validated**: 2026-07-15 · build clean · REST/gRPC/LLM-gateway healthy · Docker compose documentado

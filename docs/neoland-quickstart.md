@@ -1,6 +1,6 @@
 # Neoland Quick Start Guide
 
-**Last Updated**: 2026-04-26
+**Last Updated**: 2026-07-15
 
 Get up and running with Neoland in under 5 minutes.
 
@@ -35,7 +35,35 @@ nix develop --command neoland-server
 nix develop --command neoland-test --json
 ```
 
-### Option 2: Build Release Binary
+### Option 2: Docker Compose (stack completa)
+
+Sobe PostgreSQL (pgvector), NATS, DSPy pipeline e control plane num único comando.
+Requer Docker com BuildKit e SSH agent configurado (deps privadas do GitHub).
+
+```bash
+cd deploy/docker/
+
+# Apenas na primeira vez — .env já vem com chaves de dev pré-geradas.
+# Preencha apenas LLM_API_KEY com sua chave real.
+cp .env.example .env
+$EDITOR .env   # edite LLM_API_KEY
+
+# Build + start
+eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
+DOCKER_BUILDKIT=1 docker compose build --ssh default
+docker compose up -d
+
+# Verifique saúde
+docker compose ps
+curl http://localhost:3001/health | jq .
+```
+
+Portas expostas pelo compose: `:3001` (REST API), `:50051` (gRPC), `:4222` (NATS).
+
+O entrypoint roda `sqlx migrate run` automaticamente antes de iniciar o servidor,
+portanto não é necessário criar o schema manualmente.
+
+### Option 3: Build Release Binary
 
 ```bash
 nix develop --command cargo build --bin neoland --release

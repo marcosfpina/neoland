@@ -81,7 +81,6 @@ securellm-core = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", re
 securellm-providers = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
 securellm-security = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
 intelagent-core = { git = "https://github.com/marcosfpina/IntelAgent.git", rev = "4b340000a5f09e491264aead6d7a4a41166e421f" }
-hyprland-ipc = { git = "https://github.com/VoidNxSEC/ai-agent-os.git", rev = "3f6ff84b9dbc76e8ad2bff80848d3e68953de93c" }
 
 
 [build-dependencies]
