@@ -19,17 +19,17 @@
     "aiAgentOs": {
       "flake": false,
       "locked": {
-        "lastModified": 1782362170,
-        "narHash": "sha256-tE6X4npAHC5432Qs5p+iLYdAhXM4hYnOizrOv5ilhN8=",
-        "owner": "VoidNxSEC",
-        "repo": "ai-agent-os",
-        "rev": "bd395ca7af532efa7ff502da4d6a075208ef50cf",
-        "type": "github"
+        "lastModified": 1783653640,
+        "narHash": "sha256-9zz1ocs6sOAm6CZ+vea5EujLJSlhpa9QUDOx7ZSiLWQ=",
+        "ref": "refs/heads/main",
+        "rev": "9b32445c738707848067b067f095a31740b788ef",
+        "revCount": 22,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/ai-agent-os"
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "ai-agent-os",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/ai-agent-os"
       }
     },
     "crane": {
@@ -155,6 +155,28 @@
         "type": "github"
       }
     },
+    "microvm": {
+      "inputs": {
+        "nixpkgs": [
+          "owasaka",
+          "nixpkgs"
+        ],
+        "spectrum": "spectrum"
+      },
+      "locked": {
+        "lastModified": 1782324740,
+        "narHash": "sha256-EpaYlgijQUv8nvbhMStQEFoO7aDWxJmVTOlsoHWqHpg=",
+        "owner": "astro",
+        "repo": "microvm.nix",
+        "rev": "49a3e9fe33d33f189d24dafca36096766faa60ad",
+        "type": "github"
+      },
+      "original": {
+        "owner": "astro",
+        "repo": "microvm.nix",
+        "type": "github"
+      }
+    },
     "mlOpsApi": {
       "inputs": {
         "flake-utils": "flake-utils_2",
@@ -164,17 +186,17 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1782179917,
-        "narHash": "sha256-AoFVNkKjuG7PkRub7bRnHsVclLDDPuyO7zJUAiEBsl8=",
-        "owner": "VoidNxSEC",
-        "repo": "ml-ops-api",
-        "rev": "48be9511d33bc42667db079d63cbe768d654d1b9",
-        "type": "github"
+        "lastModified": 1783625134,
+        "narHash": "sha256-JcQAYUxkUpoDlcIgGQdJ21XqKOJFoQtOnNpqgrRHgbo=",
+        "ref": "refs/heads/main",
+        "rev": "d8c48fcab80c05cad93d616ccce6f15a3aa14ae6",
+        "revCount": 37,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "ml-ops-api",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
       }
     },
     "nixpkgs": {
@@ -244,22 +266,23 @@
     "owasaka": {
       "inputs": {
         "flake-utils": "flake-utils_3",
+        "microvm": "microvm",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1782140932,
-        "narHash": "sha256-+Q83ymPiJBNf+OC8ehgnLF2VOigSPAdrDEb1Z4Cs2Go=",
-        "owner": "VoidNxSEC",
-        "repo": "O.W.A.S.A.K.A.",
-        "rev": "9c0e81896f6a602ba374bfe641daaa236353d76e",
-        "type": "github"
+        "lastModified": 1783652695,
+        "narHash": "sha256-laMASWTrviuCLk/fcRIxPi69ptT7GS0MIaQZPWMan48=",
+        "ref": "refs/heads/main",
+        "rev": "d158fb743ed397b278935c1edd8b41de0aa88ca2",
+        "revCount": 104,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/O.W.A.S.A.K.A."
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "O.W.A.S.A.K.A.",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/O.W.A.S.A.K.A."
       }
     },
     "phantom": {
@@ -273,17 +296,17 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1782180052,
-        "narHash": "sha256-OKN62zZGODx0W4jPJsJsHI9fNFUbf9dfdxTct+EYQrk=",
-        "owner": "VoidNxSEC",
-        "repo": "phantom",
-        "rev": "22afa888d9647da3781ae06f1b50f97f37d4f6f4",
-        "type": "github"
+        "lastModified": 1783653109,
+        "narHash": "sha256-Oo/oMXLwj1kOgnUVzkh9CzD8JMjlCDkaQbB2HMsxZJk=",
+        "ref": "refs/heads/main",
+        "rev": "5ebbaa8f29780af9fe39a38180c675672a3e2213",
+        "revCount": 133,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/phantom"
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "phantom",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/phantom"
       }
     },
     "root": {
@@ -406,15 +429,15 @@
       "locked": {
         "lastModified": 1782374370,
         "narHash": "sha256-l+dlt5DluwL4ADSNi+DqLKTfahu7aiW64/EEQgXVDsw=",
-        "owner": "VoidNxSEC",
-        "repo": "securellm-bridge",
+        "ref": "refs/heads/main",
         "rev": "1135bdc13f0ec9127576ef6518949f91b26c0ff6",
-        "type": "github"
+        "revCount": 104,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "securellm-bridge",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
       }
     },
     "sops-nix": {
@@ -448,17 +471,33 @@
         "sops-nix": "sops-nix"
       },
       "locked": {
-        "lastModified": 1782056810,
-        "narHash": "sha256-7JS2CUGF/Vy+nXV7IZrhFyrJCxOltpciSQQkOvfoYcY=",
-        "owner": "VoidNxSEC",
-        "repo": "spectre",
-        "rev": "7f9548dd5652394b93b4404bf62cfb2624ab3e68",
-        "type": "github"
+        "lastModified": 1783653642,
+        "narHash": "sha256-IMhIB/Txl1TPdjuaZBmPeJWIJhsQKyslTGEuzrDA6nU=",
+        "ref": "refs/heads/main",
+        "rev": "de14511a0712ffa23f090f486f666c1eca3ba5ec",
+        "revCount": 84,
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/spectre"
       },
       "original": {
-        "owner": "VoidNxSEC",
-        "repo": "spectre",
-        "type": "github"
+        "type": "git",
+        "url": "ssh://git@github.com/VoidNxSEC/spectre"
+      }
+    },
+    "spectrum": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1778940603,
+        "narHash": "sha256-voSM8dZNlaOWN3kbYFky+FNY6fFQOEw0xF+ZMpZKkCQ=",
+        "ref": "refs/heads/main",
+        "rev": "367dd227f539267eae2b62770b4c17b88ac8c1f1",
+        "revCount": 1265,
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
       }
     },
     "systems": {
