@@ -113,6 +113,7 @@
               coreutils
               gitMinimal
               sops
+              uv
               socat
               rustToolchain
             ];
@@ -251,6 +252,7 @@
             pkg-config
             protobuf
             maturin
+            uv
           ];
 
           buildInputs = with pkgs; [
@@ -296,6 +298,7 @@
               age
               bun
               curl
+              uv
               jq
               python313
               poetry

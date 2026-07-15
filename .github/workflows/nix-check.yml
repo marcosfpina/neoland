@@ -2,9 +2,9 @@ name: Nix Evaluation
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -47,4 +47,4 @@ jobs:
           authToken: ${{ steps.sops-cachix.outputs.token }}
 
       - name: Flake check
-        run: nix flake check --no-build
+        run: nix flake check --show-trace
