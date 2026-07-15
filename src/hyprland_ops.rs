@@ -51,10 +51,7 @@ fn resolve_socket_path() -> Result<PathBuf> {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR").context("XDG_RUNTIME_DIR not set")?;
     let instance = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
         .context("HYPRLAND_INSTANCE_SIGNATURE not set — not running under Hyprland?")?;
-    let path = PathBuf::from(runtime_dir)
-        .join("hypr")
-        .join(&instance)
-        .join(".socket.sock");
+    let path = PathBuf::from(runtime_dir).join("hypr").join(&instance).join(".socket.sock");
     anyhow::ensure!(path.exists(), "Hyprland socket not found at {:?}", path);
     Ok(path)
 }
@@ -131,7 +128,8 @@ impl HyprlandIPC {
         let target = address
             .map(|a| format!("address:{}", a))
             .unwrap_or_else(|| "active".to_string());
-        self.dispatch(&format!("dispatch movetoworkspace {},{}", workspace_id, target)).await?;
+        self.dispatch(&format!("dispatch movetoworkspace {},{}", workspace_id, target))
+            .await?;
         Ok(())
     }
 
@@ -139,7 +137,8 @@ impl HyprlandIPC {
         let target = address
             .map(|a| format!("address:{}", a))
             .unwrap_or_else(|| "active".to_string());
-        self.dispatch(&format!("dispatch movetoworkspace special:scratch_neoland,{}", target)).await?;
+        self.dispatch(&format!("dispatch movetoworkspace special:scratch_neoland,{}", target))
+            .await?;
         Ok(())
     }
 
@@ -178,9 +177,7 @@ impl HyprlandEventStream {
             return Ok(None);
         }
         let event = match parts[0] {
-            "workspace" => HyprlandEvent::WorkspaceChanged {
-                id: parts[1].parse().unwrap_or(0),
-            },
+            "workspace" => HyprlandEvent::WorkspaceChanged { id: parts[1].parse().unwrap_or(0) },
             "openwindow" => HyprlandEvent::WindowOpened { address: parts[1].to_string() },
             "closewindow" => HyprlandEvent::WindowClosed { address: parts[1].to_string() },
             "movewindow" => {
@@ -189,7 +186,7 @@ impl HyprlandEventStream {
                     address: data.first().unwrap_or(&"").to_string(),
                     workspace: data.get(1).and_then(|s| s.parse().ok()).unwrap_or(0),
                 }
-            }
+            },
             "monitoradded" => HyprlandEvent::MonitorAdded { name: parts[1].to_string() },
             "monitorremoved" => HyprlandEvent::MonitorRemoved { name: parts[1].to_string() },
             _ => return Ok(None),
