@@ -43,6 +43,14 @@ jobs:
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
           fi
 
+      - uses: DeterminateSystems/nix-installer-action@a7ad9c4f
+
+      - name: Generate SBOM
+        run: |
+          nix run nixpkgs#syft -- . \
+            --output cyclonedx-json=sbom.cdx.json \
+            --output spdx-json=sbom.spdx.json
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

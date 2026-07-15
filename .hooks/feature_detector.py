@@ -18,10 +18,31 @@ FEATURE_PATTERNS = [
     (r"flake\.nix",        "nix",         "Nix build change"),
 ]
 
+# Features de infra são validadas por jobs dedicados do CI
+# (nix-check, adr-validation, release) — integradas por definição.
+SELF_INTEGRATED = {"ci", "deps", "nix", "adr"}
+
+# Features de código contam como integradas quando o mesmo commit
+# carrega evidência de integração (testes ou ADR).
+INTEGRATION_EVIDENCE = [
+    r"^tests/",
+    r"^agents/tests/",
+    r"^adr/(proposed|accepted)/",
+]
+
+
+def has_integration_evidence(files: list[str]) -> bool:
+    return any(
+        re.search(pattern, path)
+        for path in files
+        for pattern in INTEGRATION_EVIDENCE
+    )
+
 
 def detect(commit: str, files: list[str], min_confidence: float) -> list[dict]:
     detected = []
     seen_features: set[str] = set()
+    evidence = has_integration_evidence(files)
 
     for path in files:
         for pattern, feature, description in FEATURE_PATTERNS:
@@ -33,6 +54,7 @@ def detect(commit: str, files: list[str], min_confidence: float) -> list[dict]:
                     "description": description,
                     "trigger_file": path,
                     "confidence": 0.85,
+                    "integrated": feature in SELF_INTEGRATED or evidence,
                 })
 
     return [d for d in detected if d["confidence"] >= min_confidence]
