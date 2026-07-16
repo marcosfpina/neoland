@@ -191,7 +191,8 @@ TUI · Web · Desktop
 - [x] Quickstart <5 min (NixOS + Ubuntu)
 - [x] Smoke E2E documentado com llama.cpp real
 - [x] OpenAPI docs publicadas
-- [ ] Landing page pública
+- [x] Landing page pública
+- [x] Release notes (v0.4.0-beta)
 - [ ] Blog post técnico de launch
 - [ ] Video demo (TUI + Web + Desktop)
 - [ ] GitHub Discussions / Discord
