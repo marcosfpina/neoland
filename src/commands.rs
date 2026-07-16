@@ -106,7 +106,12 @@ pub struct RestartReport {
 pub trait CommandRuntime {
     async fn http_get_status(&self, url: &str) -> Result<u16, String>;
     async fn grpc_connect(&self, endpoint: &str) -> Result<(), String>;
-    async fn run_server(&self, grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> Result<(), String>;
+    async fn run_server(
+        &self,
+        grpc_port: u16,
+        rest_port: u16,
+        web_dist_dir: &str,
+    ) -> Result<(), String>;
     async fn check_db(&self, url: &str) -> Result<(), String>;
     fn env_var(&self, key: &str) -> Option<String>;
     fn config_paths(&self) -> Vec<PathBuf>;
@@ -140,8 +145,15 @@ impl CommandRuntime for SystemCommandRuntime {
             .map_err(|err| err.to_string())
     }
 
-    async fn run_server(&self, grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> Result<(), String> {
-        server::run_server(grpc_port, rest_port, web_dist_dir).await.map_err(|err| err.to_string())
+    async fn run_server(
+        &self,
+        grpc_port: u16,
+        rest_port: u16,
+        web_dist_dir: &str,
+    ) -> Result<(), String> {
+        server::run_server(grpc_port, rest_port, web_dist_dir)
+            .await
+            .map_err(|err| err.to_string())
     }
 
     async fn check_db(&self, url: &str) -> Result<(), String> {
@@ -759,7 +771,12 @@ mod tests {
                 .unwrap_or_else(|| Err(format!("unexpected grpc endpoint: {endpoint}")))
         }
 
-        async fn run_server(&self, grpc_port: u16, rest_port: u16, _web_dist_dir: &str) -> Result<(), String> {
+        async fn run_server(
+            &self,
+            grpc_port: u16,
+            rest_port: u16,
+            _web_dist_dir: &str,
+        ) -> Result<(), String> {
             self.started_servers.lock().unwrap().push((grpc_port, rest_port));
             self.server_error.clone().map_or(Ok(()), Err)
         }

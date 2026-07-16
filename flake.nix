@@ -295,6 +295,49 @@
         };
 
         ibmPlexMono = pkgs.callPackage ./nix/ibm-plex-mono.nix { };
+
+        neolandDesktopPackage = pkgs.stdenv.mkDerivation {
+          pname = "neoland-desktop";
+          version = "0.4.0";
+          src = ./desktop;
+          nativeBuildInputs = with pkgs; [
+            rustToolchain
+            pkg-config
+            trunk
+            openssl
+            glib
+            gtk3
+            webkitgtk_4_1
+            libsoup_3
+          ];
+          buildInputs = with pkgs; [
+            openssl
+            glib
+            gtk3
+            webkitgtk_4_1
+            libsoup_3
+          ];
+          buildPhase = ''
+            export HOME="$TMPDIR"
+            export CARGO_HOME="$TMPDIR/.cargo"
+            mkdir -p "$CARGO_HOME"
+            cd ../web
+            trunk build --release
+            cd ../desktop/src-tauri
+            cargo check --release
+          '';
+          installPhase = ''
+            mkdir -p $out
+            echo "Neoland Desktop v0.4.0 — build validated" > $out/README.txt
+            echo "Run cd desktop && cargo tauri build for native binaries." >> $out/README.txt
+          '';
+          meta = with pkgs.lib; {
+            description = "Neoland Desktop — Tauri-native AI console";
+            license = licenses.mit;
+            maintainers = [ "kernelcore" ];
+            platforms = platforms.linux ++ platforms.darwin;
+          };
+        };
       in
       {
         packages = {
@@ -302,6 +345,7 @@
           neoland = neolandPackage;
           neoland-web = neolandWebPackage;
           ibm-plex-mono = ibmPlexMono;
+          neoland-desktop = neolandDesktopPackage;
         };
 
         formatter = pkgs.nixfmt-tree;
@@ -327,6 +371,8 @@
               curl
               uv
               trunk
+              wasm-bindgen-cli
+              wasm-pack
               cargo-wasi
               jq
               rustup
@@ -334,6 +380,11 @@
               poetry
               # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
               stdenv.cc.cc.lib
+              glib
+              gtk3
+              webkitgtk_4_1
+              libsoup_3
+              cairo
             ]
             ++ neolandCommandPackages;
 
@@ -341,7 +392,7 @@
 
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
-          PKG_CONFIG_PATH = "$SHELL";
+          # PKG_CONFIG_PATH is auto-populated by Nix from nativeBuildInputs
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/main/packages/api/schema.json",
+  "identifier": "default",
+  "description": "Default capability set for Neoland Desktop",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "opener:default"
+  ]
+}

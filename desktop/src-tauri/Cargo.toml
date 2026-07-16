@@ -1,0 +1,31 @@
+[workspace]
+[package]
+name = "neoland-desktop"
+version = "0.4.0"
+description = "Neoland Desktop — Tauri-native AI console for Linux, macOS, and Windows"
+authors = ["VoidNxSEC Team"]
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "neoland_desktop"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

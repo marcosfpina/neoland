@@ -26,5 +26,8 @@ web-sys = { version = "0.3", features = ["EventSource", "HtmlInputElement", "Key
 # For now: server-side gRPC-web support is live; browser uses REST + SSE.
 prost = "0.13"
 
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 [build-dependencies]
 prost-build = "0.13"

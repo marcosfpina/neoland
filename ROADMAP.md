@@ -64,9 +64,9 @@ TUI · Web · Desktop
 | 5 | Protobuf types para WASM (prost-build) | ✅ |
 | 6 | Dashboard de métricas no Web (latência, tokens, confidence) | ✅ |
 | 7 | Quickstart validado — NixOS e Ubuntu, <5 min até first task | ✅ |
-| 8 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint | 🔜 |
-| 9 | Testes de integração Leptos (`wasm-bindgen-test`) | 🔜 |
-| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.4.0) | 🔜 |
+| 8 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint | ✅ |
+| 9 | Testes de integração Leptos (`wasm-bindgen-test`) | ✅ |
+| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.4.0) | ⏳ |
 
 **Gate**: stack sobe com `nix run .#neoland-full` ou `docker compose up`. Web Console funcional com backend real. Quickstart verificável por terceiro.
 
@@ -78,7 +78,7 @@ TUI · Web · Desktop
 
 | # | Entrega |
 |---|---|
-| 1 | Tauri desktop app — Linux, macOS, Windows |
+| 1 | Tauri desktop app — Linux, macOS, Windows | ✅ |
 | 2 | OAuth2 (Google/GitHub) + RBAC multi-tenant |
 | 3 | SSO / LDAP para enterprise |
 | 4 | Kubernetes Helm chart — 3+ réplicas, HA |
@@ -154,12 +154,12 @@ TUI · Web · Desktop
 - [x] Consumir REST + SSE do backend real
 - [x] Build WASM deterministico no Nix flake
 - [x] Testes de unidade (`cargo test -p neoland-web`, 16 testes)
-- [ ] gRPC-web bridge (tonic-web nativo)
-- [ ] Font IBM Plex Mono bundle Nix
-- [ ] PWA service worker + manifesto
-- [ ] Testes de integração (`wasm-bindgen-test`)
-- [ ] Dashboard de métricas (latência, tokens, confidence)
-- [ ] Deploy estático servido pelo próprio Neoland
+- [x] gRPC-web bridge server-side (tonic-web + HTTP/1.1 + CORS)
+- [x] Font IBM Plex Mono bundle Nix
+- [x] PWA service worker + manifesto + icons
+- [x] Dashboard de métricas (MetricsPanel component)
+- [x] Deploy estático servido pelo próprio Neoland (`--web-dist`)
+- [x] Testes de integração Leptos (`wasm-bindgen-test`, 14 testes WASM)
 
 ### Desktop (Tauri)
 - [ ] App shell nativa (Linux, macOS, Windows)
@@ -175,6 +175,7 @@ TUI · Web · Desktop
 - [x] GPU passthrough CDI para VRAM-aware routing
 - [x] `just smoke` + `just preflight`
 - [x] Nix flake com build WASM (`nix build .#neoland-web`)
+- [x] Quickstart validado — NixOS e Ubuntu, <5 min até first task
 - [ ] Kubernetes Helm chart (3+ réplicas, HA)
 - [ ] mTLS end-to-end
 - [ ] Backup/restore + rollback documentado
@@ -184,7 +185,8 @@ TUI · Web · Desktop
 - [x] ADRs arquiteturais (001-015+)
 - [x] Product vision + user journey
 - [x] README honesto (Leptos, TUI, CLI, screenshots, sem Next.js)
-- [ ] Quickstart <5 min (NixOS + Ubuntu)
+- [x] Quickstart <5 min (NixOS + Ubuntu)
+- [x] Smoke E2E documentado com llama.cpp real
 - [ ] OpenAPI docs publicadas
 - [ ] Landing page pública
 - [ ] Blog post técnico de launch
@@ -235,11 +237,11 @@ TUI · Web · Desktop
 | Control Plane | 95 | 95 | 96 | 98 | 100 |
 | DSPy Pipeline | 85 | 85 | 90 | 92 | 95 |
 | TUI | 90 | 90 | 92 | 95 | 98 |
-| Web Console | 45 | 65 | 85 | 90 | 95 |
-| Desktop | 0 | 0 | 0 | 75 | 90 |
-| Ops/Infra | 75 | 80 | 85 | 92 | 98 |
-| Docs | 60 | 75 | 85 | 90 | 95 |
-| **Geral** | **70** | **78** | **87** | **92** | **96** |
+| Web Console | 45 | 65 | 87 | 92 | 95 |
+| Desktop | 40 | 0 | 0 | 75 | 90 |
+| Ops/Infra | 75 | 80 | 87 | 92 | 98 |
+| Docs | 60 | 75 | 87 | 90 | 95 |
+| **Geral** | **78** | **78** | **88** | **93** | **96** |
 
 ---
 

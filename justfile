@@ -146,6 +146,28 @@ test-with-secrets:
 test-web:
     cargo test -p neoland-web
 
+# Web Console WASM integration tests (requires wasm-bindgen-cli, headless browser)
+test-web-wasm:
+    wasm-pack test --headless --chrome web/
+
+# Web Console WASM integration tests (Firefox)
+test-web-wasm-firefox:
+    wasm-pack test --headless --firefox web/
+
+# ─── Desktop ──────────────────────────────────────────────────────────────
+
+# Build desktop app (requires Tauri system deps — see desktop/README.md)
+desktop-build:
+    cd desktop && cargo tauri build
+
+# Dev mode: hot-reload desktop app with Trunk proxy
+desktop-dev:
+    cd desktop && cargo tauri dev
+
+# Check desktop Rust code compiles
+desktop-check:
+    cd desktop/src-tauri && cargo check
+
 # All tests (lib + integration + bins)
 test-all:
     cargo test

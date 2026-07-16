@@ -10,6 +10,7 @@
 
 {
   stdenvNoCC,
+  lib,
   fetchzip,
 }:
 
@@ -40,8 +41,8 @@ stdenvNoCC.mkDerivation rec {
   meta = {
     description = "IBM Plex Mono — the typeface for Neoland's terminal aesthetic";
     homepage = "https://github.com/IBM/plex";
-    license = with stdenvNoCC.lib.licenses; [ ofl ];
-    platforms = stdenvNoCC.lib.platforms.all;
+    license = with lib.licenses; [ ofl ];
+    platforms = lib.platforms.all;
     maintainers = [ "kernelcore" ];
   };
 }

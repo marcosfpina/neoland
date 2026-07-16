@@ -15,7 +15,7 @@ async fn test_grpc_chat_stream() {
 
     // Spawn server in background task
     let server_handle = tokio::spawn(async move {
-        let _ = neoland::server::run_server(test_grpc_port, test_rest_port).await;
+        let _ = neoland::server::run_server(test_grpc_port, test_rest_port, "").await;
     });
 
     // Wait for server to start
