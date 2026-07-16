@@ -1,6 +1,11 @@
 > **Source-of-truth movida para `ROADMAP.md` na raiz do projeto (2026-05-31). Este arquivo é histórico.**
+>
+> Para o status atual (v0.2.0 Honest Preview), consulte:
+> - [`ROADMAP.md`](../ROADMAP.md)
+> - [`docs/neoland-project-snapshot.md`](neoland-project-snapshot.md)
+> - [`RELEASE-v0.2.0.md`](../RELEASE-v0.2.0.md)
 
-# Neoland Delivery Progress
+# Neoland Delivery Progress (HISTÓRICO)
 
 **Last Updated**: 2026-05-17
 **Current Status**: integrated pre-release beta; not a release candidate yet
