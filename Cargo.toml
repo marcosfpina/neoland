@@ -62,6 +62,7 @@ thiserror = "1.0"
 
 # gRPC & Async
 tonic = "0.12"
+tonic-web = "0.12"
 prost = "0.13"
 tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }

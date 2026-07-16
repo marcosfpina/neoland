@@ -1663,9 +1663,13 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         event_bus: event_tx,
     });
 
-    // 1. Start gRPC Server
+    // 1. Start gRPC Server (with gRPC-web support for browser clients)
+    // tonic-web enables browsers to call gRPC endpoints via HTTP/1.1 + CORS.
+    // For production, restrict origins via a reverse proxy (nginx/Caddy).
     let grpc_state = shared_state.clone();
     let grpc_future = GrpcServer::builder()
+        .accept_http1(true)
+        .layer(tonic_web::GrpcWebLayer::new())
         .add_service(LlamaServiceServer::new(MyLlamaService { state: grpc_state }))
         .serve(grpc_addr);
 
