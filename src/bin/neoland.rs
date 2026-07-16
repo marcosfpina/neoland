@@ -9,6 +9,21 @@ use neoland::{
     logging, server,
 };
 
+fn open_browser(url: &str) {
+    let url = url.to_string();
+    // Try xdg-open (Linux), open (macOS), start (Windows)
+    if std::process::Command::new("xdg-open").arg(&url).spawn().is_ok() {
+        return;
+    }
+    if std::process::Command::new("open").arg(&url).spawn().is_ok() {
+        return;
+    }
+    if std::process::Command::new("cmd").args(["/c", "start", &url]).spawn().is_ok() {
+        return;
+    }
+    eprintln!("→ Abra no browser: {url}");
+}
+
 #[tokio::main]
 async fn main() {
     // Parse CLI arguments
@@ -76,6 +91,36 @@ async fn main() {
                 collect_doctor_report(&runtime, &config, &server_url, &neoland_gateway_url).await;
             println!("{}", render_doctor_report(&report, json));
             if report.has_errors() {
+                std::process::exit(1);
+            }
+        },
+
+        Commands::Site { server_url } => {
+            open_browser(&format!("{}/landing.html", server_url.trim_end_matches('/')));
+        },
+
+        Commands::Web { server_url } => {
+            open_browser(&server_url);
+        },
+
+        Commands::Docs { server_url } => {
+            open_browser(&format!("{}/swagger-ui/", server_url.trim_end_matches('/')));
+        },
+
+        Commands::GenCerts { days, cn } => {
+            let status = std::process::Command::new("bash")
+                .arg("scripts/gen-certs.sh")
+                .arg("--auto")
+                .arg("--days")
+                .arg(days.to_string())
+                .arg("--cn")
+                .arg(&cn)
+                .status()
+                .unwrap_or_else(|_| {
+                    eprintln!("❌ scripts/gen-certs.sh não encontrado. Rode do raiz do projeto.");
+                    std::process::exit(1);
+                });
+            if !status.success() {
                 std::process::exit(1);
             }
         },

@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "neoland")]
-#[command(version = "0.1.0")]
-#[command(about = "Neoland AI Assistant - CLI unificado para servidor e cliente", long_about = None)]
+#[command(version = "0.4.0-beta")]
+#[command(about = "Neoland — Autonomous AI Engineering Platform", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -17,7 +17,7 @@ pub struct Cli {
 pub enum Commands {
     /// Inicia o servidor gRPC + REST
     Server {
-        /// Porta gRPC (IPv6)
+        /// Porta gRPC
         #[arg(long, default_value = "50051")]
         grpc_port: u16,
 
@@ -32,16 +32,12 @@ pub enum Commands {
 
     /// Inicia o cliente TUI (Terminal User Interface)
     Client {
-        /// URL do servidor REST. Também lido de $NEOLAND_SERVER_URL.
+        /// URL do servidor REST
         #[arg(long, env = "NEOLAND_SERVER_URL", default_value = "http://localhost:3001")]
         server_url: String,
 
-        /// URL do gateway LLM principal. Também lido de $NEOLAND_GATEWAY_URL.
-        #[arg(
-            long = "neoland-gateway-url",
-            env = "NEOLAND_GATEWAY_URL",
-            default_value = "http://localhost:8080"
-        )]
+        /// URL do gateway LLM principal
+        #[arg(long = "neoland-gateway-url", env = "NEOLAND_GATEWAY_URL", default_value = "http://localhost:8080")]
         neoland_gateway_url: String,
     },
 
@@ -55,35 +51,67 @@ pub enum Commands {
         #[arg(long, default_value = "http://localhost:3001")]
         grpc_endpoint: String,
 
-        /// Renderiza o relatório em JSON para automação
+        /// Renderiza o relatório em JSON
         #[arg(long)]
         json: bool,
     },
 
-    /// Reinicia o servidor (mata processo antigo e inicia novo)
+    /// Reinicia o servidor
     Restart {
-        /// Porta gRPC do servidor a reiniciar
+        /// Porta gRPC do servidor
         #[arg(long, default_value = "50051")]
         grpc_port: u16,
 
-        /// Porta REST do servidor a reiniciar
+        /// Porta REST do servidor
         #[arg(long, default_value = "3001")]
         rest_port: u16,
     },
 
-    /// Diagnóstica o ambiente de desenvolvimento
+    /// Diagnóstica o ambiente
     Doctor {
-        /// URL do servidor REST para verificar conectividade
+        /// URL do servidor REST
         #[arg(long, default_value = "http://localhost:3001")]
         server_url: String,
 
-        /// URL do gateway LLM principal para verificar
+        /// URL do gateway LLM principal
         #[arg(long = "neoland-gateway-url", default_value = "http://localhost:8080")]
         neoland_gateway_url: String,
 
-        /// Renderiza o relatório em JSON para automação
+        /// Renderiza o relatório em JSON
         #[arg(long)]
         json: bool,
+    },
+
+    /// Abre a landing page no browser
+    Site {
+        /// URL base do servidor
+        #[arg(long, default_value = "http://localhost:3001")]
+        server_url: String,
+    },
+
+    /// Abre o Web Console no browser
+    Web {
+        /// URL base do servidor
+        #[arg(long, default_value = "http://localhost:3001")]
+        server_url: String,
+    },
+
+    /// Abre a documentação da API (Swagger UI) no browser
+    Docs {
+        /// URL base do servidor
+        #[arg(long, default_value = "http://localhost:3001")]
+        server_url: String,
+    },
+
+    /// Gera certificados mTLS para desenvolvimento local
+    GenCerts {
+        /// Dias de validade dos certificados
+        #[arg(long, default_value = "365")]
+        days: u16,
+
+        /// Common Name do servidor
+        #[arg(long, default_value = "neoland.local")]
+        cn: String,
     },
 }
 

@@ -57,13 +57,17 @@ dev-web:
 
 # ─── Quick access ────────────────────────────────────────────────────────
 
-# Open landing page in browser
+# Open landing page in browser (alias: neoland site)
 open-site:
-    xdg-open http://localhost:3001/landing.html 2>/dev/null || open http://localhost:3001/landing.html 2>/dev/null || echo "→ Abra http://localhost:3001/landing.html"
+    neoland site
 
-# Open API docs (Swagger UI) in browser
+# Open API docs in browser (alias: neoland docs)
 open-api:
-    xdg-open http://localhost:3001/swagger-ui/ 2>/dev/null || open http://localhost:3001/swagger-ui/ 2>/dev/null || echo "→ Abra http://localhost:3001/swagger-ui/"
+    neoland docs
+
+# Open Web Console in browser (alias: neoland web)
+open-web:
+    neoland web
 
 # ─── TUI development
 # Servidor standalone — cliente roda em outro terminal (ncli ou just tui)

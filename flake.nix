@@ -443,8 +443,11 @@
             agents-test-integration() { (cd "$NEOLAND_PROJECT_ROOT/agents" && poetry run pytest tests/ -m integration -v "$@"); }
 
             # Short aliases: nd = doctor, nt = test (no SOPS)
-            alias nd="neoland-doctor"
+            alias nd="neoland doctor"
             alias nt="cargo test --lib"
+            alias nsite="neoland site"
+            alias ndocs="neoland docs"
+            alias nweb="neoland web"
 
             if [[ $- == *i* ]]; then
               echo ""
@@ -457,14 +460,15 @@
               echo "  neoland client  / TUI  ncli"
               echo "  neoland server         nsrv"
               echo "  neoland doctor         nd"
+              echo "  neoland site           nsite"
+              echo "  neoland docs           ndocs"
+              echo "  neoland web            nweb"
+              echo "  neoland gen-certs      —"
               echo "  cargo test --lib       nt"
               echo ""
-              echo "  just dev               # servidor + TUI (Ctrl+C mata tudo)"
+              echo "  just dev               # servidor + TUI (Ctrl+C)"
               echo "  just dev-web           # servidor + Web Console :8080"
-              echo "  just serve             # só servidor"
               echo "  just ci                # check → fmt → clippy → test"
-              echo "  just test-web-wasm     # WASM integration tests"
-              echo "  just gen-certs         # gerar certificados mTLS"
               echo ""
               echo "  🌐 Local URLs (com servidor rodando):"
               echo "     Web Console  http://localhost:3001"
