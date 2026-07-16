@@ -35,6 +35,26 @@ dev:
     echo "✓ Servidor pronto. Abrindo TUI..."
     bash scripts/neoland-run.sh client
 
+# Dev stack Web: sobe servidor + Web Console (Trunk proxy). Single port :8080.
+dev-web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill $(jobs -p) 2>/dev/null; wait 2>/dev/null || true' EXIT INT TERM
+    echo "→ Iniciando servidor Neoland em :3001..."
+    bash scripts/neoland-run.sh server &
+    SERVER_PID=$!
+    echo "→ Aguardando /health..."
+    until curl -sf http://localhost:3001/health >/dev/null 2>&1; do
+        sleep 0.3
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "✗ Servidor encerrou antes de ficar ready."
+            exit 1
+        fi
+    done
+    echo "✓ Servidor pronto."
+    echo "→ Iniciando Web Console em http://localhost:8080..."
+    cd web && trunk serve
+
 # Servidor standalone — cliente roda em outro terminal (ncli ou just tui)
 serve: server
 
@@ -55,7 +75,12 @@ down:
     bash scripts/bootstrap-local.sh stop
 
 # CI pipeline: check → fmt-check → clippy → test (all must pass)
-ci: check fmt-check clippy test
+ci:
+    cargo check --lib
+    cargo fmt --check
+    cargo clippy --all-targets -- -D warnings
+    cargo test --lib
+    cargo test -p neoland-web
 
 # Auto-fix: format + clippy suggestions applied in-place
 fix:
@@ -82,6 +107,19 @@ test-tui:
 check:
     cargo check --lib
 
+# Check WASM compilation (Web Console)
+check-wasm:
+    nix develop --command cargo check -p neoland-web --target wasm32-unknown-unknown
+
+# Clippy for WASM target
+clippy-wasm:
+    nix develop --command cargo clippy -p neoland-web --target wasm32-unknown-unknown -- -D warnings
+
+# Build Web Console WASM (release)
+build-web:
+    nix develop --command trunk build --release
+    @echo "✓ web/dist/ ready"
+
 # Lint with clippy (deny all warnings)
 clippy:
     cargo clippy --all-targets -- -D warnings
@@ -103,6 +141,10 @@ test:
 # Unit tests with SOPS secrets loaded
 test-with-secrets:
     bash scripts/neoland-run.sh test -- --lib
+
+# Web Console unit tests (no WASM runtime needed)
+test-web:
+    cargo test -p neoland-web
 
 # All tests (lib + integration + bins)
 test-all:
@@ -244,6 +286,18 @@ roadmap:
 # Full-stack smoke: Neoland → SecureLLM → agents; ml-ops is optional by default
 smoke:
     bash scripts/smoke-full-stack.sh
+
+# Capture screenshots of TUI and Web Console (requires running server + display)
+screenshot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "→ Capturando TUI screenshot..."
+    cargo test --lib tui::ui::tests::dump_visual -- --ignored --nocapture 2>&1 | tee /tmp/neoland-tui-dump.txt
+    echo "✓ TUI dump salvo em /tmp/neoland-tui-dump.txt"
+    echo ""
+    echo "→ Para capturar o Web Console, abra http://localhost:8080 no browser"
+    echo "  e use a ferramenta de screenshot do seu OS ou DevTools."
+    echo "  (just dev-web precisa estar rodando em outro terminal)"
 
 # Long smoke: includes POST /v1/agents/task through the full DSPy pipeline
 smoke-task:
