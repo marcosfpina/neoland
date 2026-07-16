@@ -79,12 +79,12 @@ TUI · Web · Desktop
 | # | Entrega |
 |---|---|
 | 1 | Tauri desktop app — Linux, macOS, Windows | ✅ |
-| 2 | OAuth2 (Google/GitHub) + RBAC multi-tenant |
+| 2 | OAuth2 (Google/GitHub) + RBAC multi-tenant | ✅ |
 | 3 | SSO / LDAP para enterprise |
-| 4 | Kubernetes Helm chart — 3+ réplicas, HA |
-| 5 | mTLS end-to-end em todos os planes |
+| 4 | Kubernetes Helm chart — 3+ réplicas, HA | ✅ |
+| 5 | mTLS end-to-end em todos os planes | ✅ |
 | 6 | vLLM como backend opcional (além de llama.cpp) |
-| 7 | Documentação OpenAPI publicada (GitHub Pages) |
+| 7 | Documentação OpenAPI publicada (GitHub Pages) | ✅ |
 | 8 | Multi-backend routing — seleção automática por workload |
 
 **Gate**: desktop app instalável via Nix. Multi-tenant funcional. Helm chart deploya em cluster.
@@ -121,7 +121,7 @@ TUI · Web · Desktop
 - [x] SSE streaming com timeout e degraded-state handling
 - [x] Session persistence PostgreSQL + checkpoint relay
 - [x] Health/liveness/readiness probes reais
-- [ ] mTLS end-to-end
+- [x] mTLS end-to-end
 - [ ] Multi-backend routing (llama.cpp + vLLM)
 - [ ] Multi-tenant auth (OAuth2, SSO, LDAP)
 
@@ -179,8 +179,8 @@ TUI · Web · Desktop
 - [x] `just smoke` + `just preflight`
 - [x] Nix flake com build WASM (`nix build .#neoland-web`)
 - [x] Quickstart validado — NixOS e Ubuntu, <5 min até first task
-- [ ] Kubernetes Helm chart (3+ réplicas, HA)
-- [ ] mTLS end-to-end
+- [x] Kubernetes Helm chart (3+ réplicas, HA)
+- [x] mTLS end-to-end
 - [ ] Backup/restore + rollback documentado
 - [ ] Deploy non-Nix documentado (Ubuntu bare metal)
 
@@ -190,7 +190,7 @@ TUI · Web · Desktop
 - [x] README honesto (Leptos, TUI, CLI, screenshots, sem Next.js)
 - [x] Quickstart <5 min (NixOS + Ubuntu)
 - [x] Smoke E2E documentado com llama.cpp real
-- [ ] OpenAPI docs publicadas
+- [x] OpenAPI docs publicadas
 - [ ] Landing page pública
 - [ ] Blog post técnico de launch
 - [ ] Video demo (TUI + Web + Desktop)
@@ -242,9 +242,9 @@ TUI · Web · Desktop
 | TUI | 90 | 90 | 92 | 95 | 98 |
 | Web Console | 45 | 65 | 87 | 92 | 95 |
 | Desktop | 40 | 0 | 15 | 75 | 90 |
-| Ops/Infra | 75 | 80 | 87 | 92 | 98 |
-| Docs | 60 | 75 | 87 | 90 | 95 |
-| **Geral** | **78** | **78** | **89** | **93** | **96** |
+| Ops/Infra | 75 | 80 | 87 | 94 | 98 |
+| Docs | 60 | 75 | 87 | 92 | 95 |
+| **Geral** | **78** | **78** | **91** | **93** | **96** |
 
 ---
 
