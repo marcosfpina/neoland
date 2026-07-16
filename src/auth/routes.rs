@@ -46,6 +46,7 @@ pub struct AuthState {
 #[derive(Deserialize)]
 struct CallbackParams {
     code: String,
+    #[allow(dead_code)]
     state: String,
 }
 

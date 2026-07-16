@@ -180,7 +180,7 @@ impl Default for MatrixConfig {
 // ── Auth (v0.4.0 enterprise multi-tenant) ────────────────────────────────
 
 /// Authentication & authorization configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuthConfig {
     pub oauth: OAuthConfig,
@@ -199,7 +199,7 @@ pub struct OAuthConfig {
     pub github_client_id: Option<String>,
     /// GitHub OAuth2 client secret (env: NEOLAND_GITHUB_CLIENT_SECRET)
     pub github_client_secret: Option<String>,
-    /// Base URL for OAuth2 redirect callbacks (e.g. "https://neoland.example.com")
+    /// Base URL for OAuth2 redirect callbacks
     pub base_url: String,
 }
 
@@ -210,12 +210,6 @@ pub struct JwtConfig {
     /// HS256 symmetric secret for JWT signing (env: NEOLAND_JWT_SECRET).
     /// In production, use a 256-bit random key stored in Vault/SOPS.
     pub secret: String,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self { oauth: OAuthConfig::default(), jwt: JwtConfig::default() }
-    }
 }
 
 impl Default for OAuthConfig {
@@ -233,7 +227,6 @@ impl Default for OAuthConfig {
 impl Default for JwtConfig {
     fn default() -> Self {
         Self {
-            // Dev-only default — must be overridden in production via env var
             secret: "neoland-dev-jwt-secret-change-in-production".to_string(),
         }
     }

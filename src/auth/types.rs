@@ -125,12 +125,10 @@ impl AuthUser {
 
     /// Returns true if the role meets or exceeds the required level.
     pub fn has_role(&self, required: &str) -> bool {
-        match (self.role.as_str(), required) {
-            ("admin", _) => true,
-            ("user", "user" | "readonly") => true,
-            ("readonly", "readonly") => true,
-            _ => false,
-        }
+        matches!(
+            (self.role.as_str(), required),
+            ("admin", _) | ("user", "user" | "readonly") | ("readonly", "readonly")
+        )
     }
 }
 
