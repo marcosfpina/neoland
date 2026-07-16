@@ -1,8 +1,8 @@
 # Neoland
 
-**AI control-plane component** — Rust REST/gRPC · Python DSPy pipeline · Next.js workbench · Nix-first runtime
+**AI control-plane component** — Rust REST/gRPC · Python DSPy pipeline · Leptos WASM Web Console · Terminal TUI · Nix-first runtime
 
-**Version**: 0.1.0-rc.1 · **Status**: Release Candidate · **Score**: 99/100
+**Version**: 0.2.0-dev · **Status**: Honest Preview · **Score**: 78/100 (target: 96 @ v1.0.0)
 
 ---
 
@@ -10,57 +10,106 @@
 
 Neoland is the orchestration layer that wires a local AI stack together.
 It exposes a unified REST/gRPC API, runs a four-stage DSPy multi-agent pipeline
-(Junior → Senior → Architect → TechLeader), and surfaces everything through a
-Rust TUI.
+(Junior → Senior → Architect → TechLeader), and surfaces everything through three
+interfaces: **TUI** (ratatui), **Web Console** (Leptos WASM), and **CLI**.
 
-**Two boot modes:**
-- **Nix dev shell** — controle plane Rust + TUI sobem sem Docker; PostgreSQL e DSPy pipeline requerem serviços externos.
-- **Docker Compose** (`deploy/docker/`) — sobe a stack completa: PostgreSQL (pgvector), NATS, DSPy pipeline e control plane num único `docker compose up -d`.
+### Screenshots
 
-**Topology**
+**TUI** — 3-column layout (Sessions / Conversation / Reasoning), 4 themes,
+chat bubbles, pipeline tree with confidence badges:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Operator                            │
-│                     TUI (ratatui)                        │
-└────────────────────┬────────────────────────────────────┘
-                     │ REST :3001 / gRPC :50051
-         ┌───────────▼───────────┐
-         │   Neoland Control     │
-         │   Plane  (Rust)       │
-         └───────────┬───────────┘
-                     │ HTTP
-         ┌───────────▼───────────┐
-         │  SecureLLM Bridge     │  :8080
-         │  (mTLS · PII redact)  │
-         └───────────┬───────────┘
-                     │ HTTP
-         ┌───────────▼───────────┐
-         │   ml-ops-api          │  :8083  (VRAM-aware routing)
-         └───────────┬───────────┘
-                     │ HTTP
-         ┌───────────▼───────────┐
-         │   llama.cpp server    │  :8081  (GPU inference)
-         └───────────────────────┘
+│  󰽥 Neoland  │ 󰤣  │ 󰍉 local  │ 󰔎 0ms 󰡱 817d82  󰭹 Conversation                     󰀄   󰢻  │
+│──────────────────────────────────────────────────────────────────────────────────│
+│╭ 󰙯 Sessions ──────────────╮╭ 󰭹 Conversation ──────────────────╮╭ 󰒝 Reasoning ──────╮│
+││  ✚ New Chat  ^n          ││  󰚩 Neoland                       ││  Refatorar módulo   ││
+││  󰅂 ⠋ Refatorar módulo…   ││  ╭──────────────────────────────╮││    ├─ 󰄬 Root [92%]    ││
+││      agora               ││  │ Claro! Sugiro multiprocessing│││    ├─ 󰄬 Echo [88%]    ││
+││    ● Revisar pipeline…   ││  │ from multiprocessing import │││    ├─ ⠋ Lyra 0.0s     ││
+││      18m                 ││  │ Pool                        │││    ╰─ 󰡱 ADR accepted   ││
+││    ● Otimizar query db   ││  ╰──────────────────────────────╯│╰─────────────────────╯│
+│╰──────────────────────────╯╰────────────────────────────────╯                     │
+│  ╭────────────────────────────────────────────────────────────────────────────╮   │
+│  │ L local │  󰢱 balanced │ 󰑮 Aguardando intervenção (Steer)...                  │   │
+│  ╰────────────────────────────────────────────────────────────────────────────╯   │
+```
+
+**Web Console** — Leptos WASM SPA, same 3-panel layout, CSS artesanal zero deps:
+
+```
+┌─ Topbar ──────────────────────────────────────────────────────────────────────────┐
+│  [☰ Sessions]  NEOLAND://CORE  [⚙ Reasoning]                                      │
+├─ Workspace ───────────────────────────────────────────────────────────────────────┤
+│ ┌ Sessions ────────┐ ┌ Conversation ───────────────────────┐ ┌ Reasoning ────────┐ │
+│ │ [+ New Chat]     │ │                                    │ │ Pipeline Tree     │ │
+│ │                  │ │  󰚩 Neoland                         │ │  ├─ Junior [92%]   │ │
+│ │ ● Session 1  5m  │ │  ╭────────────────────────────────╮│ │  ├─ Senior [88%]   │ │
+│ │ ● Session 2  1h  │ │  │ Response streaming via SSE...   ││ │  ├─ Architect ⠋    │ │
+│ │ ○ Session 3  1d  │ │  ╰────────────────────────────────╯│ │  ╰─ ADR accepted   │ │
+│ └──────────────────┘ └────────────────────────────────────┘ └────────────────────┘ │
+├─ Composer ────────────────────────────────────────────────────────────────────────┤
+│  [Input box]                                                           [Submit ▶]  │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+> **Nota**: screenshots reais (PNG) podem ser capturadas com `just screenshot`
+> quando o ambiente estiver rodando localmente.
+
+```
+┌───────────────┐  ┌──────────────┐  ┌──────────────────┐
+│   Terminal    │  │   Browser    │  │   Desktop (Tauri) │
+│   TUI (Rust)  │  │   Leptos SPA │  │   (v0.4.0+)      │
+└───────┬───────┘  └──────┬───────┘  └────────┬─────────┘
+        │                 │                    │
+        └────────┬────────┴────────────────────┘
+                 │ REST :3001 / gRPC :50051
+         ┌───────▼───────────┐
+         │   Neoland Control │
+         │   Plane  (Rust)   │
+         └───────┬───────────┘
+                 │ HTTP
+         ┌───────▼───────────┐
+         │  SecureLLM Bridge │  :8080  (mTLS · PII redact)
+         └───────┬───────────┘
+                 │ HTTP
+         ┌───────▼───────────┐
+         │   ml-ops-api      │  :8083  (VRAM-aware routing)
+         └───────┬───────────┘
+                 │ HTTP
+         ┌───────▼───────────┐
+         │   Inference       │  llama.cpp :8081 / vLLM (opt)
+         └───────────────────┘
 
          DSPy Pipeline      :8001  (Python · FastAPI)
-         ADR Ledger         Merkle chain · secp256k1 · NATS JetStream 
+         ADR Ledger         Merkle chain · secp256k1 · NATS JetStream
 ```
+
+---
+
+## Interfaces
+
+| Surface | Stack | Status |
+|---|---|---|
+| **TUI** | Rust + ratatui · 4 themes · chat bubbles · pipeline tree | ✅ Stable |
+| **Web Console** | Leptos WASM + CSS artesanal · 3-panel SPA · SSE streaming | ✅ Honest Preview |
+| **Desktop** | Tauri + Leptos (reuses WASM bundle) | 🔮 v0.4.0 |
+| **CLI / API** | Rust + axum + tonic · 15 REST endpoints + gRPC | ✅ Stable |
 
 ---
 
 ## Release status
 
 | Gate | Result | Evidence |
-|------|--------|----------|
-| Rust unit tests | ✅ 226 passed, 17 ignored | `cargo test --lib` |
-| Clippy | ✅ 0 warnings/errors | `cargo clippy --all-targets -- -D warnings` |
+|---|---|---|
+| Rust unit tests | ✅ 242 passed, 17 ignored | `cargo test --workspace` |
+| Clippy (all targets) | ✅ 0 warnings | `cargo clippy --all-targets -- -D warnings` |
+| Clippy (WASM) | ✅ 0 warnings | `cargo clippy -p neoland-web --target wasm32-unknown-unknown` |
+| Web Console tests | ✅ 16/16 passed | `cargo test -p neoland-web` |
 | E2E REST tests | ✅ 22/22 passed | `cargo test --test rest_api_test` |
 | Python contracts | ✅ 26/26 passed | `pytest -m contract` |
+| WASM compilation | ✅ Clean | `cargo check -p neoland-web --target wasm32-unknown-unknown` |
 | Doctor | ✅ `ok: true` | `just doctor` |
 | Full-stack smoke | ✅ 9/9 layers | `just smoke` |
-
-**Last preflight**: 2026-06-02 · `just preflight` → PASS 6/6
 
 ---
 
@@ -72,163 +121,59 @@ Rust TUI.
 - PostgreSQL running locally with a `neoland` database
 
 ```bash
-# one-time: create the database
+# One-time: create the database
 psql -c "CREATE DATABASE neoland;"
 ```
 
-### Installation
+### Control plane + TUI
 
 ```bash
 git clone <this-repo> && cd neoland
 nix develop
 
-# loads SOPS secrets + starts gRPC :50051 + REST :3001
-just server
+# Start server + TUI together
+just dev
 
-# or via shell aliases set by the dev shell:
-neoland-server
-neoland-client --neoland-gateway-url http://localhost:8080
-neoland-doctor --json
+# Or individual:
+just server          # REST :3001 + gRPC :50051
+just tui             # TUI client (in another terminal)
 ```
 
-### NixOS Integration
+### Web Console (dev)
 
-```nix
-# configuration.nix
-imports = [ ./modules/applications/neoland.nix ];
+```bash
+# Single command: server + Web Console on :8080 with Trunk proxy
+just dev-web
 
-services.neoland = {
-  enable = true;
-  openFirewall = true;
-  environmentFile = "/run/secrets/neoland.env";
-};
+# Open http://localhost:8080 in your browser
 ```
 
-The module configures `systemd.services.neoland` with state/cache/runtime/log directories,
-`AUDIT_LOG_PATH`, DSPy URL, and server port wiring. Use `environmentFile` for
-`DATABASE_URL` and API keys in production.
-
-### Boot the full stack — opção A: Docker Compose (recomendado)
-
-Sobe PostgreSQL (pgvector), NATS, DSPy pipeline e control plane juntos.
-Requer `master/spectre/` no path (o Dockerfile usa contexto `master/`).
+### Docker Compose (full stack)
 
 ```bash
 cd deploy/docker/
+cp .env.example .env && $EDITOR .env   # set LLM_API_KEY
 
-# Primeira vez: copie o .env e preencha LLM_API_KEY
-cp .env.example .env && $EDITOR .env   # apenas LLM_API_KEY é obrigatória
-# (as demais variáveis já têm valores de dev seguros)
-
-# Build + start (SSH agent necessário para deps privadas do GitHub)
 eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
 DOCKER_BUILDKIT=1 docker compose build --ssh default
 docker compose up -d
 
-# Verificar saúde
-docker compose ps
 curl http://localhost:3001/health | jq .
-```
-
-Portas expostas: `:3001` (REST), `:50051` (gRPC), `:4222` (NATS).
-
-### Boot the full stack — opção B: Nix dev shell
-
-```bash
-# 1. Start DSPy pipeline
-just agents-start
-
-# 2. Start SecureLLM Bridge
-cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
-
-# 3. Start ml-ops-api
-cd ../ml-ops-api && docker compose up -d
-
-# 4. Smoke all 9 layers
-cd -
-just smoke
 ```
 
 ---
 
 ## CLI reference
 
-`neoland` is the unified binary. All commands run through it.
-
 ```
 neoland server     # gRPC :50051 + REST :3001
-neoland client     # TUI
-neoland doctor     # environment diagnostics
+neoland client     # TUI terminal client
+neoland doctor     # environment diagnostics (--json for machine output)
 neoland test       # health checks
 neoland restart    # kill + restart server
 ```
 
-### server
-
-```bash
-neoland server
-neoland server --grpc-port 50052 --rest-port 3002
-neoland server --log-level debug
-```
-
-### client (TUI)
-
-```bash
-neoland client
-neoland client --neoland-gateway-url http://localhost:8080
-neoland client --server-url http://[::1]:50051
-```
-
-TUI features: braille spinner · Tokyo Night · readline cursor (Ctrl+←/→, Ctrl+W/U/K) ·
-auto-scroll · 5 preset profiles (Ctrl+1-5)
-
-### doctor
-
-```bash
-neoland doctor           # human-readable
-neoland doctor --json    # machine-readable — reports each layer separately
-```
-
-### Bootstrap order
-
-**Opção A — Docker Compose (stack completa):**
-```
-1.  cd deploy/docker && docker compose up -d   # postgres + nats + dspy + control plane
-2.  (docker) securellm-bridge :8080
-    cd ../securellm-bridge/docker && docker compose up -d securellm-proxy
-3.  (docker) ml-ops-api       :8083
-    cd ../ml-ops-api && docker compose up -d
-4.  neoland doctor --json            # confirm all layers
-5.  bash scripts/smoke-full-stack.sh # full 9-layer verification
-```
-
-**Opção B — Nix dev shell (control plane only):**
-```
-1.  neoland server                   # control plane  :3001 / :50051
-2.  agents-start                     # DSPy pipeline  :8001  (dev shell alias)
-3.  (docker) securellm-bridge :8080
-4.  (docker) ml-ops-api       :8083
-5.  neoland doctor --json
-6.  bash scripts/smoke-full-stack.sh
-```
-
-`just` recipes exist for convenience (`just server`, `just smoke`, etc.) but are
-wrappers — `neoland <cmd>` is the canonical interface.
-
-### SOPS secrets
-
-```bash
-# Dev workflow: secrets live in secrets/neoland.sops.env (age-encrypted)
-# All 'just' commands that touch the running server decrypt automatically.
-# Manual:
-sops secrets/neoland.sops.env
-
-# Without SOPS: set env vars manually, then use -raw variants
-export NEOLAND_ADMIN_API_KEY="..."
-just server-raw
-```
-
-See [`docs/neoland-sops-setup.md`](docs/neoland-sops-setup.md) for key setup.
+Aliases set by `nix develop`: `nsrv` (server), `ncli` (client), `nd` (doctor), `nt` (test).
 
 ---
 
@@ -238,29 +183,18 @@ See [`docs/neoland-sops-setup.md`](docs/neoland-sops-setup.md) for key setup.
 
 ```
 src/
-├── bin/neoland.rs         CLI entrypoint (server | client | doctor | restart)
-├── server/mod.rs          gRPC + REST handlers · security middleware
-├── agents/
-│   ├── client.rs          HTTP client — mirrors Python pipeline schemas
-│   ├── orchestrator.rs    Orchestration core + live steering + breakpoints
-│   ├── session.rs         Session state via PostgreSQL
-│   ├── escalation.rs      Inter-agent escalation policy
-│   └── checkpoint_store.rs
-├── mcp/                   Native MCP server (breakpoints + tool routing)
-├── tools/                 NativeTool trait + ShellTool
-├── matrix/client.rs       Pipeline metrics reporting
-├── ml_offload/client.rs   Inference bridge client (OpenAI-compatible)
-├── auth.rs                API key auth · RBAC (Admin / User / ReadOnly)
-├── secrets.rs             Vault → SOPS → env fallback chain
-├── audit.rs               Structured JSON events · brute-force detection
-├── validation.rs          Input sanitization · path traversal prevention
-├── storage/vector_store.rs PostgreSQL + pgvector (optional)
-├── tui/                   ratatui TUI · Tokyo Night · SSE subscriber
-└── hyprland_ops.rs        Hyprland window manager IPC
+├── bin/neoland.rs          CLI entrypoint
+├── server/mod.rs           REST + gRPC handlers · security middleware
+├── agents/                 DSPy pipeline client, orchestrator, sessions, escalation
+├── mcp/                    Native MCP server (breakpoints + tool routing)
+├── tools/                  NativeTool trait + ShellTool
+├── auth.rs                 API key auth · RBAC (Admin / User / ReadOnly)
+├── secrets.rs              Vault → SOPS → env fallback
+├── audit.rs                Structured JSON audit · brute-force detection
+├── validation.rs           Input sanitization · path traversal prevention
+├── tui/                    ratatui TUI · 4 themes · SSE subscriber
+└── storage/                PostgreSQL + pgvector
 ```
-
-Contracts between Rust and Python: types in `src/agents/client.rs` mirror
-`agents/neoland_agents/schemas/api.py`. Any change on one side requires the other.
 
 ### Agent pipeline (Python · DSPy 3.x)
 
@@ -268,66 +202,41 @@ Contracts between Rust and Python: types in `src/agents/client.rs` mirror
 agents/neoland_agents/
 ├── app.py             FastAPI · /health · /run · /sessions
 ├── signatures/        DSPy contracts (4 agents)
-├── modules/
-│   ├── junior.py      Hypothesis generation (ReAct + tools)
-│   ├── senior.py      Risk assessment and refinement
-│   ├── architect.py   Structural soundness (conditional — escalate_to_architect)
-│   └── tech_leader.py Final decision: approve | reject | defer | escalate
-├── pipeline/
-│   ├── orchestrator.py  Four-stage coordinator
-│   └── checkpoint.py    ADR artifact persistence
-├── schemas/api.py     Pydantic ↔ Rust mirror types
-└── ipc/flags.py       SharedFlags mmap reader/writer
+├── modules/           Junior · Senior · Architect · TechLeader
+├── pipeline/          Orchestrator · checkpoint persistence
+└── schemas/api.py     Pydantic ↔ Rust mirror types
 ```
 
----
+### Web Console (Leptos WASM)
 
-## Security
-
-### Authentication & Authorization (ADR-011)
-
-- REST API Key via `X-API-Key` header
-- RBAC: 3 roles — Admin > User > ReadOnly
-- Development keys pre-configured; production keys via SOPS or Vault
-- gRPC mTLS: planned
-
-### Secrets Management (ADR-012)
-
-- Three-tier retrieval: Cache (30s TTL) → HashiCorp Vault → environment variables
-- Graceful degradation when Vault is unavailable
-- Secret types: LLM API keys, NEOLAND API keys, DB credentials, TLS certs
-- Cache hit: <1ms · Vault read: 50–100ms
-
-### Audit Logging (ADR-013)
-
-- Structured JSON, immutable append-only
-- 15 action types: auth, secrets, API, config, admin operations
-- PII/credentials auto-redacted
-- Brute-force detection: >5 failed auth in 1 min → alert
-
-### Rate Limiting & Validation (ADR-014)
-
-- 100 req/min per user/IP
-- Max 100KB prompt · 100 messages · 1MB request
-- Null byte removal · control character filtering · path traversal prevention
-
-See: `docs/neoland-authentication.md` · `docs/neoland-vault-setup.md` · `docs/ADR/`
+```
+web/
+├── src/
+│   ├── main.rs        App component · signal-based state
+│   ├── api.rs         REST + SSE client (gloo-net + EventSource)
+│   ├── model.rs       Message data model
+│   ├── lib.rs         Crate root + unit tests (16 tests)
+│   └── components/    5 Leptos components
+│       ├── composer.rs      Input box + submit
+│       ├── conversation.rs  Chat messages + streaming
+│       ├── reasoning.rs     Pipeline reasoning panel
+│       ├── sessions.rs      Session list sidebar
+│       └── topbar.rs        Header bar
+├── public/neoland.css  ~600 lines · zero dependencies
+├── Trunk.toml           Proxy config for dev
+└── Cargo.toml           Workspace member
+```
 
 ---
 
 ## Testing
 
-| Suite | Count | Notes |
-|-------|-------|-------|
-| Rust lib | 226 passing, 17 ignored | TUI, auth, agents, metrics, OpenAPI |
-| E2E REST | 22/22 | Real server on :3004, no mocks |
-| Python contracts | 26/26 | Pydantic schemas + IPC — no LLM required |
-| adr-ledger | 15 | Merkle chain, JetStream, signers |
-
 ```bash
-# Rust
-nix develop --command cargo test --lib
-nix develop --command cargo test --test rest_api_test
+# Rust — all crates
+cargo test --workspace
+
+# Web Console only
+cargo test -p neoland-web
 
 # Python — no LLM needed
 cd agents && poetry run pytest tests/ -m contract -v
@@ -335,130 +244,80 @@ cd agents && poetry run pytest tests/ -m contract -v
 # Python — requires LLM_API_KEY
 cd agents && poetry run pytest tests/ -m integration -v
 
-# SLO validation (requires hey + running server)
-nix develop --command just validate-slo
+# WASM compilation check
+cargo check -p neoland-web --target wasm32-unknown-unknown
+
+# SLO validation (requires running server)
+just validate-slo
 ```
 
 ---
 
-## Architectural decisions
+## Security
 
-Full ADR log: [`docs/ADR/`](docs/ADR/) · summary: [`docs/neoland-adr.md`](docs/neoland-adr.md)
-
-**Key decisions**:
-- **ADR-001**: 3-layer architecture (Infra / Security / Compliance)
-- **ADR-002**: LocalFirst LLM routing strategy
-- **ADR-003**: SecureLLM Proxy with Factory Pattern
-- **ADR-004**: Connection pooling for low latency
-- **ADR-011–014**: Security hardening (auth, secrets, audit, validation)
-
-**TUI over GTK4**: 50ms startup vs 2–3s · 15MB vs 300MB · native tmux/zellij integration.
-Replaced legacy GTK client with `ratatui` + `crossterm`.
-
-**LLM fallback chain**:
-1. SecureLLM Bridge (:8080) — primary OpenAI-compatible gateway
-2. gRPC internal — local Qwen 1.8B CPU fallback
-3. SecureLLM providers/upstreams — ml-ops-api, cloud, local backends behind gateway
-
----
-
-## Integrations
-
-**securellm-bridge** — primary LLM gateway. OpenAI-compatible · audit · rate limiting ·
-provider routing · can proxy to ml-ops-api for local inference.
-`--neoland-gateway-url` should point here.
-
-**ml-ops-api** — inference bridge behind the gateway. VRAM-aware routing to
-llama.cpp / vLLM / other local engines. OpenAI-compatible upstream.
-Typical role: internal upstream, not direct client endpoint.
-
-**intelagent-core (Phantom)** — task orchestration framework.
-Multi-step reasoning · tool execution · memory management.
-Path dep: `../phantom/intelagent/crates/core`
-
-**Hyprland IPC** — window management via `hyprland-ipc` crate.
-Scratchpad toggle · floating window rules · opacity control.
-Path dep: `../ai-agent-os/crates/hyprland-ipc`
-
----
-
-## ADR ledger
-
-Every pipeline decision produces an ADR artifact:
-
-- **Merkle chain** — SHA-256 chained, tamper-evident
-- **secp256k1 signatures** — each stage signs its output
-- **NATS JetStream** — at-least-once delivery, durable consumer
-- **Checkpoint storage** — `$NEOLAND_CHECKPOINT_DIR` (default: `~/.local/share/neoland/checkpoints/adr`)
-
-ADR browser in the workbench at `/adr`.
+- **RBAC**: 3 roles (Admin / User / ReadOnly) via `X-API-Key` header
+- **Secrets**: Three-tier retrieval — Cache → HashiCorp Vault → env fallback
+- **Audit**: Structured JSON, 15 action types, brute-force detection (>5 failures/min)
+- **Rate limiting**: 100 req/min per user/IP · max 100KB prompt
+- **mTLS**: Planned (v0.4.0)
+- See: [`docs/ADR/`](docs/ADR/) for full security decisions
 
 ---
 
 ## Performance
 
-Characteristics are measured, not estimated. Run `just validate-slo` to verify
-against defined targets on your hardware.
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| TUI startup | <50ms | |
-| Memory (TUI) | ~15MB | |
-| Memory (server, idle) | ~200MB | |
-| `/live` — measured | 37,600 RPS · p99 12ms | SLO target: ≥10K RPS · p99 ≤50ms |
-| `/health` — measured | 258 RPS · p99 309ms | IO-bound by design (polls all layers) · SLO target: p99 ≤1000ms |
-| Qwen 1.8B inference | 5–10 tok/s (CPU) | Dev fallback; use llama.cpp/vLLM for production |
-| Build time (release) | ~10s | |
-
-Numbers above were recorded on this machine. Re-run `just validate-slo` after any
-infrastructure change to confirm they still hold.
+| Metric | Value |
+|---|---|
+| TUI startup | <50ms |
+| Memory (TUI) | ~15MB |
+| Memory (server, idle) | ~200MB |
+| `/live` | 37,600 RPS · p99 12ms |
+| `/health` | 258 RPS · p99 309ms (IO-bound) |
+| Qwen 1.8B CPU | 5–10 tok/s (dev fallback) |
+| Build time (release) | ~10s |
 
 ---
 
-## Observability
+## NixOS Integration
 
-- **Prometheus metrics** at `/metrics`
-- **OpenTelemetry spans** (configurable exporter)
-- **Swagger UI** at `/swagger-ui/`
-- **Doctor JSON** at `just doctor` — reports control plane, gRPC, DSPy, gateway,
-  ml-ops, llama.cpp, DB, Vault, config as separate fields
+```nix
+imports = [ ./modules/applications/neoland.nix ];
+
+services.neoland = {
+  enable = true;
+  openFirewall = true;
+  environmentFile = "/run/secrets/neoland.env";
+};
+```
+
+Nix flake provides:
+- `nix build .#neoland` — control plane binary
+- `nix build .#neoland-web` — Web Console WASM bundle (requires network for first build)
+- `nix develop` — dev shell with all tooling (Rust, trunk, Python, SOPS, NATS, etc.)
+- NixOS modules: `neoland` · `securellmBridgeApi` · `mlOpsApi` · `llmSuite` · `stack`
 
 ---
 
 ## Known limitations
 
-- **pgvector not installed** — vector store runs in-memory only.
-  `CREATE EXTENSION vector` in the `neoland` database to enable persistent search.
-- **LLM API key required for full pipeline** — DSPy routes through litellm.
-  Set `OPENAI_API_KEY` (or the relevant provider key). Smoke confirms routing;
-  it does not validate model responses.
-- **SecureLLM Bridge Redis** — caching disabled without Redis. Non-blocking.
-- **CPU inference** — Candle/Qwen is a dev fallback (~5–10 tok/s).
-  Production throughput comes from llama.cpp/vLLM behind ml-ops-api.
-- **Nix-first** — one documented non-Nix path (Ubuntu bare metal) is planned
-  but not yet validated.
-- **Path dependencies** — Cargo uses pinned git deps and local patches.
-  See `Cargo.toml` and `.cargo/config.toml` when developing with sibling checkouts.
-- **gRPC mTLS** — planned, not yet implemented.
+- **pgvector** — vector store runs in-memory; `CREATE EXTENSION vector` for persistence
+- **LLM API key** — full pipeline requires `OPENAI_API_KEY` (or equivalent litellm key)
+- **SecureLLM Bridge Redis** — caching disabled without Redis (non-blocking)
+- **CPU inference** — Candle/Qwen is dev-only (~5–10 tok/s); use llama.cpp/vLLM for production
+- **Nix WASM build** — `nix build .#neoland-web` requires network on first run (cargo deps); cached thereafter
+- **gRPC-web** — not yet bridged (v0.3.0); Web Console uses REST/SSE only
+- **Non-Nix install** — Ubuntu bare metal path documented but not yet validated end-to-end
 
 ---
 
 ## Documentation
 
-- [`ROADMAP.md`](ROADMAP.md) — current planning document and delivery log
-- [`docs/neoland-project-snapshot.md`](docs/neoland-project-snapshot.md) — codebase map
+- [`ROADMAP.md`](ROADMAP.md) — release roadmap and delivery log
 - [`docs/neoland-architecture.md`](docs/neoland-architecture.md) — architecture overview
 - [`docs/neoland-quickstart.md`](docs/neoland-quickstart.md) — setup and first run
 - [`docs/neoland-sops-setup.md`](docs/neoland-sops-setup.md) — secrets workflow
-- [`docs/neoland-vault-setup.md`](docs/neoland-vault-setup.md) — Vault integration
-- [`docs/ADR/`](docs/ADR/) — architectural decisions
+- [`docs/ADR/`](docs/ADR/) — architectural decisions (016+)
 - [`docs/runbooks/`](docs/runbooks/) — operations runbooks
-
----
-
-## Contributing
-
-Part of a larger research project. External contributions not currently accepted.
 
 ---
 
@@ -467,4 +326,4 @@ Part of a larger research project. External contributions not currently accepted
 Proprietary — Internal Research Project
 
 **Maintained by**: VoidNxSEC Team  
-**Last validated**: 2026-07-15 · build clean · REST/gRPC/LLM-gateway healthy · Docker compose documentado
+**Last validated**: 2026-07-16 · build clean · REST/gRPC/LLM-gateway healthy · Web Console compiling for WASM

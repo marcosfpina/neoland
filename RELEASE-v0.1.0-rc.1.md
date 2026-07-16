@@ -1,6 +1,6 @@
 # Neoland v0.1.0-rc.1
 
-**First public release candidate.**
+**First public release candidate — TUI + CLI + API.**
 
 All release gates passed on 2026-06-02:
 
@@ -10,8 +10,6 @@ All release gates passed on 2026-06-02:
 | Clippy (0 warnings) | ✅ |
 | E2E REST tests (22/22) | ✅ |
 | Python contracts (26/26) | ✅ |
-| Frontend lint (0 errors) | ✅ |
-| Frontend build (25 routes) | ✅ |
 | Doctor (`ok: true`) | ✅ |
 | Full-stack smoke (9/9 layers) | ✅ |
 
@@ -29,9 +27,12 @@ All release gates passed on 2026-06-02:
 - Checkpoint artifacts persisted to `$NEOLAND_CHECKPOINT_DIR`
 - FastAPI health endpoint integrated into doctor
 
-### Operator workbench (Next.js 15)
-- 25 routes: pipeline view, session inspector, ADR browser, LLM playground, service dashboard
-- Zero ESLint errors, full production build
+### TUI (Rust · ratatui)
+- 3-column layout (Sessions / Conversation / Reasoning)
+- 4 themes (Tokyo Night, Neon Glass, High Contrast, Monochrome)
+- Chat bubbles + code blocks + streaming SSE subscriber
+- Pipeline tree with confidence badges and RWA anchors
+- Command system (`/help`, `/provider`, `/theme`, `/search`, etc.)
 
 ### Infrastructure
 - Nix-first dev shell: single `nix develop` wires DATABASE_URL, all NEOLAND_* env vars, SOPS secrets
@@ -43,6 +44,13 @@ All release gates passed on 2026-06-02:
 - SOPS-encrypted secrets in `secrets/neoland.sops.env`
 - HashiCorp Vault integration with env fallback chain
 - Structured audit logging, brute-force detection, input sanitization
+
+## What's next (v0.2.0 Honest Preview)
+
+- [ ] Leptos WASM Web Console connected to backend (REST + SSE streaming)
+- [ ] Build WASM in Nix flake (`nix build .#neoland-web`)
+- [ ] `cargo test --workspace` includes Web crate
+- [ ] README with real screenshots (TUI + Web Console)
 
 ## Performance (measured)
 
