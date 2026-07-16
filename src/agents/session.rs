@@ -12,10 +12,18 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct SessionState {
     pub session_id: Uuid,
+    pub session_name: String,
     pub task_count: i32,
     pub last_activity: DateTime<Utc>,
     pub last_decision: Option<serde_json::Value>,
     pub active: bool,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SessionMessage {
+    pub role: String,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 pub struct SessionManager {
@@ -45,7 +53,7 @@ impl SessionManager {
         // Fetch current state — named mapping via FromRow; safe under column reorder.
         let state = sqlx::query_as::<_, SessionState>(
             r#"
-                SELECT session_id, task_count, last_activity, last_decision, active
+                SELECT session_id, session_name, task_count, last_activity, last_decision, active
                 FROM agent_session_metadata
                 WHERE session_id = $1
                 "#,
@@ -85,7 +93,7 @@ impl SessionManager {
     pub async fn list_recent(&self, limit: i64) -> Result<Vec<SessionState>> {
         sqlx::query_as::<_, SessionState>(
             r#"
-                SELECT session_id, task_count, last_activity, last_decision, active
+                SELECT session_id, session_name, task_count, last_activity, last_decision, active
                 FROM agent_session_metadata
                 ORDER BY last_activity DESC
                 LIMIT $1
@@ -95,5 +103,32 @@ impl SessionManager {
         .fetch_all(&self.pool)
         .await
         .context("Failed to list sessions")
+    }
+
+    #[instrument(skip(self), fields(session_id = %session_id))]
+    pub async fn set_session_name(&self, session_id: Uuid, name: &str) -> Result<()> {
+        sqlx::query("UPDATE agent_session_metadata SET session_name = $2 WHERE session_id = $1")
+            .bind(session_id)
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .context("Failed to update session name")?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(session_id = %session_id))]
+    pub async fn get_session_messages(&self, session_id: Uuid) -> Result<Vec<SessionMessage>> {
+        sqlx::query_as::<_, SessionMessage>(
+            r#"
+                SELECT task as content, 'user' as role, created_at as timestamp
+                FROM agent_sessions
+                WHERE session_id = $1
+                ORDER BY created_at ASC
+                "#,
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch session messages")
     }
 }

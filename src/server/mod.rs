@@ -6,6 +6,10 @@ use std::{
 };
 
 // Axum imports for REST
+use axum::http::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    HeaderName, Method,
+};
 use axum::{
     body::Body,
     extract::{Json, Path, Query, State},
@@ -15,9 +19,10 @@ use axum::{
         sse::{Event, Sse},
         IntoResponse,
     },
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
+use tower_http::cors::CorsLayer;
 // Integration dependencies (currently used for demonstration)
 // use securellm_core;
 use intelagent_core::TaskId;
@@ -998,6 +1003,11 @@ struct AgentSteerBody {
 }
 
 #[derive(Deserialize)]
+struct SetNameBody {
+    name: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct ListSessionsQuery {
     limit: Option<usize>,
 }
@@ -1081,6 +1091,77 @@ pub(crate) async fn get_agent_session(
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session");
             (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Session not found"})))
+                .into_response()
+        },
+    }
+}
+
+/// GET /v1/agents/session/:id/messages — retrieve messages for a session.
+/// Requires ReadOnly+ auth (enforced by auth_middleware).
+async fn get_session_messages(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    match orchestrator.get_session_messages(id).await {
+        Ok(messages) => match serde_json::to_value(&messages) {
+            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, session_id = %id, "Failed to serialize session messages");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to serialize messages"})),
+                )
+                    .into_response()
+            },
+        },
+        Err(e) => {
+            tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session messages");
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Session messages not found"})),
+            )
+                .into_response()
+        },
+    }
+}
+
+/// PATCH /v1/agents/session/:id/name — update session display name.
+/// Requires User+ auth (enforced by auth_middleware).
+async fn set_session_name(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<uuid::Uuid>,
+    Json(body): Json<SetNameBody>,
+) -> impl IntoResponse {
+    let orchestrator = match &state.agent_orchestrator {
+        Some(o) => o.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
+            )
+                .into_response()
+        },
+    };
+
+    match orchestrator.set_session_name(id, &body.name).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"status": "ok"}))).into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, session_id = %id, "Failed to update session name");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
                 .into_response()
         },
     }
@@ -1598,6 +1679,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         .route("/v1/agents/sessions", get(list_agent_sessions))
         .route("/v1/agents/session/:id", get(get_agent_session))
         .route("/v1/agents/session/:id/steer", post(steer_agent_task))
+        .route("/v1/agents/session/:id/messages", get(get_session_messages))
+        .route("/v1/agents/session/:id/name", patch(set_session_name))
         .route("/v1/agents/session/:id/breakpoint/resolve", post(resolve_agent_breakpoint))
         .route("/v1/agents/tools", get(list_agent_tools))
         .route("/v1/agents/tools/call", post(call_agent_tool))
@@ -1616,11 +1699,36 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
         .route("/metrics", get(metrics_handler)) // Phase 4.1: Prometheus metrics
         .route("/v1/agents/health", get(agent_health_handler));
 
+    // CORS layer — allows the Leptos WASM Web Console (Trunk dev server) and
+    // the Neoland server itself to access the REST API from different origins.
+    let cors_layer = CorsLayer::new()
+        .allow_origin([
+            "http://localhost:8080".parse().unwrap(),
+            "http://localhost:3001".parse().unwrap(),
+        ])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers([
+            CONTENT_TYPE,
+            AUTHORIZATION,
+            HeaderName::from_static("x-api-key"),
+            HeaderName::from_static("x-correlation-id"),
+        ])
+        .allow_credentials(true);
+
+    // Static file serving for the Web Console (Leptos WASM).
+    // In production, `trunk build --release` outputs to web/dist/.
+    // The Neoland server serves it directly — single binary, single port.
+    let web_dist = std::path::Path::new("web/dist");
+    let static_service = tower_http::services::ServeDir::new(web_dist)
+        .fallback(tower_http::services::ServeFile::new(web_dist.join("index.html")));
+
     // Combine all routes
     let app = Router::new()
         .merge(protected_routes)
         .merge(public_routes)
         .merge(crate::openapi::router())
+        .fallback_service(static_service)
+        .layer(cors_layer)
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;

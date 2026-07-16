@@ -496,6 +496,19 @@ impl AgentOrchestrator {
         self.sessions.list_recent(limit).await
     }
 
+    #[instrument(skip(self), fields(session_id = %session_id))]
+    pub async fn set_session_name(&self, session_id: Uuid, name: &str) -> Result<()> {
+        self.sessions.set_session_name(session_id, name).await
+    }
+
+    #[instrument(skip(self), fields(session_id = %session_id))]
+    pub async fn get_session_messages(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<crate::agents::session::SessionMessage>> {
+        self.sessions.get_session_messages(session_id).await
+    }
+
     #[instrument(skip(self))]
     pub async fn health_check(&self) -> Result<bool> {
         self.client.health_check().await
