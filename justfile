@@ -55,6 +55,17 @@ dev-web:
     echo "→ Iniciando Web Console em http://localhost:8080..."
     cd web && trunk serve
 
+# ─── Quick access ────────────────────────────────────────────────────────
+
+# Open landing page in browser
+open-site:
+    xdg-open http://localhost:3001/landing.html 2>/dev/null || open http://localhost:3001/landing.html 2>/dev/null || echo "→ Abra http://localhost:3001/landing.html"
+
+# Open API docs (Swagger UI) in browser
+open-api:
+    xdg-open http://localhost:3001/swagger-ui/ 2>/dev/null || open http://localhost:3001/swagger-ui/ 2>/dev/null || echo "→ Abra http://localhost:3001/swagger-ui/"
+
+# ─── TUI development
 # Servidor standalone — cliente roda em outro terminal (ncli ou just tui)
 serve: server
 
