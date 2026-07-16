@@ -67,7 +67,7 @@ tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "limit", "fs"] }
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "7", features = ["axum"] }
 
@@ -114,3 +114,10 @@ harness = true
 name = "inference_benchmark"
 path = "benches/inference_benchmark.rs"
 harness = false
+
+# Workspace-wide release profile — applies to all members (neoland + neoland-web)
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
