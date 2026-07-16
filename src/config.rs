@@ -27,6 +27,14 @@ pub struct Config {
 pub struct ServerConfig {
     pub grpc_port: u16,
     pub rest_port: u16,
+    /// Path to the Web Console static bundle (Leptos WASM SPA).
+    /// Default: "web/dist". Set via --web-dist CLI flag or NEOLAND_WEB_DIST_DIR env var.
+    #[serde(default = "default_web_dist_dir")]
+    pub web_dist_dir: String,
+}
+
+fn default_web_dist_dir() -> String {
+    "web/dist".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +68,7 @@ pub struct DatabaseConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self { grpc_port: 50051, rest_port: 3001 }
+        Self { grpc_port: 50051, rest_port: 3001, web_dist_dir: "web/dist".to_string() }
     }
 }
 

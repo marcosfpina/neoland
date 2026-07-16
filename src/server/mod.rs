@@ -1442,7 +1442,7 @@ fn init_audit_logger() -> anyhow::Result<(AuditLogger, String)> {
     }
 }
 
-pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
+pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> anyhow::Result<()> {
     use tracing::info;
 
     let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
@@ -1717,10 +1717,21 @@ pub async fn run_server(grpc_port: u16, rest_port: u16) -> anyhow::Result<()> {
 
     // Static file serving for the Web Console (Leptos WASM).
     // In production, `trunk build --release` outputs to web/dist/.
+    // The path is configurable via --web-dist CLI flag or NEOLAND_WEB_DIST_DIR.
     // The Neoland server serves it directly — single binary, single port.
-    let web_dist = std::path::Path::new("web/dist");
-    let static_service = tower_http::services::ServeDir::new(web_dist)
-        .fallback(tower_http::services::ServeFile::new(web_dist.join("index.html")));
+    let web_dist = std::path::Path::new(web_dist_dir);
+    let static_service = if web_dist.exists() {
+        info!("🌐 Serving Web Console from {}", web_dist.display());
+        tower_http::services::ServeDir::new(web_dist)
+            .fallback(tower_http::services::ServeFile::new(web_dist.join("index.html")))
+    } else {
+        tracing::warn!(
+            path = %web_dist.display(),
+            "Web Console static directory not found — SPA routes will 404"
+        );
+        tower_http::services::ServeDir::new(web_dist)
+            .fallback(tower_http::services::ServeFile::new(web_dist.join("index.html")))
+    };
 
     // Combine all routes
     let app = Router::new()

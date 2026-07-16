@@ -24,6 +24,10 @@ pub enum Commands {
         /// Porta REST API
         #[arg(long, default_value = "3001")]
         rest_port: u16,
+
+        /// Caminho para o bundle estático do Web Console (Leptos WASM)
+        #[arg(long, env = "NEOLAND_WEB_DIST_DIR", default_value = "web/dist")]
+        web_dist: String,
     },
 
     /// Inicia o cliente TUI (Terminal User Interface)
@@ -118,9 +122,10 @@ mod tests {
     fn parses_server_defaults() {
         let cli = Cli::try_parse_from(["neoland", "server"]).expect("server parses");
         match cli.command {
-            Commands::Server { grpc_port, rest_port } => {
+            Commands::Server { grpc_port, rest_port, web_dist } => {
                 assert_eq!(grpc_port, 50051);
                 assert_eq!(rest_port, 3001);
+                assert_eq!(web_dist, "web/dist");
             },
             _ => panic!("expected server command"),
         }
@@ -219,9 +224,10 @@ mod tests {
         let cli = Cli::try_parse_from(with_default).expect("server parses with global flags");
 
         match cli.command {
-            Commands::Server { grpc_port, rest_port } => {
+            Commands::Server { grpc_port, rest_port, web_dist } => {
                 assert_eq!(grpc_port, 50051);
                 assert_eq!(rest_port, 3001);
+                assert_eq!(web_dist, "web/dist");
             },
             _ => panic!("expected server command"),
         }

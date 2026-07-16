@@ -37,8 +37,8 @@ async fn main() {
 
     // Match subcommands
     match cli.command {
-        Commands::Server { grpc_port, rest_port } => {
-            if let Err(e) = server::run_server(grpc_port, rest_port).await {
+        Commands::Server { grpc_port, rest_port, web_dist } => {
+            if let Err(e) = server::run_server(grpc_port, rest_port, &web_dist).await {
                 eprintln!("❌ Server error: {}", e);
                 std::process::exit(1);
             }
