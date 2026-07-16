@@ -160,20 +160,20 @@ impl RateLimiter {
 pub struct AppState {
     engine: Arc<Mutex<Option<LocalEngine>>>,
     vector_store: Arc<Mutex<VectorStore>>,
-    /// Optional pgvector-backed persistent store (set when DATABASE_URL is
-    /// configured). When present, gRPC search uses it as primary and
-    /// add_document mirrors to it.
     persistent_store: Option<Arc<PersistentVectorStore>>,
     auth_manager: Arc<AuthManager>,
     audit_logger: Arc<AuditLogger>,
     failed_auth_tracker: Arc<FailedAuthTracker>,
     rate_limiter: Arc<RateLimiter>,
-    start_time: Instant, // Phase 4.3: Track uptime for health checks
-    /// Multi-agent DSPy pipeline orchestrator (set when DATABASE_URL is
-    /// configured).
+    start_time: Instant,
     agent_orchestrator: Option<Arc<AgentOrchestrator>>,
-    /// Broadcast channel for real-time agent pipeline events (SSE).
     event_bus: tokio::sync::broadcast::Sender<AgentEvent>,
+    /// Database pool (v0.4.0 enterprise auth)
+    pub db_pool: Option<sqlx::PgPool>,
+    /// JWT signing secret (v0.4.0)
+    pub jwt_secret: Vec<u8>,
+    /// OAuth2 base URL (v0.4.0)
+    pub oauth_base_url: String,
 }
 
 // gRPC Service Implementation
@@ -1442,6 +1442,183 @@ fn init_audit_logger() -> anyhow::Result<(AuditLogger, String)> {
     }
 }
 
+// ── Auth route handlers (v0.4.0) ──────────────────────────────────────────
+// Thin wrappers that bridge the auth module with the server's AppState.
+
+#[utoipa::path(
+    get,
+    path = "/auth/login/google",
+    tag = "auth",
+    responses((status = 302, description = "Redirect to Google OAuth2"))
+)]
+pub async fn login_google_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Redirect, StatusCode> {
+    let redirect_url = format!("{}/auth/callback/google", state.oauth_base_url);
+    let (auth_url, _) = crate::auth::oauth::google_authorize_url(
+        &std::env::var("NEOLAND_GOOGLE_CLIENT_ID").unwrap_or_default(),
+        &std::env::var("NEOLAND_GOOGLE_CLIENT_SECRET").unwrap_or_default(),
+        &redirect_url,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(axum::response::Redirect::temporary(&auth_url))
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/login/github",
+    tag = "auth",
+    responses((status = 302, description = "Redirect to GitHub OAuth2"))
+)]
+pub async fn login_github_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Redirect, StatusCode> {
+    let redirect_url = format!("{}/auth/callback/github", state.oauth_base_url);
+    let (auth_url, _) = crate::auth::oauth::github_authorize_url(
+        &std::env::var("NEOLAND_GITHUB_CLIENT_ID").unwrap_or_default(),
+        &std::env::var("NEOLAND_GITHUB_CLIENT_SECRET").unwrap_or_default(),
+        &redirect_url,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(axum::response::Redirect::temporary(&auth_url))
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/callback/google",
+    tag = "auth",
+    params(("code" = String, Query, description = "OAuth2 authorization code"), ("state" = String, Query, description = "CSRF token")),
+    responses((status = 200, description = "JWT access + refresh tokens", body = AuthLoginResponse))
+)]
+pub async fn callback_google_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let code = params.get("code").cloned().unwrap_or_default();
+    let redirect_url = format!("{}/auth/callback/google", state.oauth_base_url);
+    let user_info = crate::auth::oauth::google_exchange_code(
+        &std::env::var("NEOLAND_GOOGLE_CLIENT_ID").unwrap_or_default(),
+        &std::env::var("NEOLAND_GOOGLE_CLIENT_SECRET").unwrap_or_default(),
+        &redirect_url,
+        code,
+    )
+    .await
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let db = state.db_pool.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let user = crate::auth::routes::upsert_oauth_user(db, &user_info)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let role = if user.is_owner { "admin" } else { "user" };
+    let access_token = crate::auth::jwt::create_access_token(
+        user.id,
+        "",
+        role,
+        &user.email,
+        &user.display_name,
+        &state.jwt_secret,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let refresh_token = crate::auth::jwt::create_refresh_token();
+    Ok(Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": { "id": user.id, "email": user.email, "display_name": user.display_name, "role": role }
+    })))
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/callback/github",
+    tag = "auth",
+    params(("code" = String, Query, description = "OAuth2 authorization code"), ("state" = String, Query, description = "CSRF token")),
+    responses((status = 200, description = "JWT access + refresh tokens", body = AuthLoginResponse))
+)]
+pub async fn callback_github_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let code = params.get("code").cloned().unwrap_or_default();
+    let redirect_url = format!("{}/auth/callback/github", state.oauth_base_url);
+    let user_info = crate::auth::oauth::github_exchange_code(
+        &std::env::var("NEOLAND_GITHUB_CLIENT_ID").unwrap_or_default(),
+        &std::env::var("NEOLAND_GITHUB_CLIENT_SECRET").unwrap_or_default(),
+        &redirect_url,
+        code,
+    )
+    .await
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let db = state.db_pool.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let user = crate::auth::routes::upsert_oauth_user(db, &user_info)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let role = if user.is_owner { "admin" } else { "user" };
+    let access_token = crate::auth::jwt::create_access_token(
+        user.id,
+        "",
+        role,
+        &user.email,
+        &user.display_name,
+        &state.jwt_secret,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let refresh_token = crate::auth::jwt::create_refresh_token();
+    Ok(Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": { "id": user.id, "email": user.email, "display_name": user.display_name, "role": role }
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses((status = 200, description = "New access token", body = RefreshResponse))
+)]
+pub async fn refresh_token_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(_body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // TODO: validate refresh token from DB, create new access token
+    Err(StatusCode::NOT_IMPLEMENTED)
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/me",
+    tag = "auth",
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Current user profile", body = AuthMeResponse))
+)]
+pub async fn auth_me_handler(
+    request: axum::extract::Request,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let user = crate::auth::middleware::get_auth_user(&request).ok_or(StatusCode::UNAUTHORIZED)?;
+    Ok(Json(serde_json::json!({
+        "user_id": user.user_id.to_string(),
+        "email": user.email,
+        "display_name": user.display_name,
+        "role": user.role,
+        "tenant": user.tenant_slug,
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses((status = 200, description = "Session revoked", body = LogoutResponse))
+)]
+pub async fn logout_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(_body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // TODO: revoke refresh token from DB
+    Ok(Json(serde_json::json!({ "message": "Logged out" })))
+}
+
 pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> anyhow::Result<()> {
     use tracing::info;
 
@@ -1658,9 +1835,12 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         audit_logger,
         failed_auth_tracker,
         rate_limiter,
-        start_time: Instant::now(), // Phase 4.3: Track service start time
+        start_time: Instant::now(),
         agent_orchestrator,
         event_bus: event_tx,
+        db_pool: None,
+        jwt_secret: crate::config::Config::load().auth.jwt.secret.into_bytes(),
+        oauth_base_url: crate::config::Config::load().auth.oauth.base_url,
     });
 
     // 1. Start gRPC Server (with gRPC-web support for browser clients)
@@ -1697,11 +1877,18 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
 
     // Public routes (no authentication)
     let public_routes = Router::new()
-        .route("/health", get(health_handler)) // Phase 4.3: Comprehensive health check
-        .route("/ready", get(readiness_handler)) // Phase 4.3: Readiness probe
-        .route("/live", get(liveness_handler)) // Phase 4.3: Liveness probe
-        .route("/metrics", get(metrics_handler)) // Phase 4.1: Prometheus metrics
-        .route("/v1/agents/health", get(agent_health_handler));
+        .route("/health", get(health_handler))
+        .route("/ready", get(readiness_handler))
+        .route("/live", get(liveness_handler))
+        .route("/metrics", get(metrics_handler))
+        .route("/v1/agents/health", get(agent_health_handler))
+        .route("/auth/login/google", get(login_google_handler))
+        .route("/auth/login/github", get(login_github_handler))
+        .route("/auth/callback/google", get(callback_google_handler))
+        .route("/auth/callback/github", get(callback_github_handler))
+        .route("/auth/refresh", post(refresh_token_handler))
+        .route("/auth/me", get(auth_me_handler))
+        .route("/auth/logout", post(logout_handler));
 
     // CORS layer — allows the Leptos WASM Web Console (Trunk dev server) and
     // the Neoland server itself to access the REST API from different origins.
@@ -1803,6 +1990,9 @@ mod tests {
             start_time: Instant::now(),
             agent_orchestrator: None,
             event_bus: event_tx,
+            db_pool: None,
+            jwt_secret: b"test-secret-key-32-bytes-long!!".to_vec(),
+            oauth_base_url: "http://localhost:3001".to_string(),
         }
     }
 

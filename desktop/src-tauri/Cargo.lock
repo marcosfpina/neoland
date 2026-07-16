@@ -5451,6 +5451,14 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "spectre-core"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "spectre-events"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "securellm-core"
 version = "0.1.0"
 
@@ -5460,14 +5468,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "securellm-security"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "spectre-core"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "spectre-events"
 version = "0.1.0"
 
 [[patch.unused]]

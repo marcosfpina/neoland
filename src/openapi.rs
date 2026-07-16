@@ -3,76 +3,23 @@
 //! Routes:
 //!   GET /openapi.json  — raw spec
 //!   GET /swagger-ui/   — Swagger UI (HTML)
-//!
-//! Add new schemas to `NeolandApi::components` and handlers to the
-//! `#[openapi(paths(...))]` list when you add endpoints.
 
 use axum::Router;
 use utoipa::{
-    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+    openapi::security::{ApiKey, ApiKeyValue, HttpBuilder, SecurityScheme},
     Modify, OpenApi,
 };
 use utoipa_swagger_ui::SwaggerUi;
 
-// ─── Schema definitions
-// ───────────────────────────────────────────────────────
+// ─── Schema definitions ───────────────────────────────────────────────────
 
-/// Incoming task for the multi-agent ADR pipeline.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct AgentTaskRequest {
-    /// Natural-language task description for the pipeline.
     pub task: String,
-    /// Existing session to resume. Omit to start a new session.
     #[schema(value_type = Option<String>, format = "uuid")]
     pub session_id: Option<uuid::Uuid>,
 }
 
-/// Junior agent output — creative hypothesis + self-assessed confidence.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct JuniorOutput {
-    pub hypothesis: String,
-    /// Confidence score [0.0, 1.0].
-    #[schema(minimum = 0.0, maximum = 1.0)]
-    pub confidence: f64,
-    #[schema(value_type = String, example = "low")]
-    pub risk_level: String,
-    pub unknowns: Vec<String>,
-    pub innovation_vectors: Vec<String>,
-}
-
-/// Senior agent output — sceptical refinement + escalation decision.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct SeniorOutput {
-    pub valid_parts: Vec<String>,
-    pub rejected_parts: Vec<String>,
-    pub risk_assessment: String,
-    pub escalate_to_architect: bool,
-    pub refined_hypothesis: String,
-}
-
-/// Architect agent output — structural soundness review (optional tier).
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct ArchitectOutput {
-    pub structural_soundness: bool,
-    #[schema(minimum = 0.0, maximum = 1.0)]
-    pub composability_score: f64,
-    pub long_term_concerns: Vec<String>,
-    pub recommended_structure: String,
-    pub blockers: Vec<String>,
-}
-
-/// Tech-Leader final decision + ADR checkpoint.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct TechLeaderOutput {
-    #[schema(example = "approve")]
-    pub decision: String,
-    pub rationale: String,
-    pub action_items: Vec<String>,
-    pub adr_title: String,
-    pub session_summary: String,
-}
-
-/// Full pipeline result returned by POST /v1/agents/task.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct PipelineResult {
     #[schema(value_type = String, format = "uuid")]
@@ -81,14 +28,14 @@ pub struct PipelineResult {
     pub session_id: uuid::Uuid,
     #[schema(value_type = String, format = "date-time")]
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub junior: JuniorOutput,
-    pub senior: SeniorOutput,
-    pub architect: Option<ArchitectOutput>,
-    pub tech_leader: TechLeaderOutput,
+    pub task: String,
+    pub junior: serde_json::Value,
+    pub senior: serde_json::Value,
+    pub architect: Option<serde_json::Value>,
+    pub tech_leader: serde_json::Value,
     pub checkpoint_path: String,
 }
 
-/// Session state from PostgreSQL.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct SessionState {
     #[schema(value_type = String, format = "uuid")]
@@ -100,19 +47,11 @@ pub struct SessionState {
     pub active: bool,
 }
 
-/// Recent session listing response.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct SessionListResponse {
-    pub sessions: Vec<SessionState>,
-}
-
-/// Generic error response.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
 }
 
-/// Agent pipeline health response.
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct AgentHealthResponse {
     #[schema(example = "ok")]
@@ -120,6 +59,80 @@ pub struct AgentHealthResponse {
     #[schema(example = "up")]
     pub pipeline: String,
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ChatRequest {
+    pub messages: Vec<ChatMessage>,
+    #[schema(default = true)]
+    pub stream: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ChatResponse {
+    pub choices: Vec<ChatChoice>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ChatChoice {
+    pub message: ChatMessage,
+    pub index: u32,
+}
+
+// Auth (v0.4.0)
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct AuthLoginResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub user: AuthUserInfo,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct AuthUserInfo {
+    #[schema(value_type = String, format = "uuid")]
+    pub id: uuid::Uuid,
+    pub email: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    #[schema(example = "admin")]
+    pub role: String,
+    #[schema(example = "voidnx-labs")]
+    pub tenant: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct RefreshResponse {
+    pub access_token: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct AuthMeResponse {
+    #[schema(value_type = String, format = "uuid")]
+    pub user_id: uuid::Uuid,
+    pub email: String,
+    pub display_name: String,
+    #[schema(example = "admin")]
+    pub role: String,
+    pub tenant: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct LogoutResponse {
+    #[schema(example = "Logged out")]
+    pub message: String,
+}
+
+// ─── Security schemes ─────────────────────────────────────────────────────
 
 struct ApiKeyAuth;
 
@@ -134,56 +147,77 @@ impl Modify for ApiKeyAuth {
     }
 }
 
+struct BearerAuth;
+
+impl Modify for BearerAuth {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer_auth",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(utoipa::openapi::security::HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .description(Some("JWT access token from /auth/login or /auth/refresh"))
+                        .build(),
+                ),
+            );
+        }
+    }
+}
+
+// ─── OpenAPI spec ─────────────────────────────────────────────────────────
+
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Neoland API",
-        version = "0.1.0",
-        description = "Multi-agent ADR pipeline control plane (Rust + DSPy)",
-        contact(name = "VoidNxLabs", email = "dev@voidnxlabs.io"),
-        license(name = "Proprietary")
+        version = "0.4.0",
+        description = "Autonomous AI Engineering Platform — Multi-agent ADR pipeline with OAuth2, RBAC, and HA Kubernetes deployment.\n\n## Authentication\n\n- **bearer_auth**: JWT Bearer token (OAuth2 login via Google/GitHub)\n- **api_key**: Legacy API key (X-API-Key header)",
+        contact(name = "VoidNxSEC Team", email = "sec@voidnxlabs.com", url = "https://github.com/VoidNxSEC/neoland"),
+        license(name = "MIT", url = "https://github.com/VoidNxSEC/neoland/blob/main/LICENSE")
     ),
     paths(
+        crate::server::health_handler,
+        crate::server::metrics_handler,
+        crate::server::agent_health_handler,
         crate::server::submit_agent_task,
         crate::server::list_agent_sessions,
         crate::server::get_agent_session,
-        crate::server::agent_health_handler,
-        crate::server::health_handler,
-        crate::server::metrics_handler,
+        crate::server::list_agent_tools,
+        crate::server::call_agent_tool,
+        crate::server::resolve_agent_breakpoint,
+        crate::server::login_google_handler,
+        crate::server::login_github_handler,
+        crate::server::callback_google_handler,
+        crate::server::callback_github_handler,
+        crate::server::refresh_token_handler,
+        crate::server::auth_me_handler,
+        crate::server::logout_handler,
     ),
     components(schemas(
-        AgentTaskRequest,
-        PipelineResult,
-        JuniorOutput,
-        SeniorOutput,
-        ArchitectOutput,
-        TechLeaderOutput,
-        SessionState,
-        SessionListResponse,
-        ErrorResponse,
-        AgentHealthResponse,
+        AgentTaskRequest, PipelineResult, SessionState,
+        ErrorResponse, AgentHealthResponse,
+        ChatRequest, ChatMessage, ChatResponse, ChatChoice,
+        AuthLoginResponse, AuthUserInfo, RefreshRequest, RefreshResponse,
+        AuthMeResponse, LogoutResponse,
     )),
-    modifiers(&ApiKeyAuth),
+    modifiers(&ApiKeyAuth, &BearerAuth),
     tags(
-        (name = "agents", description = "Multi-agent ADR pipeline endpoints"),
         (name = "system", description = "Health, metrics, and introspection"),
+        (name = "chat", description = "OpenAI-compatible chat completion + SSE streaming"),
+        (name = "agents", description = "Multi-agent ADR pipeline (DSPy + 4-stage review)"),
+        (name = "auth", description = "OAuth2 login, JWT tokens, session management"),
     )
 )]
 pub struct NeolandApi;
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+// ─── Routes ───────────────────────────────────────────────────────────────
 
-/// Returns axum Router with GET /openapi.json and GET /swagger-ui/* mounted.
-///
-/// Generic over state so it can be merged into any typed Router without
-/// requiring the caller to strip/re-apply state.
 pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    // `SwaggerUi::url("/openapi.json", ...)` already mounts the spec route.
-    // Adding an explicit `.route("/openapi.json", ...)` duplicates the GET
-    // handler and panics at router construction time in axum 0.7.
     Router::new().merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", NeolandApi::openapi()))
 }
 
@@ -198,14 +232,16 @@ mod tests {
         assert!(json.contains("\"openapi\""));
         assert!(json.contains("Neoland API"));
         assert!(json.contains("/v1/agents/task"));
-        assert!(json.contains("/v1/agents/session/{id}"));
+        assert!(json.contains("/health"));
+        assert!(json.contains("/auth/login/google"));
     }
 
     #[test]
-    fn openapi_has_security_scheme() {
+    fn openapi_has_security_schemes() {
         let spec = NeolandApi::openapi();
         let components = spec.components.expect("components present");
         assert!(components.security_schemes.contains_key("api_key"));
+        assert!(components.security_schemes.contains_key("bearer_auth"));
     }
 
     #[test]
@@ -216,10 +252,12 @@ mod tests {
         for name in &[
             "AgentTaskRequest",
             "PipelineResult",
-            "JuniorOutput",
-            "SeniorOutput",
-            "TechLeaderOutput",
             "SessionState",
+            "ChatRequest",
+            "ChatResponse",
+            "AuthLoginResponse",
+            "RefreshResponse",
+            "AuthMeResponse",
         ] {
             assert!(schemas.contains_key(*name), "missing schema: {name}");
         }

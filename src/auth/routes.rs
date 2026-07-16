@@ -259,7 +259,7 @@ async fn logout(
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-async fn upsert_oauth_user(db: &PgPool, info: &OAuthUserInfo) -> Result<User, sqlx::Error> {
+pub async fn upsert_oauth_user(db: &PgPool, info: &OAuthUserInfo) -> Result<User, sqlx::Error> {
     let existing = sqlx::query_as::<_, super::types::OAuthAccount>(
         "SELECT * FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2",
     )
