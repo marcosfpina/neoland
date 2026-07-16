@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Nix
         uses: cachix/install-nix-action@v25
@@ -25,14 +25,19 @@ jobs:
         uses: cachix/cachix-action@v14
         with:
           name: neoland
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           skipPush: true
 
       - name: Check Nix flake
         run: nix flake check
 
-      - name: Run unit tests
+      - name: Run unit tests (core)
         run: nix develop -c cargo test --lib --no-fail-fast
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run unit tests (web)
+        run: nix develop -c cargo test -p neoland-web --no-fail-fast
         env:
           RUST_BACKTRACE: 1
 
@@ -45,7 +50,8 @@ jobs:
         if: always()
         run: |
           echo "## Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Unit tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Core unit tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Web unit tests passed" >> $GITHUB_STEP_SUMMARY
           echo "✅ Integration tests passed" >> $GITHUB_STEP_SUMMARY
 
   test-coverage:
@@ -53,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Nix
         uses: cachix/install-nix-action@v25
@@ -69,7 +75,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/cobertura.xml
           fail_ci_if_error: false

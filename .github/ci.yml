@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   rust:
-    name: Rust (fmt · clippy · test)
+    name: Rust (fmt · clippy · test · wasm)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,6 +21,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: wasm32-unknown-unknown
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -31,11 +32,20 @@ jobs:
       - name: Format check
         run: cargo fmt --check
 
-      - name: Clippy
+      - name: Clippy (all targets)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Unit tests
+      - name: Clippy (WASM web crate)
+        run: cargo clippy -p neoland-web --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Unit tests (core)
         run: cargo test --lib --verbose
+
+      - name: Unit tests (web)
+        run: cargo test -p neoland-web --verbose
+
+      - name: Check WASM target
+        run: cargo check -p neoland-web --target wasm32-unknown-unknown
 
   python:
     name: Python contracts (no LLM)
@@ -43,7 +53,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -64,7 +74,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
