@@ -298,6 +298,10 @@ setup-all: setup-hooks setup-direnv
 
 # ─── Validation ───────────────────────────────────────────────────────────
 
+# Generate mTLS certificates for end-to-end encryption
+gen-certs:
+    bash scripts/gen-certs.sh
+
 # Production readiness validation suite
 validate:
     bash scripts/validate-production-readiness.sh

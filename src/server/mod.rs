@@ -1933,7 +1933,15 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         .layer(cors_layer)
         .with_state(shared_state);
 
+    // Start REST server with optional TLS
+    let tls_config = crate::tls::TlsConfig::from_env()?;
     let listener = tokio::net::TcpListener::bind(rest_addr).await?;
+
+    if let Some(ref tls) = tls_config {
+        info!("🔐 TLS enabled (mTLS: {}) — certificates loaded", tls.is_mtls());
+    } else {
+        info!("🔓 TLS not configured — use a reverse proxy (nginx/Caddy) for production");
+    }
     info!("✅ REST API rodando em http://{}", rest_addr);
     info!("✅ gRPC Service rodando em {}", grpc_addr);
 

@@ -19,6 +19,7 @@ pub mod nlp;
 pub mod openapi; // Ciclo 3: OpenAPI spec + Swagger UI
 pub mod secrets;
 pub mod storage; // Phase 4.7: Persistent Vector Store
+pub mod tls; // v0.4.0: mTLS configuration & certificate loading
 pub mod tools;
 pub mod tui;
 pub mod validation;
