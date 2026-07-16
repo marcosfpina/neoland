@@ -293,12 +293,15 @@
             maintainers = [ "kernelcore" ];
           };
         };
+
+        ibmPlexMono = pkgs.callPackage ./nix/ibm-plex-mono.nix { };
       in
       {
         packages = {
           default = neolandPackage;
           neoland = neolandPackage;
           neoland-web = neolandWebPackage;
+          ibm-plex-mono = ibmPlexMono;
         };
 
         formatter = pkgs.nixfmt-tree;

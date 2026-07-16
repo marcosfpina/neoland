@@ -1,10 +1,33 @@
 /*
- * Neoland Design System — v0.1.0
+ * Neoland Design System — v0.2.0
  * Single-file stylesheet. No build step, no Tailwind, no runtime JS.
  *
- * Font stack: IBM Plex Mono (bundled via Nix) → JetBrains Mono → system mono.
- * TODO: bundle IBM Plex Mono as Nix derivation instead of relying on system install.
+ * Font: IBM Plex Mono (local-first via Nix derivation, nix build .#ibm-plex-mono).
+ * Fallback: JetBrains Mono → system monospace.
  */
+
+/* ── IBM Plex Mono — bundled via Nix derivation ─────────────────────── */
+@font-face {
+    font-family: "IBM Plex Mono";
+    src: url("/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "IBM Plex Mono";
+    src: url("/fonts/IBMPlexMono-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "IBM Plex Mono";
+    src: url("/fonts/IBMPlexMono-Italic.woff2") format("woff2");
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
 
 :root {
     color-scheme: dark;

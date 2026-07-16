@@ -3366,6 +3366,8 @@ dependencies = [
  "gloo-net",
  "gloo-timers",
  "leptos",
+ "prost",
+ "prost-build",
  "serde",
  "serde_json",
  "wasm-bindgen",
