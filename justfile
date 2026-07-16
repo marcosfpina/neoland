@@ -146,13 +146,13 @@ test-with-secrets:
 test-web:
     cargo test -p neoland-web
 
-# Web Console WASM integration tests (requires wasm-bindgen-cli, headless browser)
+# Web Console WASM integration tests (requires nix develop for WASM target + headless browser)
 test-web-wasm:
-    wasm-pack test --headless --chrome web/
+    nix develop --command wasm-pack test --headless --chrome web/
 
 # Web Console WASM integration tests (Firefox)
 test-web-wasm-firefox:
-    wasm-pack test --headless --firefox web/
+    nix develop --command wasm-pack test --headless --firefox web/
 
 # ─── Desktop ──────────────────────────────────────────────────────────────
 

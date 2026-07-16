@@ -373,6 +373,8 @@
               trunk
               wasm-bindgen-cli
               wasm-pack
+              chromedriver
+              chromium
               cargo-wasi
               jq
               rustup
@@ -393,6 +395,11 @@
           # Garante que o protoc seja encontrado
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           # PKG_CONFIG_PATH is auto-populated by Nix from nativeBuildInputs
+
+          # Force wasm-pack to use the Nix-provided chromedriver (statically linked)
+          # instead of downloading a dynamically-linked binary that fails on NixOS.
+          CHROMEDRIVER = "${pkgs.chromedriver}/bin/chromedriver";
+
           shellHook = ''
             export NEOLAND_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
@@ -456,6 +463,7 @@
               echo "  just serve             # só servidor (ncli em outro terminal)"
               echo "  just tui               # TUI standalone (servidor já deve estar up)"
               echo "  just ci                # check → fmt → clippy → test"
+              echo "  just test-web-wasm     # WASM integration tests (headless Chrome)"
               echo "  just watch             # cargo-watch re-check on save"
               echo "  just visual            # ASCII preview do TUI"
               echo "  just fix               # fmt + clippy --fix"
