@@ -55,16 +55,18 @@ TUI · Web · Desktop
 
 **Meta**: stack completa operando em single-host, deployment automatizado.
 
-| # | Entrega |
-|---|---|
-| 1 | gRPC-web bridge — tonic-web nativo no Leptos (sem proxy) |
-| 2 | Font IBM Plex Mono empacotada como Nix derivation |
-| 3 | Deploy estático: Neoland server serve `web/dist/` como SPA |
-| 4 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint |
-| 5 | PWA: service worker + manifesto, offline-ready |
-| 6 | Quickstart validado — NixOS e Ubuntu, <5 min até first task |
-| 7 | Testes de integração Leptos (`wasm-bindgen-test`) |
-| 8 | Dashboard de métricas no Web (latência, tokens, confidence) |
+| # | Entrega | Status |
+|---|---------|--------|
+| 1 | gRPC-web bridge — tonic-web server-side (HTTP/1.1 + CORS) | ✅ |
+| 2 | Deploy estático configurável (`--web-dist` + env var) | ✅ |
+| 3 | PWA — service worker + manifesto + icons | ✅ |
+| 4 | Font IBM Plex Mono Nix derivation | ✅ |
+| 5 | Protobuf types para WASM (prost-build) | ✅ |
+| 6 | Dashboard de métricas no Web (latência, tokens, confidence) | ✅ |
+| 7 | Quickstart validado — NixOS e Ubuntu, <5 min até first task | ✅ |
+| 8 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint | 🔜 |
+| 9 | Testes de integração Leptos (`wasm-bindgen-test`) | 🔜 |
+| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.4.0) | 🔜 |
 
 **Gate**: stack sobe com `nix run .#neoland-full` ou `docker compose up`. Web Console funcional com backend real. Quickstart verificável por terceiro.
 
