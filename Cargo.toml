@@ -60,6 +60,12 @@ spectre-core = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548
 async-nats = "0.46"
 thiserror = "1.0"
 
+# OAuth2 & JWT (v0.4.0 enterprise auth)
+oauth2 = { version = "5", features = ["reqwest"] }
+jsonwebtoken = "9"
+sha2 = "0.10"
+hex = "0.4"
+
 # gRPC & Async
 tonic = "0.12"
 tonic-web = "0.12"
@@ -68,6 +74,7 @@ tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["cookie"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "limit", "fs"] }
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "7", features = ["axum"] }

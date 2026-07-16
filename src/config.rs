@@ -20,6 +20,7 @@ pub struct Config {
     pub nats: NatsConfig,
     pub mcp: McpConfig,
     pub matrix: MatrixConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +177,68 @@ impl Default for MatrixConfig {
     }
 }
 
+// ── Auth (v0.4.0 enterprise multi-tenant) ────────────────────────────────
+
+/// Authentication & authorization configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AuthConfig {
+    pub oauth: OAuthConfig,
+    pub jwt: JwtConfig,
+}
+
+/// OAuth2 provider credentials.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OAuthConfig {
+    /// Google OAuth2 client ID (env: NEOLAND_GOOGLE_CLIENT_ID)
+    pub google_client_id: Option<String>,
+    /// Google OAuth2 client secret (env: NEOLAND_GOOGLE_CLIENT_SECRET)
+    pub google_client_secret: Option<String>,
+    /// GitHub OAuth2 client ID (env: NEOLAND_GITHUB_CLIENT_ID)
+    pub github_client_id: Option<String>,
+    /// GitHub OAuth2 client secret (env: NEOLAND_GITHUB_CLIENT_SECRET)
+    pub github_client_secret: Option<String>,
+    /// Base URL for OAuth2 redirect callbacks (e.g. "https://neoland.example.com")
+    pub base_url: String,
+}
+
+/// JWT signing configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JwtConfig {
+    /// HS256 symmetric secret for JWT signing (env: NEOLAND_JWT_SECRET).
+    /// In production, use a 256-bit random key stored in Vault/SOPS.
+    pub secret: String,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self { oauth: OAuthConfig::default(), jwt: JwtConfig::default() }
+    }
+}
+
+impl Default for OAuthConfig {
+    fn default() -> Self {
+        Self {
+            google_client_id: None,
+            google_client_secret: None,
+            github_client_id: None,
+            github_client_secret: None,
+            base_url: "http://localhost:3001".to_string(),
+        }
+    }
+}
+
+impl Default for JwtConfig {
+    fn default() -> Self {
+        Self {
+            // Dev-only default — must be overridden in production via env var
+            secret: "neoland-dev-jwt-secret-change-in-production".to_string(),
+        }
+    }
+}
+
 impl Config {
     /// Load config from file, with env var overrides applied on top.
     /// Returns default config if no file is found (no error).
@@ -319,6 +382,25 @@ impl Config {
                 "0" | "false" | "no" | "off" => self.matrix.enabled = false,
                 _ => {},
             }
+        }
+        // Auth (v0.4.0)
+        if let Some(v) = get_env("NEOLAND_GOOGLE_CLIENT_ID") {
+            self.auth.oauth.google_client_id = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_GOOGLE_CLIENT_SECRET") {
+            self.auth.oauth.google_client_secret = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_GITHUB_CLIENT_ID") {
+            self.auth.oauth.github_client_id = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_GITHUB_CLIENT_SECRET") {
+            self.auth.oauth.github_client_secret = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_OAUTH_BASE_URL") {
+            self.auth.oauth.base_url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_JWT_SECRET") {
+            self.auth.jwt.secret = v;
         }
     }
 }

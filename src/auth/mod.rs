@@ -1,11 +1,24 @@
 //! Authentication and Authorization Module
 //!
-//! This module implements a multi-protocol authentication system for Neoland:
-//! - REST API: API key authentication via X-API-Key header
+//! Multi-protocol authentication system for Neoland:
+//! - REST API: API key via X-API-Key header (legacy) + JWT Bearer token
+//! - OAuth2: Google & GitHub OAuth2 login (v0.4.0)
 //! - gRPC: mTLS (mutual TLS) authentication
 //! - RBAC: Role-Based Access Control (admin, user, read-only)
+//! - Multi-tenant: User → Tenant → Role scoping
 //!
 //! See ADR-011 for detailed architecture decisions.
+
+// ── Enterprise auth (v0.4.0) ──────────────────────────────────────────────
+pub mod jwt;
+pub mod middleware;
+pub mod oauth;
+pub mod routes;
+pub mod types;
+
+// Re-export commonly-used types
+pub use middleware::JwtSecret;
+pub use types::{AuthUser, Claims, Tenant, User, UserRole};
 
 use std::{
     collections::HashMap,
