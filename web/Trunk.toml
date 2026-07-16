@@ -1,12 +1,31 @@
 [build]
-# Entry point — Trunk injects WASM/JS bindings here
 target = "index.html"
 dist = "dist"
 
 [serve]
-port = 8082
-open = true
+port = 8080
+open = false
 
 [watch]
-# Directories to watch for live reload
 ignore = ["dist", "target"]
+
+# Proxy API calls to the Neoland backend — single port, zero CORS issues
+[[proxy]]
+rewrite = "/v1/"
+backend = "http://127.0.0.1:3001"
+
+[[proxy]]
+rewrite = "/health"
+backend = "http://127.0.0.1:3001"
+
+[[proxy]]
+rewrite = "/ready"
+backend = "http://127.0.0.1:3001"
+
+[[proxy]]
+rewrite = "/live"
+backend = "http://127.0.0.1:3001"
+
+[[proxy]]
+rewrite = "/metrics"
+backend = "http://127.0.0.1:3001"

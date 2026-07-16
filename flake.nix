@@ -100,6 +100,7 @@
 
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" ];
+          targets = [ "wasm32-unknown-unknown" ];
         };
 
         mkNeolandCommand =
@@ -269,11 +270,35 @@
             maintainers = [ "kernelcore" ];
           };
         };
+
+        neolandWebPackage = pkgs.stdenv.mkDerivation {
+          pname = "neoland-web";
+          version = "0.2.0";
+          src = ./.;
+          nativeBuildInputs = with pkgs; [ trunk rustToolchain pkg-config openssl ];
+          buildPhase = ''
+            cd web
+            export HOME="$TMPDIR"
+            export CARGO_HOME="$TMPDIR/.cargo"
+            mkdir -p "$CARGO_HOME"
+            trunk build --release
+          '';
+          installPhase = ''
+            mkdir -p $out
+            cp -r web/dist/* $out/
+          '';
+          meta = with pkgs.lib; {
+            description = "Neoland Web Console — Leptos WASM SPA";
+            license = licenses.mit;
+            maintainers = [ "kernelcore" ];
+          };
+        };
       in
       {
         packages = {
           default = neolandPackage;
           neoland = neolandPackage;
+          neoland-web = neolandWebPackage;
         };
 
         formatter = pkgs.nixfmt-tree;
