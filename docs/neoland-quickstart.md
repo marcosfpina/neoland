@@ -1,6 +1,6 @@
 # Neoland Quick Start Guide
 
-**Last Updated**: 2026-07-15
+**Last Updated**: 2026-07-16 · **Version**: v0.2.0 Honest Preview
 
 Get up and running with Neoland in under 5 minutes.
 
@@ -9,59 +9,66 @@ Get up and running with Neoland in under 5 minutes.
 ## Prerequisites
 
 - 2GB free RAM (for local inference)
-- Terminal emulator
+- Terminal emulator (for TUI) or modern browser (for Web Console)
 - One of:
-  - Nix / NixOS recommended
-  - Ubuntu or comparable bare metal environment supported
+  - **Nix / NixOS** (recommended)
+  - Ubuntu or comparable bare metal environment
+
+---
+
+## Quick Start (Nix)
+
+```bash
+git clone <this-repo> && cd neoland
+nix develop
+
+# TUI: server + client together
+just dev
+
+# Web Console: server + browser SPA on http://localhost:8080
+just dev-web
+```
+
+That's it. Two commands. Under 5 minutes.
 
 ---
 
 ## Installation
 
-### Option 1: Development Mode With Nix (Recommended)
+### Option 1: Nix Dev Shell (Recommended)
 
 ```bash
-cd /home/kernelcore/master/neoland
+cd neoland
 nix develop
 
-# Dev-shell commands
-neoland-secrets
-neoland-server
-neoland-client --neoland-gateway-url http://localhost:9000
-neoland-doctor --json
+# Aliases set by the dev shell:
+nsrv          # neoland server  (:3001 REST, :50051 gRPC)
+ncli          # neoland client  (TUI)
+nd            # neoland doctor  (diagnostics)
+nt            # cargo test --lib (unit tests)
 
-# One-shot commands also work
-nix develop --command neoland-server
-nix develop --command neoland-test --json
+# Or use just recipes:
+just server   # start server
+just tui      # TUI client
+just dev-web  # server + Web Console on :8080
+just dev      # server + TUI
+just doctor   # environment diagnostics
 ```
 
-### Option 2: Docker Compose (stack completa)
+### Option 2: Docker Compose (Full Stack)
 
-Sobe PostgreSQL (pgvector), NATS, DSPy pipeline e control plane num único comando.
-Requer Docker com BuildKit e SSH agent configurado (deps privadas do GitHub).
+Sobe PostgreSQL (pgvector), NATS, DSPy pipeline e control plane.
 
 ```bash
 cd deploy/docker/
+cp .env.example .env && $EDITOR .env   # set LLM_API_KEY
 
-# Apenas na primeira vez — .env já vem com chaves de dev pré-geradas.
-# Preencha apenas LLM_API_KEY com sua chave real.
-cp .env.example .env
-$EDITOR .env   # edite LLM_API_KEY
-
-# Build + start
 eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
 DOCKER_BUILDKIT=1 docker compose build --ssh default
 docker compose up -d
 
-# Verifique saúde
-docker compose ps
 curl http://localhost:3001/health | jq .
 ```
-
-Portas expostas pelo compose: `:3001` (REST API), `:50051` (gRPC), `:4222` (NATS).
-
-O entrypoint roda `sqlx migrate run` automaticamente antes de iniciar o servidor,
-portanto não é necessário criar o schema manualmente.
 
 ### Option 3: Build Release Binary
 
@@ -77,290 +84,206 @@ nix develop --command cargo build --bin neoland --release
 ### 1. Start the Server
 
 ```bash
-# Default ports: gRPC=50051, REST=3001
+# Default: gRPC :50051, REST :3001, Web Console: web/dist/
 neoland server
 
-# In nix develop, you can use the shortcut command
-neoland-server
-nix develop --command neoland-server
+# Custom ports + Web Console path
+neoland server --grpc-port 50052 --rest-port 3002 --web-dist /var/www/neoland
 
-# Custom configuration
-neoland server --grpc-port 50052 --rest-port 3002 --log-level debug
+# Or via env var
+NEOLAND_WEB_DIST_DIR=/opt/neoland/web neoland server
 ```
-
-The server will:
-
-- Download models on first run (~1.2GB total)
-- Start gRPC service on `[::]:<grpc-port>`
-- Start REST API on `0.0.0.0:<rest-port>`
 
 ### 2. Launch TUI Client
 
-**In a new terminal**:
-
 ```bash
-# Connect to default local server
 neoland client
-
-# In nix develop, you can use the shortcut command
-neoland-client
-nix develop --command neoland-client --neoland-gateway-url http://localhost:9000
-
-# Custom endpoints
-neoland client \
-  --server-url http://[::1]:50051 \
-  --neoland-gateway-url http://localhost:9000
+neoland client --neoland-gateway-url http://gpu-server:8080
 ```
 
-## Secrets
-
-For local encrypted secrets, the preferred workflow is to edit
-`secrets/neoland.sops.env` with:
+### 3. Open Web Console
 
 ```bash
-neoland-secrets
+# Dev mode: single command (Trunk proxy handles CORS)
+just dev-web
+# → open http://localhost:8080
+
+# Production: build WASM, serve via Neoland
+just build-web              # → web/dist/
+neoland server --web-dist web/dist
+# → open http://localhost:3001
 ```
 
-The `neoland`, `neoland-server`, `neoland-client`, `neoland-test`,
-`neoland-doctor`, `neoland-restart`, `nsrv`, and `ncli` commands decrypt and
-load that file automatically before launch.
+---
 
-If you are on bare metal Ubuntu or do not want to use SOPS, exporting the same
-environment variables manually is also valid:
+## Web Console
+
+The Web Console is a Leptos WASM SPA with 3 panels:
+
+```
+┌─ Topbar ──────────────────────────────────────────────────────────┐
+│  [☰ Sessions]  NEOLAND://CORE  [⚙ Reasoning]                      │
+├─ Workspace ───────────────────────────────────────────────────────┤
+│ ┌ Sessions ────────┐ ┌ Conversation ───────────────────────┐      │
+│ │ [+ New Chat]     │ │                                    │      │
+│ │ ● Session 1  5m  │ │  󰚩 Neoland                         │      │
+│ │ ● Session 2  1h  │ │  ╭────────────────────────────────╮│      │
+│ └──────────────────┘ │  │ Response streaming via SSE...   ││      │
+│                      │  ╰────────────────────────────────╯│      │
+│                      └────────────────────────────────────┘      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+- **Sessions panel**: list, create, and switch between sessions
+- **Conversation**: chat messages with live SSE streaming from agent pipeline
+- **Reasoning panel**: pipeline tree with confidence badges and ADR status
+
+### Development
 
 ```bash
-export NEOLAND_ADMIN_API_KEY=...
-export NEOLAND_USER_API_KEY=...
-export NEOLAND_READONLY_API_KEY=...
+# Build WASM
+just build-web         # trunk build --release → web/dist/
+
+# Check + test
+just check-wasm        # cargo check --target wasm32-unknown-unknown
+just clippy-wasm       # cargo clippy for WASM target
+just test-web          # 16 unit tests
 ```
 
-SOPS is recommended, not mandatory.
+---
+
+## Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `just dev` | Server + TUI (single terminal) |
+| `just dev-web` | Server + Web Console on :8080 |
+| `just server` | Server only |
+| `just tui` | TUI client only |
+| `just ci` | Full CI: check → fmt → clippy → test (core + web) |
+| `just test-web` | Web Console unit tests (16) |
+| `just build-web` | Build WASM bundle |
+| `just doctor` | Environment diagnostics |
+| `just smoke` | Full-stack smoke test |
+
+---
+
+## Testing
+
+```bash
+# All tests
+cargo test --workspace          # 275 core + 16 web
+
+# Web Console only
+cargo test -p neoland-web       # 16 tests
+
+# Python contracts (no LLM needed)
+cd agents && poetry run pytest tests/ -m contract -v
+
+# WASM compilation
+cargo check -p neoland-web --target wasm32-unknown-unknown
+```
 
 ---
 
 ## TUI Interface
 
-### Layout
-
 ```
-╭─ Neoland ── ● Connected  gpt-4o-mini  1.2k tok  42ms ──────╮
-│                                                              │
-│  12:34:56  you                                               │
-│  Hello, how are you?                                         │
-│                                                              │
-│  12:34:58  assistant                                         │
-│  I'm doing well! How can I help you today?                   │
-│                                                              │
-│  12:35:02  assistant                          ⠹ thinking... │
-│                                                              │
-│                                         ↑↓ scroll  g bottom │
-╰─────────────────────────────────────────────────────────────╯
-╭─ Message ───────────────────────── Enter send  Ctrl+C quit ─╮
-│ type here█                                                   │
-╰──────────────────────────────────────────────────────────────╯
+│  󰽥 Neoland  │ 󰤣  │ 󰍉 local  │ 󰔎 0ms  󰭹 Conversation              󰀄  󰢻  │
+│─────────────────────────────────────────────────────────────────────│
+│╭ 󰙯 Sessions ──────╮╭ 󰭹 Conversation ────────────────╮╭ 󰒝 Reasoning ──╮│
+││  ✚ New Chat  ^n   ││  󰚩 Neoland                     ││ Pipeline Tree ││
+││  󰅂 ⠋ Active Task   ││  ╭────────────────────────────╮││  ├─ Jr [92%]  ││
+││    ● Past Session  ││  │ Response from agent...      │││  ├─ Sr [88%]  ││
+│╰───────────────────╯│  ╰────────────────────────────╯││  ╰─ ADR ✓     ││
+│                      ╰────────────────────────────────╯╰──────────────╯│
+│  ╭──────────────────────────────────────────────────────────────────╮  │
+│  │ L local │  󰢱 balanced │ Enter enviar  ·  Tab painéis  ·  ? help  │  │
+│  ╰──────────────────────────────────────────────────────────────────╯  │
 ```
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| **Enter** | Send message |
+| **Enter** | Send message / Steer |
 | **Ctrl+C** / **Esc** | Quit |
-| **Ctrl+L** | Clear chat |
-| **↑ / ↓** | Scroll chat |
-| **PgUp / PgDn** | Scroll fast |
-| **g** (buffer empty) | Jump to bottom |
-| **Ctrl+← / →** | Word left/right |
-| **Alt+B / Alt+F** | Word left/right (alt) |
-| **Ctrl+A / Ctrl+E** | Line start/end |
-| **Ctrl+W** | Delete word back |
-| **Ctrl+U** | Kill to start |
-| **Ctrl+K** | Kill to end |
-| **Ctrl+1** | Balanced preset (temp 0.7) |
-| **Ctrl+2** | Creative preset (temp 1.5) |
-| **Ctrl+3** | Precise preset (temp 0.3) |
-| **Ctrl+4** | Research preset |
-| **Ctrl+5** | Safe preset (no commands) |
-| **Tab** | Toggle sidebar |
-
-### Visual Feedback
-
-- **● Connected** (green): pipeline reachable
-- **● Degraded** (yellow): partial connectivity
-- **● Offline** (red): no connection
-- **⠹ thinking...**: braille spinner while waiting for response
+| **Tab** | Switch panels (Sessions → Conversation → Composer) |
+| **Ctrl+1-5** | Preset profiles |
+| **/help** | Show all commands |
+| **/theme** | Cycle themes (4 themes) |
+| **/search** | Search sessions |
+| **/why** | Show agent reasoning |
 
 ---
 
-## Testing
+## Runtime Stack
 
-### Health Check
-
-```bash
-neoland test
-
-# JSON output for scripts or CI smoke checks
-neoland test --json
 ```
-
-Verifies:
-
-1. REST API (`/health` endpoint)
-2. gRPC connectivity (real connection attempt)
-3. Process status
-
-### REST API Direct Test
-
-```bash
-# Health check (no auth)
-curl http://localhost:3001/health
-
-# OpenAPI spec (no auth)
-curl http://localhost:3001/openapi.json | jq .info
-# Swagger UI: http://localhost:3001/swagger-ui/
-
-# Chat completion (requires API key)
-curl -X POST http://localhost:3001/v1/chat/completions \
-  -H "X-API-Key: $NEOLAND_ADMIN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Hello"}], "stream": false}'
+┌──────────┐  ┌──────────┐
+│  Browser │  │ Terminal │
+│  Leptos  │  │  ratatui │
+└────┬─────┘  └────┬─────┘
+     │ REST :3001   │
+     │ SSE (EventSource)
+     │ gRPC-web :50051
+     ▼              ▼
+┌─────────────────────────┐
+│   Neoland Control Plane │
+│   (Rust · axum · tonic) │
+└───────────┬─────────────┘
+            │
+    ┌───────┴───────┐
+    │ SecureLLM     │
+    │ Bridge :8080  │
+    └───────┬───────┘
+            │
+    ┌───────┴───────┐
+    │ ml-ops-api    │
+    │ :8083         │
+    └───────┬───────┘
+            │
+    ┌───────┴───────┐
+    │ llama.cpp     │
+    │ :8081 / vLLM  │
+    └───────────────┘
 ```
-
-> **IMPORTANTE — Dev keys**: Por padrão, se `NEOLAND_ADMIN_API_KEY` não estiver
-> definida no ambiente, o servidor sobe com uma chave de desenvolvimento
-> (`neoland_admin_dev_key_change_in_production`). **Nunca use essa chave em
-> produção.** Defina sempre as variáveis de ambiente antes de subir o servidor:
->
-> ```bash
-> export NEOLAND_ADMIN_API_KEY="$(openssl rand -hex 32)"
-> export NEOLAND_USER_API_KEY="$(openssl rand -hex 32)"
-> export NEOLAND_READONLY_API_KEY="$(openssl rand -hex 32)"
-> ```
-
----
-
-## Advanced Configuration
-
-### Environment Variables
-
-```bash
-# Primary Neoland gateway URL (SecureLLM Bridge by default)
-export NEOLAND_GATEWAY_URL="http://gpu-server.local:9000"
-
-neoland client --neoland-gateway-url $NEOLAND_GATEWAY_URL
-```
-
-### Preset Customization
-
-Edit `src/tui/presets.rs`:
-
-```rust
-pub fn creative() -> Self {
-    Self {
-        temperature: 1.8,  // Increase randomness
-        max_tokens: 800,   // Longer responses
-        // ...
-    }
-}
-```
-
-Rebuild: `cargo build --release`
-
----
-
-## NixOS Integration
-
-### System Service
-
-Import the bundled module into your NixOS config:
-
-```nix
-imports = [ /home/kernelcore/master/neoland/modules/applications/neoland.nix ];
-
-services.neoland = {
-  enable = true;
-  grpcPort = 50051;
-  restPort = 3001;
-  openFirewall = true;
-  environmentFile = "/run/secrets/neoland.env";
-};
-```
-
-Rebuild: `sudo nixos-rebuild switch`
-
-Use the environment file for deployment secrets such as:
-
-- `DATABASE_URL`
-- `NEOLAND_ADMIN_API_KEY`
-- `NEOLAND_USER_API_KEY`
-- `NEOLAND_READONLY_API_KEY`
-- `VAULT_ADDR`
-- `VAULT_TOKEN`
 
 ---
 
 ## Troubleshooting
 
-### Model Download Issues
+### Web Console blank page
 
 ```bash
-# Clear cache and retry
+# Ensure WASM is built
+just build-web
+ls web/dist/   # should contain index.html + .wasm + .js
+
+# Check the path
+neoland server --web-dist web/dist
+```
+
+### Connection refused
+
+```bash
+pgrep -f "neoland server"
+lsof -i :3001
+```
+
+### Model download issues
+
+```bash
 rm -rf ~/.cache/huggingface/hub/models--Qwen*
 neoland server
 ```
-
-### Connection Refused
-
-```bash
-# Check if server is running
-pgrep -f "neoland server"
-
-# Check port availability
-lsof -i :50051
-```
-
-### TUI Not Rendering
-
-```bash
-# Verify terminal capabilities
-echo $TERM
-# Should be: xterm-256color, alacritty, or similar
-
-# Force color support
-export TERM=xterm-256color
-neoland client
-```
-
-### High Memory Usage
-
-Server memory grows with chat history. Restart periodically:
-
-```bash
-neoland restart
-```
-
----
-
-## Performance Tips
-
-1. **Use the gateway path**: SecureLLM Bridge -> ml-ops-api -> llama.cpp/vLLM for accelerated inference
-2. **Reduce max_tokens**: Lower values = faster responses
-3. **Disable RAG**: Set `context_top_k: 0` if not needed
 
 ---
 
 ## Next Steps
 
-- Read `docs/neoland-project-snapshot.md` and `docs/neoland-architecture.md` for technical details
-- Explore integration points (`securellm-bridge`, `ml-ops-api`, `llama.cpp`)
-- Check the bundled NixOS module: `modules/applications/neoland.nix`
-
----
-
-## Support
-
-Internal project - contact VoidNxSEC team for issues.
-
----
-
-**Pro Tip**: Use `neoland --help` or `neoland <command> --help` for detailed CLI documentation.
+- [`README.md`](../README.md) — full project overview
+- [`ROADMAP.md`](../ROADMAP.md) — release roadmap
+- [`docs/neoland-architecture.md`](neoland-architecture.md) — architecture deep-dive
+- [`docs/neoland-project-snapshot.md`](neoland-project-snapshot.md) — codebase inventory
+- [`docs/ADR/`](ADR/) — architectural decisions
