@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Neoland — Autonomous AI Engineering Platform</title>
+        <meta
+            name="description"
+            content="Neoland is an autonomous AI engineering platform. Multi-agent ADR pipeline with TUI, Web Console, and Desktop app. 100% Rust."
+        />
+        <meta name="theme-color" content="#0a0a12" />
+        <style>
+            @font-face {
+                font-family: "IBM Plex Mono";
+                src: url("/ibm-plex-mono-regular.woff2") format("woff2");
+                font-weight: 400;
+            }
+            @font-face {
+                font-family: "IBM Plex Mono";
+                src: url("/ibm-plex-mono-bold.woff2") format("woff2");
+                font-weight: 700;
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                background: #0a0a12;
+                color: #c8d6e5;
+                font-family: "IBM Plex Mono", "Fira Code", monospace;
+                line-height: 1.7;
+                min-height: 100vh;
+                overflow-x: hidden;
+            }
+
+            /* Scanline overlay */
+            body::before {
+                content: "";
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 255, 157, 0.015) 2px,
+                    rgba(0, 255, 157, 0.015) 4px
+                );
+                pointer-events: none;
+                z-index: 999;
+            }
+
+            /* Hero */
+            .hero {
+                text-align: center;
+                padding: 120px 24px 80px;
+                position: relative;
+            }
+            .hero h1 {
+                font-size: clamp(2rem, 6vw, 4.5rem);
+                font-weight: 700;
+                color: #00ff9d;
+                text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
+                letter-spacing: -0.02em;
+            }
+            .hero .subtitle {
+                font-size: 1.2rem;
+                color: #8395a7;
+                margin-top: 16px;
+                max-width: 640px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .hero .badge {
+                display: inline-block;
+                margin-top: 24px;
+                padding: 6px 18px;
+                border: 1px solid #00ff9d44;
+                border-radius: 4px;
+                color: #00ff9d;
+                font-size: 0.85rem;
+                letter-spacing: 0.05em;
+            }
+
+            /* Actions */
+            .actions {
+                display: flex;
+                gap: 16px;
+                justify-content: center;
+                margin-top: 40px;
+                flex-wrap: wrap;
+            }
+            .btn {
+                padding: 12px 32px;
+                border-radius: 4px;
+                text-decoration: none;
+                font-family: inherit;
+                font-size: 0.95rem;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                transition: all 0.2s;
+                cursor: pointer;
+            }
+            .btn-primary {
+                background: #00ff9d;
+                color: #0a0a12;
+                border: none;
+            }
+            .btn-primary:hover {
+                background: #00e68a;
+                transform: translateY(-1px);
+            }
+            .btn-outline {
+                border: 1px solid #00ff9d44;
+                color: #00ff9d;
+                background: transparent;
+            }
+            .btn-outline:hover {
+                border-color: #00ff9d;
+                background: rgba(0, 255, 157, 0.05);
+            }
+
+            /* Features grid */
+            .features {
+                max-width: 1080px;
+                margin: 80px auto;
+                padding: 0 24px;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 24px;
+            }
+            .feature-card {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 8px;
+                padding: 28px;
+                transition: border-color 0.2s;
+            }
+            .feature-card:hover {
+                border-color: rgba(0, 255, 157, 0.2);
+            }
+            .feature-card h3 {
+                color: #00ff9d;
+                font-size: 1.05rem;
+                margin-bottom: 8px;
+            }
+            .feature-card p {
+                color: #8395a7;
+                font-size: 0.9rem;
+            }
+
+            /* Pipeline diagram */
+            .pipeline {
+                max-width: 900px;
+                margin: 80px auto;
+                padding: 0 24px;
+                text-align: center;
+            }
+            .pipeline h2 {
+                color: #00ff9d;
+                font-size: 1.5rem;
+                margin-bottom: 32px;
+            }
+            .pipeline-stages {
+                display: flex;
+                gap: 12px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            .stage {
+                background: rgba(0, 255, 157, 0.05);
+                border: 1px solid rgba(0, 255, 157, 0.15);
+                border-radius: 8px;
+                padding: 20px 24px;
+                min-width: 140px;
+            }
+            .stage .emoji {
+                font-size: 1.5rem;
+                display: block;
+            }
+            .stage .name {
+                color: #00ff9d;
+                font-weight: 600;
+                margin-top: 8px;
+            }
+            .stage .desc {
+                color: #8395a7;
+                font-size: 0.8rem;
+                margin-top: 4px;
+            }
+            .arrow {
+                color: #00ff9d44;
+                font-size: 1.5rem;
+                display: flex;
+                align-items: center;
+            }
+
+            /* Stack */
+            .stack {
+                max-width: 900px;
+                margin: 80px auto;
+                padding: 0 24px;
+                text-align: center;
+            }
+            .stack h2 {
+                color: #00ff9d;
+                font-size: 1.5rem;
+                margin-bottom: 24px;
+            }
+            .stack-grid {
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            .stack-item {
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 6px;
+                padding: 10px 18px;
+                font-size: 0.85rem;
+                color: #8395a7;
+            }
+
+            /* CTA */
+            .cta {
+                text-align: center;
+                padding: 80px 24px 120px;
+            }
+            .cta h2 {
+                color: #fff;
+                font-size: 1.8rem;
+                margin-bottom: 16px;
+            }
+            .cta p {
+                color: #8395a7;
+                max-width: 500px;
+                margin: 0 auto 32px;
+            }
+
+            /* Footer */
+            footer {
+                text-align: center;
+                padding: 40px 24px;
+                border-top: 1px solid rgba(255, 255, 255, 0.04);
+                color: #576574;
+                font-size: 0.8rem;
+            }
+            footer a {
+                color: #8395a7;
+                text-decoration: none;
+            }
+            footer a:hover {
+                color: #00ff9d;
+            }
+        </style>
+    </head>
+    <body>
+        <section class="hero">
+            <h1>neoland</h1>
+            <p class="subtitle">
+                Autonomous AI Engineering Platform.<br />
+                Multi-agent ADR pipeline with TUI, Web Console, and Desktop app.
+            </p>
+            <span class="badge">BETA v0.4.0</span>
+
+            <div class="actions">
+                <a
+                    href="https://github.com/VoidNxSEC/neoland"
+                    class="btn btn-primary"
+                    >GitHub →</a
+                >
+                <a href="/swagger-ui/" class="btn btn-outline">API Docs</a>
+                <a href="/" class="btn btn-outline">Web Console</a>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="feature-card">
+                <h3>🤖 4-Stage Agent Pipeline</h3>
+                <p>
+                    Junior → Senior → Architect → Tech-Leader. DSPy-powered
+                    agents review, refine, and decide on architecture proposals,
+                    producing ADR checkpoints with Merkle chain integrity.
+                </p>
+            </div>
+            <div class="feature-card">
+                <h3>🔐 Enterprise Auth</h3>
+                <p>
+                    OAuth2 (Google + GitHub), JWT access/refresh tokens,
+                    multi-tenant RBAC (admin/user/readonly). Legacy API key
+                    support. PostgreSQL-backed.
+                </p>
+            </div>
+            <div class="feature-card">
+                <h3>🖥️ TUI + Web + Desktop</h3>
+                <p>
+                    Rust TUI (ratatui) for power users. Leptos WASM Web Console
+                    for teams. Tauri Desktop app for cross-platform native
+                    experience.
+                </p>
+            </div>
+            <div class="feature-card">
+                <h3>☸️ Kubernetes Native</h3>
+                <p>
+                    Production Helm chart: 3-10 replicas, HPA autoscaling,
+                    ingress TLS, rolling updates. Works with any Kubernetes
+                    cluster.
+                </p>
+            </div>
+            <div class="feature-card">
+                <h3>🔒 mTLS End-to-End</h3>
+                <p>
+                    Mutual TLS between all control planes. Built-in PKI
+                    generator. rustls-native with zero OpenSSL dependency.
+                </p>
+            </div>
+            <div class="feature-card">
+                <h3>📡 Streaming + Real-Time</h3>
+                <p>
+                    SSE streaming for agent output. NATS JetStream event bus.
+                    Prometheus metrics. OpenTelemetry tracing.
+                </p>
+            </div>
+        </section>
+
+        <section class="pipeline">
+            <h2>📋 Agent Pipeline</h2>
+            <div class="pipeline-stages">
+                <div class="stage">
+                    <span class="emoji">💡</span>
+                    <div class="name">Junior</div>
+                    <div class="desc">
+                        Creative hypothesis<br />+ self-assessment
+                    </div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="stage">
+                    <span class="emoji">🔍</span>
+                    <div class="name">Senior</div>
+                    <div class="desc">
+                        Sceptical review<br />+ risk analysis
+                    </div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="stage">
+                    <span class="emoji">🏗️</span>
+                    <div class="name">Architect</div>
+                    <div class="desc">Structural review<br />+ composition</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="stage">
+                    <span class="emoji">✅</span>
+                    <div class="name">Tech-Leader</div>
+                    <div class="desc">Final decision<br />+ ADR checkpoint</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="stack">
+            <h2>🧱 Built With</h2>
+            <div class="stack-grid">
+                <span class="stack-item">Rust</span>
+                <span class="stack-item">Leptos WASM</span>
+                <span class="stack-item">Tauri</span>
+                <span class="stack-item">axum</span>
+                <span class="stack-item">tonic</span>
+                <span class="stack-item">DSPy</span>
+                <span class="stack-item">PostgreSQL</span>
+                <span class="stack-item">NATS</span>
+                <span class="stack-item">Nix</span>
+                <span class="stack-item">Kubernetes</span>
+                <span class="stack-item">Helm</span>
+                <span class="stack-item">Prometheus</span>
+                <span class="stack-item">OAuth2</span>
+                <span class="stack-item">JWT</span>
+                <span class="stack-item">mTLS</span>
+                <span class="stack-item">WebAssembly</span>
+            </div>
+        </section>
+
+        <section class="cta">
+            <h2>Ready to ship better architecture?</h2>
+            <p>
+                Deploy Neoland in 5 minutes. Autonomous ADRs, zero
+                configuration, production-grade auth.
+            </p>
+            <div class="actions">
+                <a
+                    href="https://github.com/VoidNxSEC/neoland"
+                    class="btn btn-primary"
+                    >Star on GitHub</a
+                >
+                <a
+                    href="https://github.com/VoidNxSEC/neoland/blob/main/README.md"
+                    class="btn btn-outline"
+                    >Documentation</a
+                >
+            </div>
+        </section>
+
+        <footer>
+            <p>
+                <a href="https://github.com/VoidNxSEC/neoland">GitHub</a> ·
+                <a href="/swagger-ui/">API</a> ·
+                <a href="/app/">Console</a>
+            </p>
+            <p style="margin-top: 8px">
+                Neoland v0.4.0-beta · VoidNxSEC · MIT License
+            </p>
+        </footer>
+    </body>
+</html>
