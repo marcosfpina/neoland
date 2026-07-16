@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "neoland.fullname" . }}
+  labels:
+    {{- include "neoland.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "neoland.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: {{ .Values.monitoring.prometheus.enabled | quote }}
+        prometheus.io/port: {{ .Values.config.rest.port | quote }}
+        prometheus.io/path: /metrics
+      labels:
+        {{- include "neoland.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "neoland.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: neoland
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: rest
+              containerPort: {{ .Values.config.rest.port }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.config.grpc.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "neoland.fullname" . }}-config
+            - secretRef:
+                name: {{ include "neoland.fullname" . }}-secrets
+          env:
+            - name: NEOLAND_WEB_DIST_DIR
+              value: /app/web-dist
+          {{- if .Values.config.inference.temperature }}
+            - name: NEOLAND_INFERENCE_TEMPERATURE
+              value: {{ .Values.config.inference.temperature | quote }}
+          {{- end }}
+          {{- if .Values.config.inference.maxTokens }}
+            - name: NEOLAND_INFERENCE_MAX_TOKENS
+              value: {{ .Values.config.inference.maxTokens | quote }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /var/lib/neoland/checkpoints
+            - name: web-dist
+              mountPath: /app/web-dist
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: checkpoints
+          {{- if .Values.persistence.checkpoints.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "neoland.fullname" . }}-checkpoints
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: web-dist
+          emptyDir: {}
+      {{- if .Values.webDist.enabled }}
+      initContainers:
+        - name: copy-web-dist
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.webDist.image.repository }}:{{ .Values.webDist.image.tag }}"
+          imagePullPolicy: {{ .Values.webDist.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - cp -r /dist/* /app/web-dist/
+          volumeMounts:
+            - name: web-dist
+              mountPath: /app/web-dist
+      {{- end }}

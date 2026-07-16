@@ -1,20 +1,56 @@
-Neoland {{ .Chart.AppVersion }} deployed.
+╭─────────────────────────────────────────────────────────────╮
+│  Neoland v{{ .Chart.AppVersion }} — Autonomous AI Engineering           │
+╰─────────────────────────────────────────────────────────────╯
 
-  Release: {{ .Release.Name }}
-  Namespace: {{ .Release.Namespace }}
-
-REST API:
 {{- if .Values.ingress.enabled }}
-  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/
-{{- else if eq .Values.service.type "LoadBalancer" }}
-  export SVC=$(kubectl get svc {{ include "neoland.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-  curl http://$SVC:{{ .Values.service.restPort }}/health
+🌐 Web Console: https://{{ index .Values.ingress.hosts 0 "host" }}
 {{- else }}
-  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "neoland.fullname" . }} {{ .Values.service.restPort }}:{{ .Values.service.restPort }}
-  curl http://localhost:{{ .Values.service.restPort }}/health
-  # Swagger UI: http://localhost:{{ .Values.service.restPort }}/swagger-ui/
+🌐 Web Console: kubectl port-forward svc/{{ include "neoland.fullname" . }} 3001:3001
 {{- end }}
 
-Run DB migrations (first install only):
-  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "neoland.fullname" . }} -c control-plane -- \
-    sqlx migrate run --database-url "$DATABASE_URL" --source /app/migrations
+📡 REST API:  http://{{ include "neoland.fullname" . }}:{{ .Values.config.rest.port }}
+📡 gRPC:      {{ include "neoland.fullname" . }}:{{ .Values.config.grpc.port }}
+
+{{- if .Values.postgresql.enabled }}
+🗄️  PostgreSQL: {{ include "neoland.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
+{{- end }}
+
+{{- if .Values.nats.enabled }}
+📮 NATS:      nats://{{ include "neoland.fullname" . }}-nats:4222
+{{- end }}
+
+🔑 JWT Secret: stored in Secret/{{ include "neoland.fullname" . }}-secrets
+
+{{- if and .Values.config.auth.googleClientId .Values.config.auth.githubClientId }}
+🔐 OAuth2:    Google ✓ | GitHub ✓
+{{- else if .Values.config.auth.googleClientId }}
+🔐 OAuth2:    Google ✓
+{{- else if .Values.config.auth.githubClientId }}
+🔐 OAuth2:    GitHub ✓
+{{- end }}
+
+📈 Metrics:   http://{{ include "neoland.fullname" . }}:{{ .Values.config.rest.port }}/metrics
+
+── Quick Test ──────────────────────────────────────────────
+
+  # Health check
+  curl http://{{ include "neoland.fullname" . }}:{{ .Values.config.rest.port }}/health
+
+  # List sessions (requires auth)
+  curl -H "Authorization: Bearer <jwt>" \\
+       http://{{ include "neoland.fullname" . }}:{{ .Values.config.rest.port }}/v1/sessions
+
+── Upgrade ─────────────────────────────────────────────────
+
+  helm upgrade {{ .Release.Name }} ./deploy/helm/neoland \\
+    --namespace {{ .Release.Namespace }} \\
+    --set config.auth.jwtSecret="$(openssl rand -hex 32)" \\
+    --set config.auth.googleClientId="..." \\
+    --set config.auth.googleClientSecret="..."
+
+{{- if .Values.autoscaling.enabled }}
+── Autoscaling ──────────────────────────────────────────────
+
+  HPA: {{ .Values.autoscaling.minReplicas }} → {{ .Values.autoscaling.maxReplicas }} replicas
+  Target: CPU {{ .Values.autoscaling.targetCPUUtilizationPercentage }}% / Memory {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}%
+{{- end }}

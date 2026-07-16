@@ -1,92 +1,225 @@
+# ─── Neoland Helm Chart — Default Values ─────────────────────────────────
+
+# Global settings
+global:
+  imageRegistry: ghcr.io/voidnxlabs
+  imagePullSecrets: []
+  storageClass: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Neoland Control Plane ──────────────────────────────────────────────
+
+replicaCount: 3
+
 image:
-  controlPlane:
-    repository: neoland-control-plane
-    tag: "0.1.0"
-    pullPolicy: IfNotPresent
-  pipeline:
-    repository: neoland-dspy-pipeline
-    tag: "0.1.0"
-    pullPolicy: IfNotPresent
-  postgres:
-    repository: pgvector/pgvector
-    tag: pg16
-    pullPolicy: IfNotPresent
+  repository: neoland
+  tag: "0.4.0"
+  pullPolicy: IfNotPresent
+
+# Web Console static bundle (built separately, served by Neoland)
+webDist:
+  enabled: true
+  image:
+    repository: neoland-web
+    tag: "0.4.0"
+
+# Server configuration
+config:
+  grpc:
+    port: 50051
+  rest:
+    port: 3001
+  logLevel: info
+
+  # LLM backend
+  inference:
+    provider: llamacpp # local | deepseek | llamacpp | securellm
+    temperature: 0.7
+    maxTokens: 2048
+
+  # Agent pipeline
+  agents:
+    dspyUrl: "http://neoland-agents:8001"
+    pipelineTimeoutSecs: 120
+    juniorConfidenceWarnThreshold: 0.4
+    techLeaderDeferTtlHours: 24
+    checkpointDir: /var/lib/neoland/checkpoints
+    ragTopK: 5
+
+  # NATS event bus
   nats:
-    repository: nats
-    tag: 2.10-alpine
-    pullPolicy: IfNotPresent
+    url: "nats://neoland-nats:4222"
+    enabled: true
 
-replicaCount: 1
+  # Authentication (v0.4.0)
+  auth:
+    jwtSecret: "" # MUST be set via secrets — see secret.yaml
+    oauthBaseUrl: "https://neoland.example.com"
+    googleClientId: ""
+    googleClientSecret: ""
+    githubClientId: ""
+    githubClientSecret: ""
 
-# Secrets — pass via --set or pre-create a Secret named <release>-neoland-secrets
-# and set secrets.existingSecret to its name.
-secrets:
-  existingSecret: ""
-  postgresPassword: ""
-  adminApiKey: ""
-  userApiKey: ""
-  readonlyApiKey: ""
-  llmApiKey: ""
-
-env:
-  llmProvider: openai
-  llmModel: gpt-4o-mini
-  rustLog: info
-  checkpointDir: /var/lib/neoland/checkpoints/adr
-  pipelinePort: "8001"
-
+# Service
 service:
   type: ClusterIP
   restPort: 3001
   grpcPort: 50051
-
-ingress:
-  enabled: false
-  className: nginx
   annotations: {}
-  host: neoland.example.com
-  tls: []
 
-resources:
-  controlPlane:
-    requests:
-      cpu: 250m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 1Gi
-  pipeline:
-    requests:
-      cpu: 500m
-      memory: 512Mi
-    limits:
-      cpu: "2"
-      memory: 2Gi
-
-hpa:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 3
-  targetCPUUtilizationPercentage: 70
-
-postgres:
+# Ingress (Web Console + REST API)
+ingress:
   enabled: true
-  storageClass: ""
-  storage: 10Gi
-  database: neoland
-  user: neoland
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: neoland.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          port: 3001
+  tls:
+    - secretName: neoland-tls
+      hosts:
+        - neoland.example.com
+
+# Resource limits
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Health probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3001
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /live
+    port: 3001
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: neoland
+          topologyKey: kubernetes.io/hostname
+
+# ── PostgreSQL ──────────────────────────────────────────────────────────
+
+postgresql:
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: pg17
+  auth:
+    database: neoland
+    username: neoland
+    password: "" # MUST be set via secrets
+  primary:
+    persistence:
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+# ── NATS ────────────────────────────────────────────────────────────────
 
 nats:
   enabled: true
-  storageClass: ""
-  storage: 1Gi
-  clientPort: 4222
-  monitorPort: 8222
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        dir: /data
+        pvc:
+          size: 10Gi
 
-nameOverride: ""
-fullnameOverride: ""
+# ── SecureLLM Bridge (mTLS gateway — optional) ──────────────────────────
 
+securellm:
+  enabled: false
+  image:
+    repository: securellm-bridge
+    tag: "0.1.0"
+  replicaCount: 2
+  service:
+    port: 8080
+
+# ── ML Ops API (VRAM-aware routing — optional) ──────────────────────────
+
+mlOps:
+  enabled: false
+  image:
+    repository: ml-ops-api
+    tag: "0.1.0"
+  replicaCount: 2
+  service:
+    port: 8083
+
+# ── Observability ────────────────────────────────────────────────────────
+
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  grafana:
+    enabled: false # Use external Grafana with dashboards from ConfigMap
+
+# Service account
 serviceAccount:
   create: true
+  name: "neoland"
   annotations: {}
-  name: ""
+
+# Checkpoint persistence
+persistence:
+  checkpoints:
+    enabled: true
+    size: 10Gi

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "neoland.fullname" . }}-config
+  labels:
+    {{- include "neoland.labels" . | nindent 4 }}
+data:
+  NEOLAND_GRPC_PORT: {{ .Values.config.grpc.port | quote }}
+  NEOLAND_REST_PORT: {{ .Values.config.rest.port | quote }}
+  NEOLAND_INFERENCE_PROVIDER: {{ .Values.config.inference.provider | quote }}
+  NEOLAND_DSPY_URL: {{ .Values.config.agents.dspyUrl | quote }}
+  NEOLAND_PIPELINE_TIMEOUT_SECS: {{ .Values.config.agents.pipelineTimeoutSecs | quote }}
+  NEOLAND_JUNIOR_CONFIDENCE_WARN_THRESHOLD: {{ .Values.config.agents.juniorConfidenceWarnThreshold | quote }}
+  NEOLAND_TECH_LEADER_DEFER_TTL_HOURS: {{ .Values.config.agents.techLeaderDeferTtlHours | quote }}
+  NEOLAND_CHECKPOINT_DIR: {{ .Values.config.agents.checkpointDir | quote }}
+  NEOLAND_RAG_TOP_K: {{ .Values.config.agents.ragTopK | quote }}
+  NEOLAND_NATS_URL: {{ .Values.config.nats.url | quote }}
+  NEOLAND_NATS_ENABLED: {{ .Values.config.nats.enabled | quote }}
+  NEOLAND_OAUTH_BASE_URL: {{ .Values.config.auth.oauthBaseUrl | quote }}
+  RUST_LOG: {{ .Values.config.logLevel | quote }}

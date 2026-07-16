@@ -4,16 +4,20 @@ metadata:
   name: {{ include "neoland.fullname" . }}
   labels:
     {{- include "neoland.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.restPort }}
+    - name: rest
+      port: {{ .Values.service.restPort }}
       targetPort: rest
       protocol: TCP
-      name: rest
-    - port: {{ .Values.service.grpcPort }}
+    - name: grpc
+      port: {{ .Values.service.grpcPort }}
       targetPort: grpc
       protocol: TCP
-      name: grpc
   selector:
     {{- include "neoland.selectorLabels" . | nindent 4 }}

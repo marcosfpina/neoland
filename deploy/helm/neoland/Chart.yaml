@@ -1,14 +1,25 @@
 apiVersion: v2
 name: neoland
-description: Neoland AI Agent Platform — control plane + DSPy pipeline
+description: Neoland — Autonomous AI Engineering Platform. Multi-agent pipeline with TUI, Web Console, and Desktop app.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.4.0
+appVersion: "0.4.0"
+icon: https://raw.githubusercontent.com/VoidNxSEC/neoland/main/web/public/icon-192.png
+
 keywords:
   - ai
-  - agents
+  - agent
+  - engineering
   - llm
+  - autonomous
   - dspy
+  - adr
+  - architecture
+
+home: https://github.com/VoidNxSEC/neoland
+sources:
+  - https://github.com/VoidNxSEC/neoland
+
 maintainers:
-  - name: voidnxlabs
-    email: dev@voidnxlabs.io
+  - name: VoidNxSEC Team
+    email: sec@voidnxlabs.com
