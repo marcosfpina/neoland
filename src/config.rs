@@ -226,9 +226,7 @@ impl Default for OAuthConfig {
 
 impl Default for JwtConfig {
     fn default() -> Self {
-        Self {
-            secret: "neoland-dev-jwt-secret-change-in-production".to_string(),
-        }
+        Self { secret: "neoland-dev-jwt-secret-change-in-production".to_string() }
     }
 }
 
