@@ -39,31 +39,21 @@ impl IntoResponse for AuthError {
 
 /// Middleware that validates the JWT Bearer token and injects `AuthUser` into
 /// request extensions. Routes that need auth should be wrapped with this.
-pub async fn require_auth(
-    mut request: Request,
-    next: Next,
-) -> Result<Response, AuthError> {
+pub async fn require_auth(mut request: Request, next: Next) -> Result<Response, AuthError> {
     let auth_header = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .ok_or(AuthError::MissingToken)?;
 
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or(AuthError::MissingToken)?;
+    let token = auth_header.strip_prefix("Bearer ").ok_or(AuthError::MissingToken)?;
 
     // Get JWT secret from request extensions (set up in server setup)
-    let secret = request
-        .extensions()
-        .get::<JwtSecret>()
-        .ok_or(AuthError::InvalidToken)?;
+    let secret = request.extensions().get::<JwtSecret>().ok_or(AuthError::InvalidToken)?;
 
-    let claims = validate_access_token(token, &secret.0)
-        .map_err(|_| AuthError::ExpiredToken)?;
+    let claims = validate_access_token(token, &secret.0).map_err(|_| AuthError::ExpiredToken)?;
 
-    let user_id = uuid::Uuid::parse_str(&claims.sub)
-        .map_err(|_| AuthError::InvalidToken)?;
+    let user_id = uuid::Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidToken)?;
 
     let auth_user = AuthUser {
         user_id,

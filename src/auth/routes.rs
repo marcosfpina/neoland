@@ -77,9 +77,8 @@ async fn login_google(State(state): State<AuthState>) -> Result<Redirect, Status
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     let redirect_url = format!("{}/auth/callback/google", state.base_url);
-    let (auth_url, _csrf) =
-        oauth::google_authorize_url(client_id, client_secret, &redirect_url)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (auth_url, _csrf) = oauth::google_authorize_url(client_id, client_secret, &redirect_url)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Redirect::temporary(&auth_url))
 }
@@ -92,9 +91,8 @@ async fn login_github(State(state): State<AuthState>) -> Result<Redirect, Status
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     let redirect_url = format!("{}/auth/callback/github", state.base_url);
-    let (auth_url, _csrf) =
-        oauth::github_authorize_url(client_id, client_secret, &redirect_url)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (auth_url, _csrf) = oauth::github_authorize_url(client_id, client_secret, &redirect_url)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Redirect::temporary(&auth_url))
 }
@@ -149,9 +147,7 @@ async fn complete_oauth_login(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let role = if user.is_owner { "admin" } else { "user" };
-    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id)
-        .await
-        .unwrap_or_default();
+    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id).await.unwrap_or_default();
 
     let access_token = create_access_token(
         user.id,
@@ -219,9 +215,7 @@ async fn refresh(
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     let role = if user.is_owner { "admin" } else { "user" };
-    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id)
-        .await
-        .unwrap_or_default();
+    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id).await.unwrap_or_default();
 
     let access_token = create_access_token(
         user.id,
@@ -237,8 +231,7 @@ async fn refresh(
 }
 
 async fn me(request: Request) -> Result<Json<serde_json::Value>, StatusCode> {
-    let user = get_auth_user(&request)
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let user = get_auth_user(&request).ok_or(StatusCode::UNAUTHORIZED)?;
     Ok(Json(json!({
         "user_id": user.user_id.to_string(),
         "email": user.email,

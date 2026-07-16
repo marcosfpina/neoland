@@ -82,6 +82,11 @@ ci:
     cargo test --lib
     cargo test -p neoland-web
 
+# Auth-specific CI: compile check + auth tests
+ci-auth:
+    cargo check --lib
+    cargo test --lib auth::
+
 # Auto-fix: format + clippy suggestions applied in-place
 fix:
     cargo fmt

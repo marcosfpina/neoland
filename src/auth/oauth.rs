@@ -7,8 +7,8 @@
 
 use anyhow::{Context, Result};
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
+    Scope, TokenResponse, TokenUrl,
 };
 use reqwest::Client as HttpClient;
 use serde::Deserialize;
@@ -43,12 +43,8 @@ pub fn google_authorize_url(
 
     let (auth_url, csrf_token) = client
         .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new(
-            "https://www.googleapis.com/auth/userinfo.email".to_string(),
-        ))
-        .add_scope(Scope::new(
-            "https://www.googleapis.com/auth/userinfo.profile".to_string(),
-        ))
+        .add_scope(Scope::new("https://www.googleapis.com/auth/userinfo.email".to_string()))
+        .add_scope(Scope::new("https://www.googleapis.com/auth/userinfo.profile".to_string()))
         .url();
 
     Ok((auth_url.to_string(), csrf_token))
@@ -197,8 +193,5 @@ async fn fetch_github_primary_email(http: &HttpClient, access_token: &str) -> Op
         .await
         .ok()?;
 
-    emails
-        .into_iter()
-        .find(|e| e.primary && e.verified)
-        .map(|e| e.email)
+    emails.into_iter().find(|e| e.primary && e.verified).map(|e| e.email)
 }

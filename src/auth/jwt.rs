@@ -34,12 +34,8 @@ pub fn create_access_token(
         jti: Uuid::new_v4().to_string(),
     };
 
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret),
-    )
-    .context("Failed to encode access token")
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret))
+        .context("Failed to encode access token")
 }
 
 /// Create a refresh token (long-lived opaque token stored in DB).
@@ -58,12 +54,9 @@ pub fn create_refresh_token() -> String {
 
 /// Validate an access token and return claims.
 pub fn validate_access_token(token: &str, secret: &[u8]) -> Result<Claims> {
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret),
-        &Validation::default(),
-    )
-    .context("Invalid or expired access token")?;
+    let token_data =
+        decode::<Claims>(token, &DecodingKey::from_secret(secret), &Validation::default())
+            .context("Invalid or expired access token")?;
 
     Ok(token_data.claims)
 }
@@ -113,15 +106,8 @@ mod tests {
         // We can't easily test expiration without waiting, but we can verify
         // that a tampered token fails validation.
         let secret = b"test-secret-key-for-jwt-32b!!";
-        let token = create_access_token(
-            Uuid::new_v4(),
-            "t",
-            "user",
-            "a@b.com",
-            "X",
-            secret,
-        )
-        .expect("create");
+        let token = create_access_token(Uuid::new_v4(), "t", "user", "a@b.com", "X", secret)
+            .expect("create");
 
         // Tamper with a different secret
         let wrong_secret = b"wrong-secret-key-for-jwt-32b";
