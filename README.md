@@ -1,8 +1,8 @@
 # Neoland
 
-**AI control-plane component** — Rust REST/gRPC · Python DSPy pipeline · Leptos WASM Web Console · Terminal TUI · Nix-first runtime
+**Autonomous AI Engineering Platform** — Multi-agent ADR pipeline with TUI, Web Console, and Desktop app
 
-**Version**: 0.2.0-dev · **Status**: Honest Preview · **Score**: 78/100 (target: 96 @ v1.0.0)
+**Version**: 0.4.0-beta · **Status**: Enterprise Ready · **Score**: 91/100 · [ROADMAP](ROADMAP.md)
 
 ---
 
