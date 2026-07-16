@@ -10,7 +10,7 @@
 |---|---|---|---|
 | **TUI** | Rust + ratatui | Devs, power users | ✅ |
 | **Web Console** | Leptos WASM + CSS artesanal | End users, times | 🚧 |
-| **Desktop App** | Tauri + Leptos | Cross-platform | 🔮 |
+| **Desktop App** | Tauri + Leptos | Cross-platform | 🚧 |
 | **CLI / API** | Rust + axum + tonic | Integrações | ✅ |
 
 ---
@@ -129,7 +129,7 @@ TUI · Web · Desktop
 - [x] 26 contract tests (Pydantic + signatures)
 - [x] Checkpoint artifacts em `$NEOLAND_CHECKPOINT_DIR`
 - [x] FastAPI health endpoint
-- [ ] Smoke E2E com LLM real documentado
+- [x] Smoke E2E com LLM real documentado
 - [ ] Advanced ranking analytics por estágio
 - [ ] Deeper ADR-ledger automation
 
@@ -159,14 +159,17 @@ TUI · Web · Desktop
 - [x] PWA service worker + manifesto + icons
 - [x] Dashboard de métricas (MetricsPanel component)
 - [x] Deploy estático servido pelo próprio Neoland (`--web-dist`)
-- [x] Testes de integração Leptos (`wasm-bindgen-test`, 14 testes WASM)
+- [x] Testes de integração Leptos (`wasm-bindgen-test`, 12 testes WASM)
 
 ### Desktop (Tauri)
-- [ ] App shell nativa (Linux, macOS, Windows)
-- [ ] System tray + notificações
-- [ ] Modo offline total
-- [ ] Instalação via Nix (`nix profile install`)
+- [x] App shell nativa (Linux, macOS, Windows) — Tauri v2 scaffold
+- [x] System tray + notificações — tray.rs com menu Show/Hide/Quit
+- [x] Instalação via Nix (`nix profile install`) — neoland-desktop derivation
+- [ ] Modo offline total — embedded Neoland server
 - [ ] Atalhos de teclado globais
+- [ ] DMG / AppImage / MSI installers via CI/CD
+- [ ] Auto-start on login
+- [ ] Deep link handling (`neoland://`)
 
 ### Ops & Infra
 - [x] Nix flake (dev shell, env vars, SOPS, DB)
@@ -238,10 +241,10 @@ TUI · Web · Desktop
 | DSPy Pipeline | 85 | 85 | 90 | 92 | 95 |
 | TUI | 90 | 90 | 92 | 95 | 98 |
 | Web Console | 45 | 65 | 87 | 92 | 95 |
-| Desktop | 40 | 0 | 0 | 75 | 90 |
+| Desktop | 40 | 0 | 15 | 75 | 90 |
 | Ops/Infra | 75 | 80 | 87 | 92 | 98 |
 | Docs | 60 | 75 | 87 | 90 | 95 |
-| **Geral** | **78** | **78** | **88** | **93** | **96** |
+| **Geral** | **78** | **78** | **89** | **93** | **96** |
 
 ---
 
