@@ -17,38 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
-
       - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Extract Cachix token from SOPS
-        id: sops-cachix
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: |
-          if [[ -z "$SOPS_AGE_KEY" ]]; then
-            echo "token=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          mkdir -p ~/.config/sops/age
-          printf '%s' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
-          chmod 600 ~/.config/sops/age/keys.txt
-          token=$(nix run nixpkgs#sops -- --decrypt --extract '["CACHIX_AGENT_TOKEN"]' secrets/cachix.sops.yaml)
-          echo "::add-mask::$token"
-          echo "token=$token" >> "$GITHUB_OUTPUT"
-          rm -f ~/.config/sops/age/keys.txt
-
-      - uses: cachix/cachix-action@v16
-        if: steps.sops-cachix.outputs.token != ''
+      - uses: ./.github/actions/cachix-setup
         with:
-          name: neoland
-          authToken: ${{ steps.sops-cachix.outputs.token }}
+          auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Flake check
         run: nix flake check --show-trace
@@ -60,16 +38,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
-
       - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
             sandbox = false
+
+      - uses: ./.github/actions/cachix-setup
+        with:
+          auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Build WASM (nix)
         run: nix build .#neoland-web --option sandbox false --show-trace
@@ -81,16 +60,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
-
       - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
             sandbox = false
+
+      - uses: ./.github/actions/cachix-setup
+        with:
+          auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Build full stack (nix)
         run: nix build .#neoland-full --option sandbox false --show-trace

@@ -6,27 +6,27 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
     securellmBridge = {
-      url = "git+ssh://git@github.com/VoidNxSEC/securellm-bridge";
+      url = "git+https://github.com/VoidNxSEC/securellm-bridge";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     mlOpsApi = {
-      url = "git+ssh://git@github.com/VoidNxSEC/ml-ops-api";
+      url = "git+https://github.com/VoidNxSEC/ml-ops-api";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     aiAgentOs = {
-      url = "git+ssh://git@github.com/VoidNxSEC/ai-agent-os";
+      url = "git+https://github.com/VoidNxSEC/ai-agent-os";
       flake = false;
     };
     phantom = {
-      url = "git+ssh://git@github.com/VoidNxSEC/phantom";
+      url = "git+https://github.com/VoidNxSEC/phantom";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     owasaka = {
-      url = "git+ssh://git@github.com/VoidNxSEC/O.W.A.S.A.K.A.";
+      url = "git+https://github.com/VoidNxSEC/O.W.A.S.A.K.A.";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     spectre = {
-      url = "git+ssh://git@github.com/VoidNxSEC/spectre";
+      url = "git+https://github.com/VoidNxSEC/spectre";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

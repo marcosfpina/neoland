@@ -94,16 +94,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
-
       - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
             sandbox = false
+
+      - uses: ./.github/actions/cachix-setup
+        with:
+          auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Flake check
         run: nix flake check --show-trace

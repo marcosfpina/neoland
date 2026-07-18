@@ -25,11 +25,11 @@
         "rev": "9b32445c738707848067b067f095a31740b788ef",
         "revCount": 22,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ai-agent-os"
+        "url": "https://github.com/VoidNxSEC/ai-agent-os"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ai-agent-os"
+        "url": "https://github.com/VoidNxSEC/ai-agent-os"
       }
     },
     "crane": {
@@ -192,11 +192,11 @@
         "rev": "d8c48fcab80c05cad93d616ccce6f15a3aa14ae6",
         "revCount": 37,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
+        "url": "https://github.com/VoidNxSEC/ml-ops-api"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/ml-ops-api"
+        "url": "https://github.com/VoidNxSEC/ml-ops-api"
       }
     },
     "nixpkgs": {
@@ -278,11 +278,11 @@
         "rev": "d158fb743ed397b278935c1edd8b41de0aa88ca2",
         "revCount": 104,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/O.W.A.S.A.K.A."
+        "url": "https://github.com/VoidNxSEC/O.W.A.S.A.K.A."
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/O.W.A.S.A.K.A."
+        "url": "https://github.com/VoidNxSEC/O.W.A.S.A.K.A."
       }
     },
     "phantom": {
@@ -302,11 +302,11 @@
         "rev": "5ebbaa8f29780af9fe39a38180c675672a3e2213",
         "revCount": 133,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/phantom"
+        "url": "https://github.com/VoidNxSEC/phantom"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/phantom"
+        "url": "https://github.com/VoidNxSEC/phantom"
       }
     },
     "root": {
@@ -433,11 +433,11 @@
         "rev": "1135bdc13f0ec9127576ef6518949f91b26c0ff6",
         "revCount": 104,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
+        "url": "https://github.com/VoidNxSEC/securellm-bridge"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/securellm-bridge"
+        "url": "https://github.com/VoidNxSEC/securellm-bridge"
       }
     },
     "sops-nix": {
@@ -477,11 +477,11 @@
         "rev": "de14511a0712ffa23f090f486f666c1eca3ba5ec",
         "revCount": 84,
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/spectre"
+        "url": "https://github.com/VoidNxSEC/spectre"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/VoidNxSEC/spectre"
+        "url": "https://github.com/VoidNxSEC/spectre"
       }
     },
     "spectrum": {

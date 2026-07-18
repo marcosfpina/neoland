@@ -1,0 +1,46 @@
+name: Cachix (voidnxlabs)
+description: >
+  Configura o cache voidnxlabs. Usa auth-token direto quando presente;
+  senão tenta extrair de secrets/cachix.sops.yaml via age-key (requer Nix
+  já instalado). Sem token nenhum, segue sem cache (no-op).
+inputs:
+  auth-token:
+    description: Token Cachix direto (secrets.CACHIX_AUTH_TOKEN)
+    required: false
+    default: ""
+  age-key:
+    description: Chave age para decriptar secrets/cachix.sops.yaml (fallback)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Resolve Cachix token
+      id: token
+      shell: bash
+      env:
+        AUTH_TOKEN: ${{ inputs.auth-token }}
+        SOPS_AGE_KEY: ${{ inputs.age-key }}
+      run: |
+        if [[ -n "$AUTH_TOKEN" ]]; then
+          echo "token=$AUTH_TOKEN" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [[ -z "$SOPS_AGE_KEY" ]]; then
+          echo "token=" >> "$GITHUB_OUTPUT"
+          echo "::notice::Sem CACHIX_AUTH_TOKEN nem SOPS_AGE_KEY — seguindo sem Cachix"
+          exit 0
+        fi
+        mkdir -p ~/.config/sops/age
+        printf '%s' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+        chmod 600 ~/.config/sops/age/keys.txt
+        token=$(nix run nixpkgs#sops -- --decrypt --extract '["CACHIX_AGENT_TOKEN"]' secrets/cachix.sops.yaml)
+        echo "::add-mask::$token"
+        echo "token=$token" >> "$GITHUB_OUTPUT"
+        rm -f ~/.config/sops/age/keys.txt
+
+    - uses: cachix/cachix-action@v16
+      if: steps.token.outputs.token != ''
+      with:
+        name: voidnxlabs
+        authToken: ${{ steps.token.outputs.token }}
