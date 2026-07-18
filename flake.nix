@@ -267,7 +267,13 @@
           ];
 
           PROTOC = "${pkgs.protobuf}/bin/protoc";
-          SWAGGER_UI_DOWNLOAD_URL = "file://${swaggerUiZip}";
+          # O zip precisa ser gravável: o build script copia preservando perms
+          # e o unzip falha com PermissionDenied se vier 444 do /nix/store.
+          preBuild = ''
+            cp ${swaggerUiZip} "$TMPDIR/v5.17.12.zip"
+            chmod +w "$TMPDIR/v5.17.12.zip"
+            export SWAGGER_UI_DOWNLOAD_URL="file://$TMPDIR/v5.17.12.zip"
+          '';
 
           # Enable tests (Phase 0: Foundation)
           doCheck = true;
