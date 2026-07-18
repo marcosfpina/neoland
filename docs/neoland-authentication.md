@@ -3,8 +3,8 @@
 ## Overview
 
 Neoland implements multi-protocol authentication for secure API access:
-- **REST API**: API key authentication (X-API-Key header)
-- **gRPC API**: mTLS (planned for Phase 1.5)
+- **REST API**: JWT (OAuth2/SSO) or API key authentication (X-API-Key header), with native TLS/mTLS via `NEOLAND_TLS_*` (v0.0.1)
+- **gRPC API**: native TLS with client-certificate verification when a CA is configured (v0.0.1)
 
 See [ADR-011](ADR/ADR-011-authentication-strategy.md) for detailed architecture.
 
@@ -140,7 +140,7 @@ vault kv put secret/neoland/api-keys \
    - Audit access logs
 
 3. **Network Security**
-   - Use HTTPS/TLS in production (terminate at load balancer)
+   - Use HTTPS/TLS in production — native via `NEOLAND_TLS_*` env vars, or terminate at load balancer
    - Consider IP whitelisting
    - Implement rate limiting (Phase 1.4)
 
@@ -336,9 +336,9 @@ For testing protected endpoints without auth, you'll need to temporarily modify 
 - 🔜 Rate limiting per user
 - 🔜 Prevent brute force attacks
 
-### Phase 1.5 (Future) 🔜
-- 🔜 gRPC mTLS authentication
-- 🔜 Certificate-based auth
+### Phase 1.5 ✅ (delivered in v0.0.1)
+- ✅ gRPC mTLS authentication — tonic `ServerTlsConfig` with client CA root
+- ✅ Certificate-based auth — client certs required when `NEOLAND_TLS_CA_CERT` is set
 
 ## References
 

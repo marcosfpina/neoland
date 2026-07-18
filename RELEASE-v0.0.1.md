@@ -1,13 +1,13 @@
-# Neoland v0.4.0-beta — "Enterprise Ready"
+# Neoland v0.0.1 — "Enterprise Ready"
 
-**Data**: 2026-07-16 · **Codename**: Enterprise Ready  
-**Tipo**: Beta Release · **Status**: Pre-Release
+**Data**: 2026-07-18 · **Codename**: Enterprise Ready  
+**Tipo**: Initial Release · **Status**: Pre-Release
 
 ---
 
 ## 🎯 Overview
 
-Neoland v0.4.0-beta is the **enterprise-ready milestone** — the first release that can be deployed in production environments with authentication, encryption, observability, and high availability. Every control plane now requires OAuth2 or API key authentication, all traffic supports mTLS, and the platform ships with a production-grade Helm chart.
+Neoland v0.0.1 is the **initial public release**, aggregating every development cycle to date into a single enterprise-ready baseline: authentication, encryption, observability, and high availability. Every control plane requires OAuth2 or API key authentication, both listeners (REST and gRPC) serve native TLS/mTLS, and the platform ships with a production-grade Helm chart. All versioning starts here — future releases follow from 0.0.1.
 
 ### What's Neoland?
 
@@ -25,12 +25,15 @@ An **autonomous AI engineering platform** that runs a 4-stage DSPy agent pipelin
 | **mTLS Infrastructure** | PKI generator + rustls TLS module for end-to-end encryption |
 | **OpenAPI 3.0 Docs** | Swagger UI at `/swagger-ui/`, 16 endpoints, Bearer JWT + API Key auth |
 | **Tauri Desktop App** | Native shell (Linux/macOS/Windows) with system tray + notifications |
+| **vLLM Backend** | OpenAI-compatible GPU inference, `/v1/chat/completions` |
+| **Multi-backend Routing** | Adaptive workload classification: local/bridge/vLLM |
+| **SSO / LDAP Auth** | Enterprise identity: LDAP bind + OIDC (Azure AD, Okta, Keycloak) |
 | **Web Console** | Leptos WASM SPA, 3-panel layout, SSE streaming, 28 tests |
-| **CI/CD Pipeline** | 15 GitHub Actions workflows, `act`-validated, Nix flake |
+| **CI/CD Pipeline** | 16 GitHub Actions workflows, `act`-validated, Nix flake |
 
 ---
 
-## 📦 What's New Since v0.3.0
+## 📦 What's Included
 
 ### Authentication & Authorization (#2)
 - **OAuth2 providers**: Google (OpenID Connect) + GitHub OAuth2
@@ -54,7 +57,8 @@ An **autonomous AI engineering platform** that runs a 4-stage DSPy agent pipelin
 - **Certificate generator**: `bash scripts/gen-certs.sh` — CA + server + client + bridge
 - **PKCS#12 bundle**: Import client cert into browsers/TUI
 - **TLS module**: `src/tls.rs` — rustls ServerConfig + ClientConfig builders
-- **Production pattern**: Reverse proxy (nginx/Caddy) terminates TLS, internal mTLS between services
+- **Native TLS on listeners**: REST (axum-server/rustls) + gRPC (tonic) serve HTTPS directly; client certificate required when a CA is configured (mTLS)
+- **Alternative pattern**: Reverse proxy (nginx/Caddy) TLS termination still supported when `NEOLAND_TLS_*` is unset
 - **Environment**: `NEOLAND_TLS_CA_CERT`, `NEOLAND_TLS_SERVER_CERT`, `NEOLAND_TLS_SERVER_KEY`
 
 ### OpenAPI Documentation (#7)
@@ -71,29 +75,53 @@ An **autonomous AI engineering platform** that runs a 4-stage DSPy agent pipelin
 - **Nix derivation**: `nix build .#neoland-desktop`
 - **Icons**: RGBA icons for all platforms (32x32, 128x128, tray, .ico)
 
+### vLLM Backend (#6)
+- **OpenAI-compatible**: Communicates via `/v1/chat/completions` endpoint
+- **Health check**: `/health` endpoint with 5s timeout
+- **Model discovery**: `/v1/models` for auto-detection
+- **Config**: `NEOLAND_VLLM_URL` (default: `http://localhost:8000`), `NEOLAND_VLLM_MODEL`
+
+### Multi-Backend Routing (#8)
+- **3 backends**: Local (ml-offload/llama.cpp), Bridge (SecureLLM), vLLM (GPU)
+- **4 strategies**: `LocalFirst`, `ExternalFirst`, `LoadBalanced` (EMA latency), `Adaptive` (workload classification)
+- **Circuit breakers**: Independent per backend (5 failures, 30s recovery)
+- **Workload classifier**: Auto-detects ShortRealtime, CodeGen, or General prompts
+- **Fallback chains**: Automatic failover when backends are unhealthy
+
+### SSO / LDAP Enterprise Auth (#3)
+- **LDAP**: Bind + search for Active Directory, OpenLDAP, FreeIPA
+- **OIDC**: Generic OpenID Connect with auto-discovery (`/.well-known/openid-configuration`)
+- **Endpoints**: `POST /auth/login/ldap`, `GET /auth/login/sso`, `GET /auth/callback/sso`
+- **Per-tenant config**: Database-backed `ldap_configs` + `oidc_configs` tables
+- **12+ env vars**: `NEOLAND_LDAP_URL`, `NEOLAND_OIDC_ISSUER_URL`, etc.
+
 ---
 
 ## 🧪 Testing
 
 | Suite | Count | Result |
 |---|---|---|
-| Core unit tests (`cargo test --lib`) | 280 | ✅ All pass |
+| Core unit tests (`cargo test --lib`) | 298 | ✅ All pass |
 | Web Console unit tests | 16 | ✅ All pass |
 | WASM integration tests (headless Chrome) | 12 | ✅ All pass |
 | OpenAPI spec tests | 3 | ✅ All pass |
 | JWT token tests | 4 | ✅ All pass |
+| SSO / LDAP unit tests | 7 | ✅ All pass |
+| vLLM client tests | 4 | ✅ All pass |
+| Workload classifier tests | 5 | ✅ All pass |
 | Integration tests (gRPC + REST) | 7/8 | ⚠️ 1 requires SecureLLM Bridge |
 | CI/CD (`act` simulation) | fmt + clippy + test + wasm | ✅ All pass |
 | Nix flake check | 5 derivations | ✅ All pass |
 
 ---
 
-## 📋 Migration from v0.3.0
+## 📋 Setup
 
 ### Database
 ```sql
--- Run migration 005 for multi-tenant auth:
+-- Run migrations for auth:
 psql -d neoland -f migrations/005_multi_tenant_auth.sql
+psql -d neoland -f migrations/006_enterprise_sso.sql
 ```
 
 ### Configuration
@@ -111,11 +139,8 @@ base_url = "https://neoland.example.com"
 secret = ""                # Or set NEOLAND_JWT_SECRET (openssl rand -hex 32)
 ```
 
-### Breaking Changes
+### Notes
 - **API key auth still works** but is deprecated in favor of JWT
-- **`AppState`** has 3 new fields: `db_pool`, `jwt_secret`, `oauth_base_url`
-- **`.github/` CI workflows** moved to `.github/workflows/` (GitHub Actions spec)
-- **`stdenvNoCC.lib`** removed — use `lib` directly in Nix derivations
 
 ---
 
@@ -145,14 +170,13 @@ docker compose up -d
 
 ---
 
-## 🔜 What's Next (v1.0.0)
+## 🔜 What's Next (v0.1.0)
 
-- [ ] SSO / LDAP enterprise auth
-- [ ] vLLM as optional LLM backend
-- [ ] Multi-backend routing (auto-select by workload)
 - [ ] SOC2 Type I + GDPR compliance
 - [ ] Soak period — 2 weeks of real tasks, zero P0 incidents
 - [ ] Public launch: landing page, blog post, community
+- [ ] Refresh-token validation/revocation backed by DB
+- [ ] Native desktop binaries via Nix (current derivation validates only)
 
 ---
 
@@ -163,5 +187,5 @@ GitHub: [VoidNxSEC/neoland](https://github.com/VoidNxSEC/neoland)
 
 ---
 
-**Changelog**: [Full commit history](https://github.com/VoidNxSEC/neoland/compare/v0.3.0...main)  
+**Changelog**: [Full commit history](https://github.com/VoidNxSEC/neoland/commits/main)  
 **License**: MIT

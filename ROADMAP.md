@@ -1,6 +1,6 @@
 # Neoland — Release Roadmap
 
-**Versão**: final · **Data**: 2026-07-16 · **Status**: Pre-Release
+**Versão**: v0.0.1 · **Data**: 2026-07-18 · **Status**: Pre-Release
 
 ---
 
@@ -33,7 +33,7 @@ TUI · Web · Desktop
 
 ## Linha do Tempo
 
-### v0.2.0 — Honest Preview · 2 semanas
+### Ciclo 1 — Honest Preview (entregue na v0.0.1)
 
 **Meta**: o Web Console deixa de ser mock e começa a conversar com backend real.
 
@@ -51,7 +51,7 @@ TUI · Web · Desktop
 
 ---
 
-### v0.3.0 — Full Stack Beta · 4 semanas
+### Ciclo 2 — Full Stack Beta (entregue na v0.0.1)
 
 **Meta**: stack completa operando em single-host, deployment automatizado.
 
@@ -66,13 +66,13 @@ TUI · Web · Desktop
 | 7 | Quickstart validado — NixOS e Ubuntu, <5 min até first task | ✅ |
 | 8 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint | ✅ |
 | 9 | Testes de integração Leptos (`wasm-bindgen-test`) | ✅ |
-| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.4.0) | ⏳ |
+| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.1.0) | ⏳ |
 
 **Gate**: stack sobe com `nix run .#neoland-full` ou `docker compose up`. Web Console funcional com backend real. Quickstart verificável por terceiro.
 
 ---
 
-### v0.4.0 — Desktop & Multi-tenant · 6 semanas
+### Ciclo 3 — Desktop & Multi-tenant (entregue na v0.0.1)
 
 **Meta**: desktop app nativo + multi-tenant auth + Kubernetes.
 
@@ -80,18 +80,18 @@ TUI · Web · Desktop
 |---|---|
 | 1 | Tauri desktop app — Linux, macOS, Windows | ✅ |
 | 2 | OAuth2 (Google/GitHub) + RBAC multi-tenant | ✅ |
-| 3 | SSO / LDAP para enterprise |
+| 3 | SSO / LDAP para enterprise | ✅ |
 | 4 | Kubernetes Helm chart — 3+ réplicas, HA | ✅ |
 | 5 | mTLS end-to-end em todos os planes | ✅ |
-| 6 | vLLM como backend opcional (além de llama.cpp) |
+| 6 | vLLM como backend opcional (além de llama.cpp) | ✅ |
 | 7 | Documentação OpenAPI publicada (GitHub Pages) | ✅ |
-| 8 | Multi-backend routing — seleção automática por workload |
+| 8 | Multi-backend routing — seleção automática por workload | ✅ |
 
 **Gate**: desktop app instalável via Nix. Multi-tenant funcional. Helm chart deploya em cluster.
 
 ---
 
-### v1.0.0 — Public Release · 8 semanas
+### v0.1.0 — Public Release · 8 semanas
 
 **Meta**: pronto para o mundo. Compliance, soak, launch.
 
@@ -104,9 +104,9 @@ TUI · Web · Desktop
 | 5 | GitHub Discussions / Discord para comunidade |
 | 6 | Release notes finais — changelog, breaking changes, migration |
 | 7 | Video demo — TUI + Web + Desktop em ação |
-| 8 | Roadmap pós-1.0 — advanced analytics, ledger automation, mobile nativo |
+| 8 | Roadmap pós-0.1.0 — advanced analytics, ledger automation, mobile nativo |
 
-**Gate**: Tag `v1.0.0`. Soak limpo. Docs completos. Comunidade aberta.
+**Gate**: Tag `v0.1.0`. Soak limpo. Docs completos. Comunidade aberta.
 
 ---
 
@@ -121,9 +121,11 @@ TUI · Web · Desktop
 - [x] SSE streaming com timeout e degraded-state handling
 - [x] Session persistence PostgreSQL + checkpoint relay
 - [x] Health/liveness/readiness probes reais
-- [x] mTLS end-to-end
-- [ ] Multi-backend routing (llama.cpp + vLLM)
-- [ ] Multi-tenant auth (OAuth2, SSO, LDAP)
+- [x] mTLS end-to-end — TLS nativo nos listeners REST (axum-server/rustls) e gRPC (tonic), client cert obrigatório quando CA configurado
+- [x] Multi-backend routing (llama.cpp + vLLM)
+- [x] Multi-tenant auth (OAuth2, SSO, LDAP)
+- [ ] Refresh token: validar contra DB e emitir novo access token (`src/server/mod.rs` TODO)
+- [ ] Logout: revogar refresh token no DB (`src/server/mod.rs` TODO)
 
 ### Agent Pipeline (Python · DSPy)
 - [x] 26 contract tests (Pydantic + signatures)
@@ -164,7 +166,7 @@ TUI · Web · Desktop
 ### Desktop (Tauri)
 - [x] App shell nativa (Linux, macOS, Windows) — Tauri v2 scaffold
 - [x] System tray + notificações — tray.rs com menu Show/Hide/Quit
-- [x] Instalação via Nix (`nix profile install`) — neoland-desktop derivation
+- [ ] Instalação via Nix — derivation atual só valida (`cargo check` + README no $out); falta produzir binário Tauri real
 - [ ] Modo offline total — embedded Neoland server
 - [ ] Atalhos de teclado globais
 - [ ] DMG / AppImage / MSI installers via CI/CD
@@ -180,9 +182,11 @@ TUI · Web · Desktop
 - [x] Nix flake com build WASM (`nix build .#neoland-web`)
 - [x] Quickstart validado — NixOS e Ubuntu, <5 min até first task
 - [x] Kubernetes Helm chart (3+ réplicas, HA)
-- [x] mTLS end-to-end
+- [x] mTLS end-to-end (TLS nativo nos listeners; smoke: gen-certs + curl mTLS)
+- [x] Output `neoland-full` no flake (control plane + Web Console, binário único)
 - [ ] Backup/restore + rollback documentado
 - [ ] Deploy non-Nix documentado (Ubuntu bare metal)
+- [ ] Limpar `azure-pipelines.yml`: job `frontend_checks` aponta `matrix/frontend` (legado, não existe no repo)
 
 ### Docs & Comunidade
 - [x] ADRs arquiteturais (001-015+)
@@ -192,7 +196,7 @@ TUI · Web · Desktop
 - [x] Smoke E2E documentado com llama.cpp real
 - [x] OpenAPI docs publicadas
 - [x] Landing page pública
-- [x] Release notes (v0.4.0-beta)
+- [x] Release notes (v0.0.1)
 - [ ] Blog post técnico de launch
 - [ ] Video demo (TUI + Web + Desktop)
 - [ ] GitHub Discussions / Discord
@@ -213,19 +217,19 @@ TUI · Web · Desktop
 | Infra | Nix-first, Docker compat, Kubernetes para HA |
 | Auth | RBAC local → OAuth2 → SSO/LDAP |
 | LLM Backend | llama.cpp primário, vLLM opcional |
-| Compliance | SOC2 Type I no v1.0 |
+| Compliance | SOC2 Type I no v0.1.0 |
 
 ---
 
-## Gate de Release Final (v1.0.0)
+## Gate de Release Final (v0.1.0)
 
-- [ ] `cargo test --workspace` passa (TUI + Web + Desktop)
-- [ ] `nix build .#neoland-full` gera stack completa deterministicamente
+- [x] `cargo test --workspace` passa (298 core + 16 web, validado 2026-07-18)
+- [ ] `nix build .#neoland-full` gera stack completa deterministicamente (output criado; validar no CI `validate-all`)
 - [ ] Web Console funcional com backend real (streaming, sessões, ADRs)
 - [ ] Desktop app instalável em Linux, macOS, Windows
-- [ ] Multi-tenant auth operacional (OAuth2 + SSO)
+- [x] Multi-tenant auth operacional (OAuth2 + SSO)
 - [ ] Kubernetes Helm chart deploy funcional
-- [ ] mTLS em todos os planes
+- [x] mTLS em todos os planes — TLS nativo REST+gRPC, smoke 4/4 (2026-07-18)
 - [ ] Smoke E2E completo com LLM real
 - [ ] Quickstart <5 min em NixOS e Ubuntu
 - [ ] Docs completos (README, OpenAPI, ADRs, compliance)
@@ -236,16 +240,16 @@ TUI · Web · Desktop
 
 ## Progressão de Score
 
-| Área | Agora | v0.2.0 | v0.3.0 | v0.4.0 | v1.0.0 |
+| Área | Início | Ciclo 1 | Ciclo 2 | v0.0.1 | v0.1.0 |
 |---|---|---|---|---|---|
-| Control Plane | 95 | 95 | 96 | 98 | 100 |
+| Control Plane | 95 | 95 | 96 | 99 | 100 |
 | DSPy Pipeline | 85 | 85 | 90 | 92 | 95 |
 | TUI | 90 | 90 | 92 | 95 | 98 |
 | Web Console | 45 | 65 | 87 | 92 | 95 |
 | Desktop | 40 | 0 | 15 | 75 | 90 |
-| Ops/Infra | 75 | 80 | 87 | 94 | 98 |
-| Docs | 60 | 75 | 87 | 92 | 95 |
-| **Geral** | **78** | **78** | **91** | **93** | **96** |
+| Ops/Infra | 75 | 80 | 87 | 96 | 98 |
+| Docs | 60 | 75 | 87 | 93 | 95 |
+| **Geral** | **78** | **78** | **91** | **94** | **96** |
 
 ---
 

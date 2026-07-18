@@ -14,7 +14,7 @@ Neoland is a multi-surface AI control-plane component:
 
 ```text
 Operator
-  -> TUI (ratatui) / Web Console (Leptos WASM) / Desktop (Tauri, v0.4.0+)
+  -> TUI (ratatui) / Web Console (Leptos WASM) / Desktop (Tauri, v0.0.1+)
     -> Rust control plane (:3001 REST, :50051 gRPC)
       -> Python DSPy agent pipeline (:8001)
       -> Session/checkpoint storage (PostgreSQL)
@@ -33,7 +33,7 @@ Operator
 |---------|-------|--------|
 | **TUI** | Rust + ratatui · 4 themes · chat bubbles · pipeline tree | ✅ Stable |
 | **Web Console** | Leptos WASM + CSS artesanal · 3-panel SPA · SSE streaming | ✅ Honest Preview (v0.2.0) |
-| **Desktop** | Tauri + Leptos (reuses WASM bundle) | 🔮 v0.4.0 |
+| **Desktop** | Tauri + Leptos (reuses WASM bundle) | ✅ v0.0.1 |
 | **CLI / API** | Rust + axum + tonic · 15 REST endpoints + gRPC | ✅ Stable |
 | **Agent Pipeline** | Python · DSPy 3.x · FastAPI · 4-stage | ✅ Stable |
 

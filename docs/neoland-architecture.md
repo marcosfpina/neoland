@@ -539,7 +539,7 @@ ghz --insecure --proto proto/llamachat.proto \
 
 1. **Input Validation**: All CLI args sanitized via `clap`
 2. **Command Filtering**: Whitelist for `[[CMD:]]` execution
-3. **TLS**: gRPC supports TLS (disabled in dev)
+3. **TLS/mTLS**: Native TLS on both listeners — REST (axum-server/rustls) and gRPC (tonic). Enabled via `NEOLAND_TLS_*` env vars (see `scripts/gen-certs.sh`); when a CA is set, client certificates are required. Unset in dev → plain HTTP with reverse-proxy option.
 
 ### Future Hardening
 

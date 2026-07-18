@@ -2,7 +2,7 @@
 
 **Autonomous AI Engineering Platform** — Multi-agent ADR pipeline with TUI, Web Console, and Desktop app
 
-**Version**: 0.4.0-beta · **Status**: Enterprise Ready · **Score**: 91/100 · [ROADMAP](ROADMAP.md)
+**Version**: 0.0.1 · **Status**: Enterprise Ready · **Score**: 94/100 · [ROADMAP](ROADMAP.md)
 
 ---
 
@@ -58,7 +58,7 @@ chat bubbles, pipeline tree with confidence badges:
 ```
 ┌───────────────┐  ┌──────────────┐  ┌──────────────────┐
 │   Terminal    │  │   Browser    │  │   Desktop (Tauri) │
-│   TUI (Rust)  │  │   Leptos SPA │  │   (v0.4.0+)      │
+│   TUI (Rust)  │  │   Leptos SPA │  │   (v0.0.1+)      │
 └───────┬───────┘  └──────┬───────┘  └────────┬─────────┘
         │                 │                    │
         └────────┬────────┴────────────────────┘
@@ -92,7 +92,7 @@ chat bubbles, pipeline tree with confidence badges:
 |---|---|---|
 | **TUI** | Rust + ratatui · 4 themes · chat bubbles · pipeline tree | ✅ Stable |
 | **Web Console** | Leptos WASM + CSS artesanal · 3-panel SPA · SSE streaming | ✅ Honest Preview |
-| **Desktop** | Tauri + Leptos (reuses WASM bundle) | 🔮 v0.4.0 |
+| **Desktop** | Tauri + Leptos (reuses WASM bundle) | ✅ v0.0.1 |
 | **CLI / API** | Rust + axum + tonic · 15 REST endpoints + gRPC | ✅ Stable |
 
 ---
@@ -259,7 +259,7 @@ just validate-slo
 - **Secrets**: Three-tier retrieval — Cache → HashiCorp Vault → env fallback
 - **Audit**: Structured JSON, 15 action types, brute-force detection (>5 failures/min)
 - **Rate limiting**: 100 req/min per user/IP · max 100KB prompt
-- **mTLS**: Planned (v0.4.0)
+- **mTLS**: ✅ End-to-end nativo nos listeners (v0.0.1)
 - See: [`docs/ADR/`](docs/ADR/) for full security decisions
 
 ---
@@ -293,6 +293,7 @@ services.neoland = {
 Nix flake provides:
 - `nix build .#neoland` — control plane binary
 - `nix build .#neoland-web` — Web Console WASM bundle (requires network for first build)
+- `nix build .#neoland-full` — full stack: control plane + Web Console served by a single binary (`neoland-full`)
 - `nix develop` — dev shell with all tooling (Rust, trunk, Python, SOPS, NATS, etc.)
 - NixOS modules: `neoland` · `securellmBridgeApi` · `mlOpsApi` · `llmSuite` · `stack`
 

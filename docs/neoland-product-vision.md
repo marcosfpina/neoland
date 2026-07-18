@@ -171,7 +171,7 @@ docker-compose up -d  # https://neoland.local
 
 ---
 
-### **v0.4.0 - Desktop App (Q3 2026)** 🔮
+### **Desktop App (entregue na v0.0.1)** ✅
 
 **Target**: Power Users sem Hyprland
 
@@ -359,7 +359,7 @@ flowchart LR
 
 ## 📈 Success Metrics (KPIs)
 
-| Metric                    | Current (v0.2.0) | Target (v0.3.0) | Target (v0.4.0) |
+| Metric                    | Baseline | Entregue (v0.0.1) | Target (v0.1.0) |
 | ------------------------- | ---------------- | --------------- | --------------- |
 | **GitHub Stars**          | ~50              | 1,000           | 5,000           |
 | **Active Users**          | 5 (internal)     | 100             | 1,000           |
