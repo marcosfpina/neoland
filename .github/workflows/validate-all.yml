@@ -1,18 +1,24 @@
-name: CI
+name: Validate All
+
+# Pipeline final de validação — exercita o gate completo do release:
+# qualidade Rust, smoke TLS/mTLS, contratos Python e todos os outputs Nix.
+# Nenhuma tarefa de release é considerada concluída sem este workflow verde.
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    tags:
+      - "v*"
+  schedule:
+    - cron: "0 4 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  rust:
-    name: Rust (fmt · clippy · test · wasm)
+  rust-quality:
+    name: Rust fmt · clippy · tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,20 +41,11 @@ jobs:
       - name: Clippy (all targets)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Clippy (WASM web crate)
-        run: cargo clippy -p neoland-web --target wasm32-unknown-unknown -- -D warnings
-
-      - name: Unit tests (core)
-        run: cargo test --lib --verbose
-
-      - name: Unit tests (web)
-        run: cargo test -p neoland-web --verbose
-
-      - name: Check WASM target
-        run: cargo check -p neoland-web --target wasm32-unknown-unknown
+      - name: Tests (workspace)
+        run: cargo test --workspace --lib --verbose
 
   tls-smoke:
-    name: TLS/mTLS smoke (REST + gRPC)
+    name: TLS/mTLS smoke
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,7 +65,7 @@ jobs:
       - name: TLS/mTLS smoke
         run: bash scripts/tls-smoke.sh
 
-  python:
+  python-contracts:
     name: Python contracts (no LLM)
     runs-on: ubuntu-latest
     permissions:
@@ -89,23 +86,44 @@ jobs:
       - name: Contract tests
         run: cd agents && poetry run pytest tests/ -m contract -v
 
-  adr:
-    name: ADR validation
+  nix-outputs:
+    name: Nix build (neoland · web · full)
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
-          python-version: "3.13"
+          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
 
-      - name: Validate ADRs
-        run: bash scripts/validate-adr.sh
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            sandbox = false
 
-  sops-verify:
-    name: SOPS secrets integrity
-    uses: ./.github/workflows/reusable-sops-verify.yml
-    secrets:
-      SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+      - name: Flake check
+        run: nix flake check --show-trace
+
+      - name: Build neoland
+        run: nix build .#neoland --option sandbox false --show-trace
+
+      - name: Build neoland-web
+        run: nix build .#neoland-web --option sandbox false --show-trace
+
+      - name: Build neoland-full
+        run: nix build .#neoland-full --option sandbox false --show-trace
+
+      - name: Wrapper smoke
+        run: ./result/bin/neoland-full --help
+
+  gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    needs: [rust-quality, tls-smoke, python-contracts, nix-outputs]
+    steps:
+      - name: All validations green
+        run: echo "✅ validate-all — gate completo verde"

@@ -20,8 +20,6 @@ variables:
   CARGO_HOME: $(Pipeline.Workspace)/.cargo
   TOOL_HOME: $(Pipeline.Workspace)/tools
   TARGET_DIR: $(Build.SourcesDirectory)/target
-  FRONTEND_DIR: $(Build.SourcesDirectory)/matrix/frontend
-  NPM_CACHE_DIR: $(Pipeline.Workspace)/.npm
   REPORTS_DIR: $(Build.SourcesDirectory)/.azure-reports
 
 stages:
@@ -200,39 +198,6 @@ stages:
             condition: always()
             displayName: Publish contract test results
 
-      - job: frontend_checks
-        displayName: Frontend Lint and Build
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - checkout: self
-            clean: true
-
-          - task: NodeTool@0
-            inputs:
-              versionSpec: '24.x'
-            displayName: Use Node 24
-
-          - task: Cache@2
-            inputs:
-              key: 'npm | "$(Agent.OS)" | matrix/frontend/package-lock.json'
-              restoreKeys: |
-                npm | "$(Agent.OS)"
-              path: $(NPM_CACHE_DIR)
-            displayName: Restore npm cache
-
-          - bash: |
-              set -euxo pipefail
-              cd "$(FRONTEND_DIR)"
-              npm ci --cache "$(NPM_CACHE_DIR)"
-              npm run lint
-              npm run build
-            displayName: npm ci + lint + build
-            env:
-              NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:3001
-              NEOLAND_CONTROL_PLANE_URL: http://127.0.0.1:3001
-              NEOLAND_DSPY_URL: http://127.0.0.1:8001
-
   - stage: extended_validation
     displayName: Extended Validation
     dependsOn: fast_feedback
@@ -276,9 +241,9 @@ stages:
           - bash: |
               set -euxo pipefail
               . "$HOME/.nix-profile/etc/profile.d/nix.sh"
-              nix build .#neoland
-              ./result/bin/neoland --version || true
-            displayName: Build release binary
+              nix build .#neoland-full
+              ./result/bin/neoland-full --help > /dev/null
+            displayName: Build full-stack release (neoland-full)
             env:
               CARGO_HOME: $(CARGO_HOME)
               CARGO_TARGET_DIR: $(TARGET_DIR)

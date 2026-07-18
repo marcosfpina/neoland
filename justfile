@@ -321,6 +321,19 @@ gen-certs:
 validate:
     bash scripts/validate-production-readiness.sh
 
+# TLS/mTLS smoke — listeners nativos REST + gRPC (requer scripts/gen-certs.sh --auto)
+tls-smoke:
+    cargo build --bin neoland
+    bash scripts/tls-smoke.sh
+
+# Gate completo de release — espelho local do workflow validate-all
+validate-all:
+    cargo fmt --check
+    cargo clippy --all-targets -- -D warnings
+    cargo test --workspace --lib
+    nix build .#neoland-full
+    just tls-smoke
+
 # Dependency vulnerability scan
 audit:
     cargo audit

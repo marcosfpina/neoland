@@ -73,3 +73,27 @@ jobs:
 
       - name: Build WASM (nix)
         run: nix build .#neoland-web --option sandbox false --show-trace
+
+  build-full:
+    name: Nix build neoland-full
+    runs-on: ubuntu-latest
+    needs: [flake-check]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VOIDNXSEC_DEPLOY_KEY }}
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            sandbox = false
+
+      - name: Build full stack (nix)
+        run: nix build .#neoland-full --option sandbox false --show-trace
+
+      - name: Wrapper smoke
+        run: ./result/bin/neoland-full --help
