@@ -155,7 +155,7 @@ pub async fn github_exchange_code(
 
     let user: GitHubUserInfo = http
         .get(GITHUB_USER_URL)
-        .header("User-Agent", "Neoland/0.4.0")
+        .header("User-Agent", "Neoland/0.0.1")
         .bearer_auth(token.access_token().secret())
         .send()
         .await
@@ -184,7 +184,7 @@ pub async fn github_exchange_code(
 async fn fetch_github_primary_email(http: &HttpClient, access_token: &str) -> Option<String> {
     let emails: Vec<GitHubEmail> = http
         .get("https://api.github.com/user/emails")
-        .header("User-Agent", "Neoland/0.4.0")
+        .header("User-Agent", "Neoland/0.0.1")
         .bearer_auth(access_token)
         .send()
         .await

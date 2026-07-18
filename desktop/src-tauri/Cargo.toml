@@ -1,7 +1,7 @@
 [workspace]
 [package]
 name = "neoland-desktop"
-version = "0.4.0"
+version = "0.0.1"
 description = "Neoland Desktop — Tauri-native AI console for Linux, macOS, and Windows"
 authors = ["VoidNxSEC Team"]
 edition = "2024"

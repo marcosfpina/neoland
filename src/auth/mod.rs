@@ -2,18 +2,20 @@
 //!
 //! Multi-protocol authentication system for Neoland:
 //! - REST API: API key via X-API-Key header (legacy) + JWT Bearer token
-//! - OAuth2: Google & GitHub OAuth2 login (v0.4.0)
+//! - OAuth2: Google & GitHub OAuth2 login (v0.0.1)
+//! - SSO/LDAP: Enterprise identity providers (v0.0.1 #3)
 //! - gRPC: mTLS (mutual TLS) authentication
 //! - RBAC: Role-Based Access Control (admin, user, read-only)
 //! - Multi-tenant: User → Tenant → Role scoping
 //!
 //! See ADR-011 for detailed architecture decisions.
 
-// ── Enterprise auth (v0.4.0) ──────────────────────────────────────────────
+// ── Enterprise auth (v0.0.1) ──────────────────────────────────────────────
 pub mod jwt;
 pub mod middleware;
 pub mod oauth;
 pub mod routes;
+pub mod sso;
 pub mod types;
 
 // Re-export commonly-used types

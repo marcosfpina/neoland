@@ -1,27 +1,30 @@
 # syntax=docker/dockerfile:1.7
-# Build context: master/  (one level above neoland/ — needed for spectre/ path dep)
-# Build with:
-#   eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519
-#   DOCKER_BUILDKIT=1 docker compose build --ssh default
+# Build context: master/deploy/  (contains neoland/, spectre/, intelagent/, securellm-bridge/)
+# Path patches are in neoland/.cargo/config.toml
+#
+# Build:
+#   docker compose -f docker-compose.master.yml --profile neoland build neoland-control-plane
 
 # ── Stage 1: Build ───────────────────────────────────────────────────────────
-FROM rust:1.82-slim-bookworm AS builder
+FROM rust:1.95-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev ca-certificates git openssh-client \
+    pkg-config libssl-dev ca-certificates git protobuf-compiler curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# spectre/ is a path dependency — must be present before cargo fetch
+# Copy all path dependencies (needed for the .cargo/config.toml patches)
 COPY spectre/ spectre/
 COPY neoland/ neoland/
+COPY intelagent/ intelagent/
+COPY securellm-bridge/ securellm-bridge/
 
 WORKDIR /build/neoland
 
-# Fetch crates; SSH agent required for private github deps
-RUN --mount=type=ssh \
-    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+
+# Fetch crates (uses .cargo/config.toml path patches for local deps)
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
     cargo fetch --locked
 
@@ -32,7 +35,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo build --bin neoland --release && \
     cp target/release/neoland /usr/local/bin/neoland-bin
 
-# Build sqlx-cli for DB migrations (reuses registry cache)
+# Build sqlx-cli for DB migrations
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo install sqlx-cli --no-default-features --features postgres && \
     cp /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx-bin

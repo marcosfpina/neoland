@@ -2,7 +2,7 @@
 //!
 //! These are the WASM-compatible prost-generated types from
 //! `proto/llamachat.proto`.  The full gRPC-web client bridge
-//! (with streaming, bidirectional RPC) is planned for v0.4.0
+//! (with streaming, bidirectional RPC) is planned for v0.1.0
 //! once `tonic` gains WASM support or we implement a manual
 //! fetch-based transport.
 //!

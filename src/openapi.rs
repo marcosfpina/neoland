@@ -84,7 +84,7 @@ pub struct ChatChoice {
     pub index: u32,
 }
 
-// Auth (v0.4.0)
+// Auth (v0.0.1)
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct AuthLoginResponse {
     pub access_token: String,
@@ -172,7 +172,7 @@ impl Modify for BearerAuth {
 #[openapi(
     info(
         title = "Neoland API",
-        version = "0.4.0",
+        version = "0.0.1",
         description = "Autonomous AI Engineering Platform — Multi-agent ADR pipeline with OAuth2, RBAC, and HA Kubernetes deployment.\n\n## Authentication\n\n- **bearer_auth**: JWT Bearer token (OAuth2 login via Google/GitHub)\n- **api_key**: Legacy API key (X-API-Key header)",
         contact(name = "VoidNxSEC Team", email = "sec@voidnxlabs.com", url = "https://github.com/VoidNxSEC/neoland"),
         license(name = "MIT", url = "https://github.com/VoidNxSEC/neoland/blob/main/LICENSE")

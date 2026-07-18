@@ -168,11 +168,11 @@ pub struct AppState {
     start_time: Instant,
     agent_orchestrator: Option<Arc<AgentOrchestrator>>,
     event_bus: tokio::sync::broadcast::Sender<AgentEvent>,
-    /// Database pool (v0.4.0 enterprise auth)
+    /// Database pool (v0.0.1 enterprise auth)
     pub db_pool: Option<sqlx::PgPool>,
-    /// JWT signing secret (v0.4.0)
+    /// JWT signing secret (v0.0.1)
     pub jwt_secret: Vec<u8>,
-    /// OAuth2 base URL (v0.4.0)
+    /// OAuth2 base URL (v0.0.1)
     pub oauth_base_url: String,
 }
 
@@ -1442,7 +1442,7 @@ fn init_audit_logger() -> anyhow::Result<(AuditLogger, String)> {
     }
 }
 
-// ── Auth route handlers (v0.4.0) ──────────────────────────────────────────
+// ── Auth route handlers (v0.0.1) ──────────────────────────────────────────
 // Thin wrappers that bridge the auth module with the server's AppState.
 
 #[utoipa::path(
@@ -1843,11 +1843,26 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         oauth_base_url: crate::config::Config::load().auth.oauth.base_url,
     });
 
+    // TLS/mTLS opcional — certs via NEOLAND_TLS_* (scripts/gen-certs.sh)
+    // aws-lc-rs e ring coexistem no dep tree (tonic/tokio-rustls): o provider
+    // process-level precisa ser escolhido explicitamente antes de qualquer TLS.
+    rustls::crypto::ring::default_provider().install_default().ok();
+    let tls_config = crate::tls::TlsConfig::from_env()?;
+
     // 1. Start gRPC Server (with gRPC-web support for browser clients)
     // tonic-web enables browsers to call gRPC endpoints via HTTP/1.1 + CORS.
     // For production, restrict origins via a reverse proxy (nginx/Caddy).
     let grpc_state = shared_state.clone();
-    let grpc_future = GrpcServer::builder()
+    let mut grpc_builder = GrpcServer::builder();
+    if let Some(ref tls) = tls_config {
+        let mut grpc_tls = tonic::transport::ServerTlsConfig::new()
+            .identity(tonic::transport::Identity::from_pem(&tls.certs_pem, &tls.key_der));
+        if let Some(ref ca) = tls.ca_der {
+            grpc_tls = grpc_tls.client_ca_root(tonic::transport::Certificate::from_pem(ca));
+        }
+        grpc_builder = grpc_builder.tls_config(grpc_tls)?;
+    }
+    let grpc_future = grpc_builder
         .accept_http1(true)
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(LlamaServiceServer::new(MyLlamaService { state: grpc_state }))
@@ -1934,21 +1949,28 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         .with_state(shared_state);
 
     // Start REST server with optional TLS
-    let tls_config = crate::tls::TlsConfig::from_env()?;
-    let listener = tokio::net::TcpListener::bind(rest_addr).await?;
-
-    if let Some(ref tls) = tls_config {
+    let rest_future: std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::io::Result<()>> + Send>,
+    > = if let Some(ref tls) = tls_config {
         info!("🔐 TLS enabled (mTLS: {}) — certificates loaded", tls.is_mtls());
+        let mut rustls_config = tls.mtls_server_config()?;
+        rustls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        let rustls_config =
+            axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(rustls_config));
+        info!("✅ REST API rodando em https://{}", rest_addr);
+        Box::pin(axum_server::bind_rustls(rest_addr, rustls_config).serve(app.into_make_service()))
     } else {
         info!("🔓 TLS not configured — use a reverse proxy (nginx/Caddy) for production");
-    }
-    info!("✅ REST API rodando em http://{}", rest_addr);
+        info!("✅ REST API rodando em http://{}", rest_addr);
+        let listener = tokio::net::TcpListener::bind(rest_addr).await?;
+        Box::pin(async move { axum::serve(listener, app).await })
+    };
     info!("✅ gRPC Service rodando em {}", grpc_addr);
 
     // Run both servers concurrently
     tokio::select! {
         res = grpc_future => info!("gRPC Server exit: {:?}", res),
-        res = axum::serve(listener, app) => info!("REST Server exit: {:?}", res),
+        res = rest_future => info!("REST Server exit: {:?}", res),
     }
 
     Ok(())

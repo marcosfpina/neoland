@@ -1,6 +1,6 @@
 [package]
 name = "neoland-web"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 
 [lib]
@@ -22,7 +22,7 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["EventSource", "HtmlInputElement", "KeyboardEvent", "MessageEvent"] }
 
 # gRPC-web message types (protobuf, WASM-compatible)
-# Full gRPC-web client bridge requires tonic (tokio threads) → deferred to v0.4.0.
+# Full gRPC-web client bridge requires tonic (tokio threads) → deferred to v0.1.0.
 # For now: server-side gRPC-web support is live; browser uses REST + SSE.
 prost = "0.13"
 

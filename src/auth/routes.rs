@@ -1,11 +1,14 @@
-//! OAuth2 authentication routes.
+//! Authentication routes — OAuth2, LDAP, and OIDC SSO.
 //!
 //! Endpoints:
-//!   GET  /auth/login/:provider  → redirect to OAuth2 provider
-//!   GET  /auth/callback/:provider → exchange code, create session, return JWT
-//!   POST /auth/refresh          → exchange refresh token for new access token
-//!   GET  /auth/me               → return current user info
-//!   POST /auth/logout           → revoke session
+//!   GET  /auth/login/:provider   -> redirect to OAuth2 provider
+//!   GET  /auth/callback/:provider -> exchange code, create session, return JWT
+//!   POST /auth/login/ldap        -> LDAP bind authentication (v0.0.1 #3)
+//!   GET  /auth/login/sso         -> OIDC redirect to enterprise IdP (v0.0.1 #3)
+//!   GET  /auth/callback/sso      -> OIDC code exchange + JWT (v0.0.1 #3)
+//!   POST /auth/refresh           -> exchange refresh token for new access token
+//!   GET  /auth/me                -> return current user info
+//!   POST /auth/logout            -> revoke session
 
 use axum::{
     extract::{Query, Request, State},
@@ -23,13 +26,13 @@ use super::jwt::{
     create_access_token, create_refresh_token, hash_refresh_token, refresh_token_lifetime_secs,
 };
 use super::oauth;
+use super::sso::{IdentityProvider, LdapConfig, LdapProvider, OidcConfig, OidcProvider};
 use super::types::{OAuthUserInfo, User};
 use super::JwtSecret;
 use crate::auth::middleware::get_auth_user;
 
 // ── Shared state ──────────────────────────────────────────────────────────
 
-/// Configuration passed to the auth router.
 #[derive(Clone)]
 pub struct AuthState {
     pub db: PgPool,
@@ -39,6 +42,10 @@ pub struct AuthState {
     pub google_client_secret: Option<String>,
     pub github_client_id: Option<String>,
     pub github_client_secret: Option<String>,
+    /// LDAP config (v0.0.1 #3)
+    pub ldap_config: Option<LdapConfig>,
+    /// OIDC SSO config (v0.0.1 #3)
+    pub oidc_config: Option<OidcConfig>,
 }
 
 // ── Query params ──────────────────────────────────────────────────────────
@@ -55,6 +62,12 @@ struct RefreshParams {
     refresh_token: String,
 }
 
+#[derive(Deserialize)]
+struct LdapLoginRequest {
+    username: String,
+    password: String,
+}
+
 // ── Router ────────────────────────────────────────────────────────────────
 
 pub fn auth_routes() -> Router<AuthState> {
@@ -63,12 +76,15 @@ pub fn auth_routes() -> Router<AuthState> {
         .route("/auth/login/github", get(login_github))
         .route("/auth/callback/google", get(callback_google))
         .route("/auth/callback/github", get(callback_github))
+        .route("/auth/login/ldap", post(login_ldap))
+        .route("/auth/login/sso", get(login_sso))
+        .route("/auth/callback/sso", get(callback_sso))
         .route("/auth/refresh", post(refresh))
         .route("/auth/me", get(me))
         .route("/auth/logout", post(logout))
 }
 
-// ── Handlers ──────────────────────────────────────────────────────────────
+// ── OAuth2 Handlers ───────────────────────────────────────────────────────
 
 async fn login_google(State(state): State<AuthState>) -> Result<Redirect, StatusCode> {
     let (client_id, client_secret) = state
@@ -147,51 +163,70 @@ async fn complete_oauth_login(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let role = if user.is_owner { "admin" } else { "user" };
-    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id).await.unwrap_or_default();
+    issue_tokens_and_respond(state, user).await
+}
 
-    let access_token = create_access_token(
-        user.id,
-        &tenant_slug,
-        role,
-        &user.email,
-        &user.display_name,
-        &state.jwt_secret.0,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+// ── LDAP Handler (v0.0.1 #3) ──────────────────────────────────────────────
 
-    let refresh_token = create_refresh_token();
-    let refresh_hash = hash_refresh_token(&refresh_token);
+async fn login_ldap(
+    State(state): State<AuthState>,
+    Json(creds): Json<LdapLoginRequest>,
+) -> Result<Response, StatusCode> {
+    let ldap_cfg = state.ldap_config.clone().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let provider = LdapProvider::new(ldap_cfg);
 
-    let expires_at = chrono::Utc::now() + chrono::Duration::seconds(refresh_token_lifetime_secs());
-    sqlx::query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)")
-        .bind(user.id)
-        .bind(&refresh_hash)
-        .bind(expires_at)
-        .execute(&state.db)
+    // Format credentials as expected by the LDAP provider
+    let credentials = format!("{}\n{}", creds.username, creds.password);
+
+    let identity = provider
+        .authenticate(&credentials)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Convert IdentityInfo -> OAuthUserInfo and reuse the existing user upsert flow
+    let user_info: OAuthUserInfo = identity.into();
+    let user = upsert_oauth_user(&state.db, &user_info)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
-        .bind(user.id)
-        .execute(&state.db)
-        .await
-        .ok();
-
-    Ok(Json(json!({
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
-            "role": role,
-            "tenant": tenant_slug,
-        }
-    }))
-    .into_response())
+    issue_tokens_and_respond(&state, user).await
 }
+
+// ── OIDC SSO Handlers (v0.0.1 #3) ─────────────────────────────────────────
+
+async fn login_sso(State(state): State<AuthState>) -> Result<Redirect, StatusCode> {
+    let oidc_cfg = state.oidc_config.clone().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let provider = OidcProvider::new(oidc_cfg);
+
+    let auth_url = provider.authorize_url().await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to generate OIDC authorization URL");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Redirect::temporary(&auth_url))
+}
+
+async fn callback_sso(
+    State(state): State<AuthState>,
+    Query(params): Query<CallbackParams>,
+) -> Result<Response, StatusCode> {
+    let oidc_cfg = state.oidc_config.clone().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let provider = OidcProvider::new(oidc_cfg);
+
+    let identity = provider
+        .authenticate(&params.code)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let user_info: OAuthUserInfo = identity.into();
+    let user = upsert_oauth_user(&state.db, &user_info)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    issue_tokens_and_respond(&state, user).await
+}
+
+// ── Token management ──────────────────────────────────────────────────────
 
 async fn refresh(
     State(state): State<AuthState>,
@@ -257,7 +292,55 @@ async fn logout(
     Ok(Json(json!({ "message": "Logged out" })))
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────
+
+/// Issue JWT access + refresh tokens and return the standard login response.
+async fn issue_tokens_and_respond(state: &AuthState, user: User) -> Result<Response, StatusCode> {
+    let role = if user.is_owner { "admin" } else { "user" };
+    let tenant_slug = get_tenant_slug(&state.db, user.tenant_id).await.unwrap_or_default();
+
+    let access_token = create_access_token(
+        user.id,
+        &tenant_slug,
+        role,
+        &user.email,
+        &user.display_name,
+        &state.jwt_secret.0,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let refresh_token = create_refresh_token();
+    let refresh_hash = hash_refresh_token(&refresh_token);
+
+    let expires_at = chrono::Utc::now() + chrono::Duration::seconds(refresh_token_lifetime_secs());
+    sqlx::query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)")
+        .bind(user.id)
+        .bind(&refresh_hash)
+        .bind(expires_at)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    Ok(Json(json!({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "role": role,
+            "tenant": tenant_slug,
+        }
+    }))
+    .into_response())
+}
 
 pub async fn upsert_oauth_user(db: &PgPool, info: &OAuthUserInfo) -> Result<User, sqlx::Error> {
     let existing = sqlx::query_as::<_, super::types::OAuthAccount>(

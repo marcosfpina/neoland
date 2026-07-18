@@ -16,7 +16,7 @@ replicaCount: 3
 
 image:
   repository: neoland
-  tag: "0.4.0"
+  tag: "0.0.1"
   pullPolicy: IfNotPresent
 
 # Web Console static bundle (built separately, served by Neoland)
@@ -24,7 +24,7 @@ webDist:
   enabled: true
   image:
     repository: neoland-web
-    tag: "0.4.0"
+    tag: "0.0.1"
 
 # Server configuration
 config:
@@ -54,7 +54,7 @@ config:
     url: "nats://neoland-nats:4222"
     enabled: true
 
-  # Authentication (v0.4.0)
+  # Authentication (v0.0.1)
   auth:
     jwtSecret: "" # MUST be set via secrets — see secret.yaml
     oauthBaseUrl: "https://neoland.example.com"

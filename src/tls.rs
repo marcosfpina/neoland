@@ -21,6 +21,8 @@ use std::sync::Arc;
 pub struct TlsConfig {
     /// Server certificate chain (DER format).
     pub certs: Vec<CertificateDer<'static>>,
+    /// Server certificate chain (raw PEM bytes — tonic Identity requer PEM).
+    pub certs_pem: Vec<u8>,
     /// Server private key (DER bytes).
     pub key_der: Vec<u8>,
     /// Optional CA certificate for mutual TLS (client verification).
@@ -49,13 +51,15 @@ impl TlsConfig {
     /// Load certificates from explicit paths.
     pub fn load(cert_path: &str, key_path: &str, ca_path: Option<&str>) -> Result<Option<Self>> {
         let certs = load_certificates(cert_path)?;
+        let certs_pem = std::fs::read(cert_path)
+            .with_context(|| format!("Failed to read certificate file: {cert_path}"))?;
         let key_der = std::fs::read(key_path)
             .with_context(|| format!("Failed to read key file: {key_path}"))?;
         let ca_der = ca_path
             .map(|p| std::fs::read(p).with_context(|| format!("Failed to read CA: {p}")))
             .transpose()?;
 
-        Ok(Some(Self { certs, key_der, ca_der }))
+        Ok(Some(Self { certs, certs_pem, key_der, ca_der }))
     }
 
     pub fn is_mtls(&self) -> bool {
@@ -71,7 +75,9 @@ impl TlsConfig {
         Ok(config)
     }
 
-    pub fn grpc_server_config(&self) -> Result<rustls::ServerConfig> {
+    /// ServerConfig com verificação de certificado de cliente quando um CA
+    /// está configurado (mTLS); sem CA degrada para TLS simples.
+    pub fn mtls_server_config(&self) -> Result<rustls::ServerConfig> {
         if let Some(ref ca_der) = self.ca_der {
             let ca = load_ca_certificate_from_der(ca_der)?;
             let mut roots = rustls::RootCertStore::empty();
@@ -127,11 +133,11 @@ impl TlsConfig {
 /// Load a PrivateKeyDer from raw DER bytes.
 fn load_private_key_from_der(der: &[u8]) -> Result<PrivateKeyDer<'static>> {
     let mut slice = der;
-    for key in rustls_pemfile::pkcs8_private_keys(&mut slice) {
+    if let Some(key) = rustls_pemfile::pkcs8_private_keys(&mut slice).next() {
         return Ok(PrivateKeyDer::Pkcs8(key.map_err(|e| anyhow::anyhow!("PKCS8: {e}"))?));
     }
     let mut slice = der;
-    for key in rustls_pemfile::rsa_private_keys(&mut slice) {
+    if let Some(key) = rustls_pemfile::rsa_private_keys(&mut slice).next() {
         return Ok(PrivateKeyDer::Pkcs1(key.map_err(|e| anyhow::anyhow!("RSA: {e}"))?));
     }
     anyhow::bail!("Failed to parse private key from DER bytes")
@@ -140,8 +146,8 @@ fn load_private_key_from_der(der: &[u8]) -> Result<PrivateKeyDer<'static>> {
 /// Load a CertificateDer from raw DER bytes.
 fn load_ca_certificate_from_der(der: &[u8]) -> Result<CertificateDer<'static>> {
     let mut slice = der;
-    for cert in rustls_pemfile::certs(&mut slice) {
-        return Ok(cert.map_err(|e| anyhow::anyhow!("CA cert: {e}"))?);
+    if let Some(cert) = rustls_pemfile::certs(&mut slice).next() {
+        return cert.map_err(|e| anyhow::anyhow!("CA cert: {e}"));
     }
     anyhow::bail!("Failed to parse CA certificate from DER bytes")
 }

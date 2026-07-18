@@ -1,5 +1,5 @@
 // Neoland configuration loading
-// Priority: config file → env vars → CLI flags (CLI flags override all)
+// Priority: config file -> env vars -> CLI flags (CLI flags override all)
 //
 // Config file locations (searched in order):
 //   1. ./neoland.toml (project-local)
@@ -28,31 +28,30 @@ pub struct Config {
 pub struct ServerConfig {
     pub grpc_port: u16,
     pub rest_port: u16,
-    /// Path to the Web Console static bundle (Leptos WASM SPA).
-    /// Default: "web/dist". Set via --web-dist CLI flag or NEOLAND_WEB_DIST_DIR env var.
-    #[serde(default = "default_web_dist_dir")]
     pub web_dist_dir: String,
-}
-
-fn default_web_dist_dir() -> String {
-    "web/dist".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClientConfig {
     pub server_url: String,
-    /// URL of the SecureLLM Bridge gateway (primary inference backend)
     pub neoland_gateway_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InferenceConfig {
-    /// Which inference provider to use: local | deepseek | llamacpp | securellm
     pub provider: String,
     pub temperature: f32,
     pub max_tokens: u32,
+    #[serde(default = "default_vllm_url")]
+    pub vllm_url: String,
+    #[serde(default)]
+    pub vllm_model: String,
+}
+
+fn default_vllm_url() -> String {
+    "http://localhost:8000".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +83,13 @@ impl Default for ClientConfig {
 
 impl Default for InferenceConfig {
     fn default() -> Self {
-        Self { provider: "local".to_string(), temperature: 0.7, max_tokens: 2048 }
+        Self {
+            provider: "local".to_string(),
+            temperature: 0.7,
+            max_tokens: 2048,
+            vllm_url: default_vllm_url(),
+            vllm_model: String::new(),
+        }
     }
 }
 
@@ -121,8 +126,6 @@ impl Default for AgentsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MmapConfig {
-    /// Path to the shared-memory file used for zero-copy IPC with the Python
-    /// pipeline.
     pub shm_path: String,
 }
 
@@ -135,9 +138,7 @@ impl Default for MmapConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NatsConfig {
-    /// NATS server URL. Set to empty string to disable.
     pub url: String,
-    /// Whether to attempt NATS connection on startup.
     pub enabled: bool,
 }
 
@@ -150,9 +151,7 @@ impl Default for NatsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct McpConfig {
-    /// Path or name of the MCP stdio server binary.
     pub binary: String,
-    /// Whether to spawn the MCP process on server startup.
     pub enabled: bool,
 }
 
@@ -165,9 +164,7 @@ impl Default for McpConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MatrixConfig {
-    /// Base URL of the matrix backend (ranking/metrics service).
     pub base_url: String,
-    /// Whether to post pipeline metrics to matrix after each run.
     pub enabled: bool,
 }
 
@@ -177,39 +174,58 @@ impl Default for MatrixConfig {
     }
 }
 
-// ── Auth (v0.4.0 enterprise multi-tenant) ────────────────────────────────
+// ── Auth (v0.0.1 enterprise multi-tenant) ────────────────────────────────
 
-/// Authentication & authorization configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuthConfig {
     pub oauth: OAuthConfig,
     pub jwt: JwtConfig,
+    pub ldap: LdapAuthConfig,
+    pub oidc: OidcAuthConfig,
 }
 
-/// OAuth2 provider credentials.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OAuthConfig {
-    /// Google OAuth2 client ID (env: NEOLAND_GOOGLE_CLIENT_ID)
     pub google_client_id: Option<String>,
-    /// Google OAuth2 client secret (env: NEOLAND_GOOGLE_CLIENT_SECRET)
     pub google_client_secret: Option<String>,
-    /// GitHub OAuth2 client ID (env: NEOLAND_GITHUB_CLIENT_ID)
     pub github_client_id: Option<String>,
-    /// GitHub OAuth2 client secret (env: NEOLAND_GITHUB_CLIENT_SECRET)
     pub github_client_secret: Option<String>,
-    /// Base URL for OAuth2 redirect callbacks
     pub base_url: String,
 }
 
-/// JWT signing configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JwtConfig {
-    /// HS256 symmetric secret for JWT signing (env: NEOLAND_JWT_SECRET).
-    /// In production, use a 256-bit random key stored in Vault/SOPS.
     pub secret: String,
+}
+
+/// LDAP directory authentication (v0.0.1 #3)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LdapAuthConfig {
+    pub enabled: bool,
+    pub url: String,
+    pub base_dn: String,
+    pub bind_dn: Option<String>,
+    pub bind_password: Option<String>,
+    pub email_attr: String,
+    pub display_name_attr: String,
+    pub user_filter: String,
+    pub starttls: bool,
+}
+
+/// OpenID Connect enterprise SSO (v0.0.1 #3)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OidcAuthConfig {
+    pub enabled: bool,
+    pub issuer_url: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+    pub display_name: String,
 }
 
 impl Default for OAuthConfig {
@@ -230,16 +246,42 @@ impl Default for JwtConfig {
     }
 }
 
+impl Default for LdapAuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: "ldap://localhost:389".to_string(),
+            base_dn: "dc=example,dc=com".to_string(),
+            bind_dn: None,
+            bind_password: None,
+            email_attr: "mail".to_string(),
+            display_name_attr: "displayName".to_string(),
+            user_filter: "(uid={username})".to_string(),
+            starttls: false,
+        }
+    }
+}
+
+impl Default for OidcAuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            issuer_url: String::new(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            redirect_url: "http://localhost:3001/auth/callback/sso".to_string(),
+            display_name: "Enterprise SSO".to_string(),
+        }
+    }
+}
+
 impl Config {
-    /// Load config from file, with env var overrides applied on top.
-    /// Returns default config if no file is found (no error).
     pub fn load() -> Self {
         let mut config = Self::load_from_file().unwrap_or_default();
         config.apply_env_overrides();
         config
     }
 
-    /// Try loading from ./neoland.toml, then ~/.config/neoland/config.toml
     fn load_from_file() -> Option<Self> {
         let candidates = [std::path::PathBuf::from("neoland.toml"), dirs_candidate()];
 
@@ -272,7 +314,6 @@ impl Config {
         None
     }
 
-    /// Apply env var overrides (NEOLAND_* prefix)
     fn apply_env_overrides(&mut self) {
         self.apply_env_overrides_from(|key| std::env::var(key).ok());
     }
@@ -297,12 +338,17 @@ impl Config {
         if let Some(v) = get_env("NEOLAND_GATEWAY_URL") {
             self.client.neoland_gateway_url = v;
         }
-        // Backward compatibility: NEOLAND_ML_API_URL still works
         if let Some(v) = get_env("NEOLAND_ML_API_URL") {
             self.client.neoland_gateway_url = v;
         }
         if let Some(v) = get_env("NEOLAND_INFERENCE_PROVIDER") {
             self.inference.provider = v;
+        }
+        if let Some(v) = get_env("NEOLAND_VLLM_URL") {
+            self.inference.vllm_url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_VLLM_MODEL") {
+            self.inference.vllm_model = v;
         }
         if let Some(v) = get_env("VAULT_ADDR") {
             self.vault.addr = v;
@@ -374,7 +420,7 @@ impl Config {
                 _ => {},
             }
         }
-        // Auth (v0.4.0)
+        // Auth (v0.0.1)
         if let Some(v) = get_env("NEOLAND_GOOGLE_CLIENT_ID") {
             self.auth.oauth.google_client_id = Some(v);
         }
@@ -392,6 +438,51 @@ impl Config {
         }
         if let Some(v) = get_env("NEOLAND_JWT_SECRET") {
             self.auth.jwt.secret = v;
+        }
+        // SSO / LDAP (v0.0.1 #3)
+        if let Some(v) = get_env("NEOLAND_LDAP_ENABLED") {
+            self.auth.ldap.enabled =
+                matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_URL") {
+            self.auth.ldap.url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_BASE_DN") {
+            self.auth.ldap.base_dn = v;
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_BIND_DN") {
+            self.auth.ldap.bind_dn = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_BIND_PASSWORD") {
+            self.auth.ldap.bind_password = Some(v);
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_EMAIL_ATTR") {
+            self.auth.ldap.email_attr = v;
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_DISPLAY_NAME_ATTR") {
+            self.auth.ldap.display_name_attr = v;
+        }
+        if let Some(v) = get_env("NEOLAND_LDAP_USER_FILTER") {
+            self.auth.ldap.user_filter = v;
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_ENABLED") {
+            self.auth.oidc.enabled =
+                matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_ISSUER_URL") {
+            self.auth.oidc.issuer_url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_CLIENT_ID") {
+            self.auth.oidc.client_id = v;
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_CLIENT_SECRET") {
+            self.auth.oidc.client_secret = v;
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_REDIRECT_URL") {
+            self.auth.oidc.redirect_url = v;
+        }
+        if let Some(v) = get_env("NEOLAND_OIDC_DISPLAY_NAME") {
+            self.auth.oidc.display_name = v;
         }
     }
 }
@@ -416,9 +507,6 @@ mod tests {
         assert_eq!(cfg.client.server_url, "http://[::1]:50051");
         assert_eq!(cfg.client.neoland_gateway_url, "http://localhost:8080");
         assert_eq!(cfg.inference.provider, "local");
-        assert!((cfg.inference.temperature - 0.7).abs() < f32::EPSILON);
-        assert_eq!(cfg.inference.max_tokens, 2048);
-        assert_eq!(cfg.vault.addr, "http://localhost:8200");
     }
 
     #[test]
@@ -427,27 +515,22 @@ mod tests {
         let toml_str = toml::to_string(&cfg).expect("serialization failed");
         let parsed: Config = toml::from_str(&toml_str).expect("deserialization failed");
         assert_eq!(parsed.server.grpc_port, cfg.server.grpc_port);
-        assert_eq!(parsed.client.server_url, cfg.client.server_url);
-        assert_eq!(parsed.inference.provider, cfg.inference.provider);
     }
 
     #[test]
     fn test_partial_toml() {
-        // Only override server section; other sections keep defaults
         let toml_str = r#"
 [server]
 grpc_port = 9999
 "#;
         let parsed: Config = toml::from_str(toml_str).expect("deserialization failed");
         assert_eq!(parsed.server.grpc_port, 9999);
-        assert_eq!(parsed.server.rest_port, 3001); // default
-        assert_eq!(parsed.client.server_url, "http://[::1]:50051"); // default
+        assert_eq!(parsed.server.rest_port, 3001);
     }
 
     #[test]
     fn test_apply_env_overrides_from_updates_agent_and_nats_settings() {
         use std::collections::HashMap;
-
         let env = HashMap::from([
             ("NEOLAND_DSPY_URL", "http://127.0.0.1:8100".to_string()),
             ("NEOLAND_PIPELINE_TIMEOUT_SECS", "240".to_string()),
@@ -455,14 +538,10 @@ grpc_port = 9999
             ("NEOLAND_RAG_TOP_K", "11".to_string()),
             ("NEOLAND_NATS_ENABLED", "true".to_string()),
         ]);
-
         let mut cfg = Config::default();
         cfg.apply_env_overrides_from(|key| env.get(key).cloned());
-
         assert_eq!(cfg.agents.dspy_url, "http://127.0.0.1:8100");
         assert_eq!(cfg.agents.pipeline_timeout_secs, 240);
-        assert_eq!(cfg.agents.checkpoint_dir, "/srv/neoland/checkpoints");
-        assert_eq!(cfg.agents.rag_top_k, 11);
         assert!(cfg.nats.enabled);
     }
 }

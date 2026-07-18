@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "neoland"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["voidnxlabs <sec@voidnxlabs.com>"]
 
@@ -33,7 +33,7 @@ async-channel = "2.3"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 lru = "0.12"
 
-# TLS / mTLS (v0.4.0)
+# TLS / mTLS (v0.0.1)
 rustls = "0.23"
 rustls-pemfile = "2"
 rustls-native-certs = "0.8"
@@ -55,7 +55,7 @@ tracing-opentelemetry = "0.28"
 
 # Persistent Storage (Phase 4.7)
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
-pgvector = { version = "0.4", features = ["sqlx"] }
+pgvector = { version = "=0.4.1", features = ["sqlx"] }  # 0.4.2 requer sqlx 0.9; ficamos no sqlx 0.8
 
 # IPC (Ciclo 1 — Fase A)
 memmap2 = "0.9"
@@ -66,20 +66,25 @@ spectre-core = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548
 async-nats = "0.46"
 thiserror = "1.0"
 
-# OAuth2 & JWT (v0.4.0 enterprise auth)
+# OAuth2 & JWT (v0.0.1 enterprise auth)
 oauth2 = { version = "5", features = ["reqwest"] }
 jsonwebtoken = "9"
 sha2 = "0.10"
 hex = "0.4"
 
+# SSO / LDAP enterprise auth (v0.0.1 #3)
+ldap3 = "0.11"
+base64 = "0.22"
+
 # gRPC & Async
-tonic = "0.12"
+tonic = { version = "0.12", features = ["tls"] }
 tonic-web = "0.12"
 prost = "0.13"
 tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
 axum-extra = { version = "0.9", features = ["cookie"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "limit", "fs"] }
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }

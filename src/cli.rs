@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "neoland")]
-#[command(version = "0.4.0-beta")]
+#[command(version = "0.0.1")]
 #[command(about = "Neoland — Autonomous AI Engineering Platform", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
@@ -37,7 +37,11 @@ pub enum Commands {
         server_url: String,
 
         /// URL do gateway LLM principal
-        #[arg(long = "neoland-gateway-url", env = "NEOLAND_GATEWAY_URL", default_value = "http://localhost:8080")]
+        #[arg(
+            long = "neoland-gateway-url",
+            env = "NEOLAND_GATEWAY_URL",
+            default_value = "http://localhost:8080"
+        )]
         neoland_gateway_url: String,
     },
 

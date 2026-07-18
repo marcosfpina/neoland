@@ -238,9 +238,16 @@
         ];
 
 
+        # utoipa-swagger-ui baixa este zip em build time; pré-buscar mantém
+        # o build determinístico e sem rede no builder.
+        swaggerUiZip = pkgs.fetchurl {
+          url = "https://github.com/swagger-api/swagger-ui/archive/refs/tags/v5.17.12.zip";
+          sha256 = "1wh7yrkyc87zkzdyxbhpzcvykmmz2zkbsj9h0ny2mmryjby37bhw";
+        };
+
         neolandPackage = pkgs.rustPlatform.buildRustPackage {
           pname = "neoland";
-          version = "0.1.0";
+          version = "0.0.1";
 
           src = ./.;
 
@@ -260,6 +267,7 @@
           ];
 
           PROTOC = "${pkgs.protobuf}/bin/protoc";
+          SWAGGER_UI_DOWNLOAD_URL = "file://${swaggerUiZip}";
 
           # Enable tests (Phase 0: Foundation)
           doCheck = true;
@@ -273,22 +281,53 @@
 
         neolandWebPackage = pkgs.stdenv.mkDerivation {
           pname = "neoland-web";
-          version = "0.2.0";
+          version = "0.0.1";
           src = ./.;
-          nativeBuildInputs = with pkgs; [ trunk rustToolchain pkg-config openssl ];
+          nativeBuildInputs = with pkgs; [
+            trunk
+            rustToolchain
+            pkg-config
+            openssl
+            protobuf
+            rustPlatform.cargoSetupHook
+          ];
+          # Vendoriza os deps do workspace (inclui git privados via builtins.fetchGit)
+          # para o cargo do trunk rodar offline, sem credenciais no sandbox.
+          cargoDeps = pkgs.rustPlatform.importCargoLock {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
+          cargoRoot = ".";
+          PROTOC = "${pkgs.protobuf}/bin/protoc";
           buildPhase = ''
             cd web
             export HOME="$TMPDIR"
-            export CARGO_HOME="$TMPDIR/.cargo"
-            mkdir -p "$CARGO_HOME"
             trunk build --release
           '';
           installPhase = ''
             mkdir -p $out
-            cp -r web/dist/* $out/
+            cp -r dist/* $out/
           '';
           meta = with pkgs.lib; {
             description = "Neoland Web Console — Leptos WASM SPA";
+            license = licenses.mit;
+            maintainers = [ "kernelcore" ];
+          };
+        };
+
+        # Stack completa determinística: control plane + Web Console servidos
+        # por um único binário (gate v1.0: `nix build .#neoland-full`).
+        neolandFullPackage = pkgs.symlinkJoin {
+          name = "neoland-full";
+          paths = [ neolandPackage ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            makeWrapper ${neolandPackage}/bin/neoland $out/bin/neoland-full \
+              --set-default NEOLAND_WEB_DIST_DIR ${neolandWebPackage} \
+              --add-flags "server"
+          '';
+          meta = with pkgs.lib; {
+            description = "Neoland full stack — control plane + Web Console (single binary)";
             license = licenses.mit;
             maintainers = [ "kernelcore" ];
           };
@@ -298,7 +337,7 @@
 
         neolandDesktopPackage = pkgs.stdenv.mkDerivation {
           pname = "neoland-desktop";
-          version = "0.4.0";
+          version = "0.0.1";
           src = ./desktop;
           nativeBuildInputs = with pkgs; [
             rustToolchain
@@ -328,7 +367,7 @@
           '';
           installPhase = ''
             mkdir -p $out
-            echo "Neoland Desktop v0.4.0 — build validated" > $out/README.txt
+            echo "Neoland Desktop v0.0.1 — build validated" > $out/README.txt
             echo "Run cd desktop && cargo tauri build for native binaries." >> $out/README.txt
           '';
           meta = with pkgs.lib; {
@@ -344,6 +383,7 @@
           default = neolandPackage;
           neoland = neolandPackage;
           neoland-web = neolandWebPackage;
+          neoland-full = neolandFullPackage;
           ibm-plex-mono = ibmPlexMono;
           neoland-desktop = neolandDesktopPackage;
         };
@@ -452,7 +492,7 @@
             if [[ $- == *i* ]]; then
               echo ""
               echo "  ╭─────────────────────────────────────────────────────────────╮"
-              echo "  │  Neoland dev shell — v0.4.0-beta                           │"
+              echo "  │  Neoland dev shell — v0.0.1                           │"
               echo "  ╰─────────────────────────────────────────────────────────────╯"
               echo ""
               echo "  Run                    Alias"

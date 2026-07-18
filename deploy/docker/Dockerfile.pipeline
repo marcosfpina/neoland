@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -u 1001 -s /bin/false neoland
 
-RUN pip install --no-cache-dir poetry==1.8.3
+RUN pip install --no-cache-dir poetry>=2.0
 
 WORKDIR /app
 
