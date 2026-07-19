@@ -291,8 +291,8 @@ impl OidcProvider {
             urlencoding(&self.config.client_id),
             urlencoding(&self.config.redirect_url),
             urlencoding(&scopes),
-            &state,
-            &nonce,
+            state,
+            nonce,
         );
 
         info!(issuer = %self.config.issuer_url, "Generated OIDC authorization URL");

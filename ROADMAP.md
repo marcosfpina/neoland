@@ -84,7 +84,7 @@ TUI · Web · Desktop
 | 4 | Kubernetes Helm chart — 3+ réplicas, HA | ✅ |
 | 5 | mTLS end-to-end em todos os planes | ✅ |
 | 6 | vLLM como backend opcional (além de llama.cpp) | ✅ |
-| 7 | Documentação OpenAPI publicada (GitHub Pages) | ✅ |
+| 7 | Documentação OpenAPI publicada (GitHub Pages) | ⚠️ pendente — docs.yml removido (mike/mkdocs nunca existiram no repo); recriar site de docs no v0.1.0 |
 | 8 | Multi-backend routing — seleção automática por workload | ✅ |
 
 **Gate**: desktop app instalável via Nix. Multi-tenant funcional. Helm chart deploya em cluster.

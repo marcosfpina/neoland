@@ -17,6 +17,7 @@ if [[ ! -f "$TLS_DIR/ca/ca.crt" ]]; then
 fi
 
 echo "▶ Subindo server com mTLS..."
+NEOLAND_SKIP_EMBEDDINGS=1 \
 NEOLAND_TLS_CA_CERT="$TLS_DIR/ca/ca.crt" \
 NEOLAND_TLS_SERVER_CERT="$TLS_DIR/server/server.crt" \
 NEOLAND_TLS_SERVER_KEY="$TLS_DIR/server/server.key" \
