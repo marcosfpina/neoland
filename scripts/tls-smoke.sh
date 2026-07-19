@@ -10,28 +10,57 @@ set -euo pipefail
 BIN="${1:-./target/debug/neoland}"
 TLS_DIR="secrets/tls"
 REST_URL="https://localhost:3001/health"
+SERVER_LOG="$(mktemp)"
 
 if [[ ! -f "$TLS_DIR/ca/ca.crt" ]]; then
   echo "Certificados não encontrados — rodando gen-certs.sh --auto"
   bash scripts/gen-certs.sh --auto
 fi
 
-echo "▶ Subindo server com mTLS..."
+echo "▶ Subindo server com mTLS (log: $SERVER_LOG)..."
 NEOLAND_SKIP_EMBEDDINGS=1 \
 NEOLAND_TLS_CA_CERT="$TLS_DIR/ca/ca.crt" \
 NEOLAND_TLS_SERVER_CERT="$TLS_DIR/server/server.crt" \
 NEOLAND_TLS_SERVER_KEY="$TLS_DIR/server/server.key" \
-"$BIN" server &
+"$BIN" server > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
-trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-sleep 5
 
-echo "▶ 1/4 mTLS com client cert deve responder..."
-curl -sf --max-time 10 \
-  --cacert "$TLS_DIR/ca/ca.crt" \
-  --cert "$TLS_DIR/client/client.crt" \
-  --key "$TLS_DIR/client/client.key" \
-  "$REST_URL" > /dev/null
+cleanup() {
+  status=$?
+  kill "$SERVER_PID" 2>/dev/null || true
+  if [[ $status -ne 0 ]]; then
+    echo "── diagnóstico: curl -v ──"
+    curl -v --max-time 10 \
+      --cacert "$TLS_DIR/ca/ca.crt" \
+      --cert "$TLS_DIR/client/client.crt" \
+      --key "$TLS_DIR/client/client.key" \
+      "$REST_URL" 2>&1 | tail -30 || true
+    echo "── diagnóstico: server log (tail) ──"
+    tail -40 "$SERVER_LOG" || true
+    echo "── diagnóstico: curl --version ──"
+    curl --version | head -1
+  fi
+  exit $status
+}
+trap cleanup EXIT
+
+echo "▶ 1/4 mTLS com client cert deve responder (readiness ≤30s)..."
+ready=""
+for _ in $(seq 1 30); do
+  if curl -sf --max-time 5 \
+    --cacert "$TLS_DIR/ca/ca.crt" \
+    --cert "$TLS_DIR/client/client.crt" \
+    --key "$TLS_DIR/client/client.key" \
+    "$REST_URL" > /dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if [[ -z "$ready" ]]; then
+  echo "  ❌ mTLS com client cert não respondeu em 30s"
+  exit 56
+fi
 echo "  ✅ aceito"
 
 echo "▶ 2/4 Sem client cert deve ser rejeitado..."
