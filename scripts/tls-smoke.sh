@@ -18,6 +18,7 @@ if [[ ! -f "$TLS_DIR/ca/ca.crt" ]]; then
 fi
 
 echo "▶ Subindo server com mTLS (log: $SERVER_LOG)..."
+RUST_BACKTRACE=1 \
 NEOLAND_SKIP_EMBEDDINGS=1 \
 NEOLAND_TLS_CA_CERT="$TLS_DIR/ca/ca.crt" \
 NEOLAND_TLS_SERVER_CERT="$TLS_DIR/server/server.crt" \
@@ -27,19 +28,28 @@ SERVER_PID=$!
 
 cleanup() {
   status=$?
-  kill "$SERVER_PID" 2>/dev/null || true
+  # Diagnóstico ANTES do kill — senão o curl -v examina um server morto
   if [[ $status -ne 0 ]]; then
+    echo "── diagnóstico: server vivo? ──"
+    if kill -0 "$SERVER_PID" 2>/dev/null; then
+      echo "server VIVO (pid $SERVER_PID) — listeners:"
+      ss -tlnp 2>/dev/null | grep -E '3001|50051' || echo "  (nenhum listener em 3001/50051)"
+    else
+      wait "$SERVER_PID" 2>/dev/null
+      echo "server MORTO — exit code: $?"
+    fi
     echo "── diagnóstico: curl -v ──"
     curl -v --max-time 10 \
       --cacert "$TLS_DIR/ca/ca.crt" \
       --cert "$TLS_DIR/client/client.crt" \
       --key "$TLS_DIR/client/client.key" \
       "$REST_URL" 2>&1 | tail -30 || true
-    echo "── diagnóstico: server log (tail) ──"
-    tail -40 "$SERVER_LOG" || true
+    echo "── diagnóstico: server log (completo) ──"
+    cat "$SERVER_LOG" || true
     echo "── diagnóstico: curl --version ──"
     curl --version | head -1
   fi
+  kill "$SERVER_PID" 2>/dev/null || true
   exit $status
 }
 trap cleanup EXIT
