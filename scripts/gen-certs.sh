@@ -102,9 +102,19 @@ if [ ! -f client/client.key ]; then
     openssl genrsa -out client/client.key 2048
     openssl req -new -key client/client.key -out client/client.csr \
         -subj "/O=${ORG}/CN=neoland-client"
+    # Extensões explícitas: openssl 3.0 sem extfile emite cert v1 pelado,
+    # que o webpki/rustls rejeita no client auth (alert certificate unknown).
+    cat > client/client.cnf <<EOF
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+EOF
     openssl x509 -req -in client/client.csr -CA ca/ca.crt -CAkey ca/ca.key \
-        -CAcreateserial -out client/client.crt -days "$DAYS" -sha256
-    rm client/client.csr
+        -CAcreateserial -out client/client.crt -days "$DAYS" -sha256 \
+        -extfile client/client.cnf
+    rm client/client.csr client/client.cnf
 
     # Create PKCS#12 bundle for import into TUI/browsers
     openssl pkcs12 -export -in client/client.crt -inkey client/client.key \
