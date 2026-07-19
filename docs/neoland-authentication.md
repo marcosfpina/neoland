@@ -351,3 +351,50 @@ For testing protected endpoints without auth, you'll need to temporarily modify 
 **Issues**: Report at [github.com/org/neoland/issues](https://github.com/org/neoland/issues)
 
 **Security**: For security issues, email security@neoland.example.com
+
+## Pattern: mTLS Certificate Generation Across OpenSSL Versions
+
+**Rule: every certificate must be signed with an explicit extensions file — never rely on OpenSSL defaults.**
+
+### The failure mode
+
+`openssl x509 -req` without `-extfile` behaves differently across versions:
+
+| OpenSSL | Result without `-extfile` |
+|---------|---------------------------|
+| ≤ 3.0.x (Ubuntu 24.04 = 3.0.13) | **X.509 v1** certificate — no extensions at all |
+| ≥ 3.3 (nixpkgs) | v3 with SKID/AKID added by default |
+
+rustls/webpki rejects v1 certificates for client authentication. The handshake completes up to the client `Certificate` + `CertificateVerify`, then the server answers `TLS alert: certificate unknown` and the client sees a connection reset (`curl: (56)`). The same code, script and curl pass wherever a newer OpenSSL generated the certs — an environment-dependent bug invisible in local testing.
+
+### The fix (see `scripts/gen-certs.sh`)
+
+Client certificates are signed with an explicit extfile:
+
+```ini
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+```
+
+Server certs use `extendedKeyUsage = serverAuth` plus SANs; the same rule applies.
+
+### How it was diagnosed (reusable debug pattern)
+
+1. **Smoke script self-diagnosis** (`scripts/tls-smoke.sh`): on failure, before killing the
+   server, print — server liveness (`kill -0`) + listeners (`ss -tlnp`), `curl -v` output,
+   the **full** server log, and `curl --version`. "Server alive + handshake alert" vs
+   "server dead + connection refused" points to entirely different root causes.
+2. **Reproduce the CI environment locally** with docker instead of iterating on CI:
+   `ubuntu:24.04 --network=host` provides the runner's exact curl (8.5.0/OpenSSL 3.0.13)
+   and openssl (3.0.13) to both generate certs and attack a locally-running server.
+   Iteration time drops from ~7 min per CI round to seconds.
+
+Verify a client cert is CI-safe:
+
+```bash
+openssl x509 -in secrets/tls/client/client.crt -noout -text | grep -E "Version|Extended Key"
+# Must show: Version: 3 (0x2) and TLS Web Client Authentication
+```
