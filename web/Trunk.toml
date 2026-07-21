@@ -12,20 +12,20 @@ ignore = ["dist", "target"]
 # Proxy API calls to the Neoland backend — single port, zero CORS issues
 [[proxy]]
 rewrite = "/v1/"
-backend = "http://127.0.0.1:3001"
+backend = "http://127.0.0.1:3005"
 
 [[proxy]]
 rewrite = "/health"
-backend = "http://127.0.0.1:3001"
+backend = "http://127.0.0.1:3005"
 
 [[proxy]]
 rewrite = "/ready"
-backend = "http://127.0.0.1:3001"
+backend = "http://127.0.0.1:3005"
 
 [[proxy]]
 rewrite = "/live"
-backend = "http://127.0.0.1:3001"
+backend = "http://127.0.0.1:3005"
 
 [[proxy]]
 rewrite = "/metrics"
-backend = "http://127.0.0.1:3001"
+backend = "http://127.0.0.1:3005"
