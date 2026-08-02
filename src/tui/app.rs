@@ -308,6 +308,10 @@ pub struct AppState {
     pub config: QueryConfig,
     pub sidebar_visible: bool,
     pub server_url: String,
+    /// gRPC endpoint for the legacy direct-LLM fallback path (`try_grpc_fallback`).
+    /// Distinct from `server_url`, which is the REST base — the two ports differ
+    /// (default :3001 vs :50051) and must not be conflated.
+    pub grpc_url: String,
     pub neoland_gateway_url: String,
     pub scroll_offsets: [u16; 3], // per-panel scroll, indexed by Panel::index()
     pub auto_scroll: bool,
@@ -387,7 +391,7 @@ pub struct Notification {
 }
 
 impl AppState {
-    pub fn new(server_url: String, neoland_gateway_url: String) -> Self {
+    pub fn new(server_url: String, grpc_url: String, neoland_gateway_url: String) -> Self {
         // Respect SECURELLM_PROVIDER env var as initial provider, default to local
         let active_provider = match std::env::var("SECURELLM_PROVIDER").as_deref() {
             Ok("deepseek") => LlmProvider::Deepseek,
@@ -421,6 +425,7 @@ impl AppState {
             config: QueryConfig::default(),
             sidebar_visible: false,
             server_url,
+            grpc_url,
             neoland_gateway_url,
             scroll_offsets: [0; 3],
             auto_scroll: true,
@@ -1137,7 +1142,11 @@ mod tests {
     use super::*;
 
     fn app_with(buf: &str, cursor: usize) -> AppState {
-        let mut a = AppState::new("http://localhost:3000".into(), "http://localhost:8001".into());
+        let mut a = AppState::new(
+            "http://localhost:3000".into(),
+            "http://localhost:50051".into(),
+            "http://localhost:8001".into(),
+        );
         a.input_buffer = buf.to_owned();
         a.cursor_pos = cursor;
         a
@@ -1328,7 +1337,7 @@ mod tests {
 
     #[test]
     fn add_system_message_sets_auto_scroll() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.auto_scroll = false;
         a.add_system_message("info");
         assert!(a.auto_scroll);
@@ -1337,7 +1346,7 @@ mod tests {
 
     #[test]
     fn add_assistant_message_sets_auto_scroll() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.auto_scroll = false;
         a.add_assistant_message("response");
         assert!(a.auto_scroll);
@@ -1345,7 +1354,7 @@ mod tests {
 
     #[test]
     fn add_user_message_does_not_change_auto_scroll() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.auto_scroll = false;
         a.add_user_message("prompt");
         assert!(!a.auto_scroll);
@@ -1384,7 +1393,7 @@ mod tests {
 
     #[test]
     fn typewriter_reveals_then_commits() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.stream_mode = StreamMode::Typewriter;
         a.begin_stream("hello world".into()); // 11 chars
         assert!(a.streaming);
@@ -1398,7 +1407,7 @@ mod tests {
 
     #[test]
     fn line_by_line_reveals_one_line_per_tick() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.stream_mode = StreamMode::LineByLine;
         a.begin_stream("a\nb\nc".into());
         a.advance_stream();
@@ -1412,7 +1421,7 @@ mod tests {
 
     #[test]
     fn thinking_reveal_commits_immediately() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.stream_mode = StreamMode::ThinkingReveal;
         a.begin_stream("done".into());
         assert!(!a.streaming, "thinking mode commits at once");
@@ -1421,7 +1430,7 @@ mod tests {
 
     #[test]
     fn apply_preset_balanced() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.apply_preset("balanced");
         assert!((a.config.temperature - 0.7).abs() < f32::EPSILON);
         assert_eq!(a.config.max_tokens, 600);
@@ -1429,21 +1438,21 @@ mod tests {
 
     #[test]
     fn apply_preset_creative_sets_high_temp() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.apply_preset("creative");
         assert!(a.config.temperature > 1.0);
     }
 
     #[test]
     fn apply_preset_safe_disables_commands() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.apply_preset("safe");
         assert!(!a.config.enable_commands);
     }
 
     #[test]
     fn apply_preset_unknown_falls_back_to_default() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.apply_preset("unknown_preset");
         assert!((a.config.temperature - 0.7).abs() < f32::EPSILON);
     }
@@ -1452,7 +1461,7 @@ mod tests {
 
     #[test]
     fn set_stage_output_updates_matching_stage() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.start_task(Uuid::new_v4());
         a.set_stage_output("junior", "hypothesis text".into());
         let s = a.pipeline_stages.iter().find(|s| s.name == "junior").unwrap();
@@ -1461,7 +1470,7 @@ mod tests {
 
     #[test]
     fn set_stage_output_normalizes_underscore() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.start_task(Uuid::new_v4());
         a.set_stage_output("tech_leader", "rationale".into());
         let s = a.pipeline_stages.iter().find(|s| s.name == "tech-leader").unwrap();
@@ -1472,7 +1481,7 @@ mod tests {
 
     #[test]
     fn history_commit_and_prev() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.history_commit("first task".into());
         a.history_commit("second task".into());
         a.history_prev();
@@ -1483,7 +1492,7 @@ mod tests {
 
     #[test]
     fn history_next_clears_buffer() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.history_commit("task one".into());
         a.history_prev();
         a.history_next();
@@ -1493,7 +1502,7 @@ mod tests {
 
     #[test]
     fn history_commit_deduplicates_consecutive() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.history_commit("same".into());
         a.history_commit("same".into());
         assert_eq!(a.input_history.len(), 1);
@@ -1501,7 +1510,7 @@ mod tests {
 
     #[test]
     fn history_prev_on_empty_is_noop() {
-        let mut a = AppState::new("u".into(), "m".into());
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.history_prev();
         assert_eq!(a.history_idx, None);
     }

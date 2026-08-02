@@ -96,7 +96,7 @@ enum LlmEvent {
 
 // ── Entry point ───────────────────────────────────────────────────────
 
-pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<()> {
+pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &str) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
@@ -116,7 +116,11 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
     });
 
     let api_key = std::env::var("NEOLAND_API_KEY").unwrap_or_default();
-    let mut app = AppState::new(server_url.to_string(), neoland_gateway_url.to_string());
+    let mut app = AppState::new(
+        server_url.to_string(),
+        grpc_url.to_string(),
+        neoland_gateway_url.to_string(),
+    );
     check_server_health(&mut app).await;
 
     let mut tick = tokio::time::interval(Duration::from_millis(80));
@@ -328,10 +332,10 @@ pub async fn run_client(server_url: &str, neoland_gateway_url: &str) -> Result<(
                                 app.auto_scroll = true;
                                 let tx = llm_tx.clone();
                                 let ml_url = app.neoland_gateway_url.clone();
-                                let srv_url = app.server_url.clone();
+                                let grpc_url = app.grpc_url.clone();
                                 let cfg = app.config.clone();
                                 let provider = app.active_provider;
-                                tokio::spawn(run_llm(msg, cfg, ml_url, srv_url, provider, tx));
+                                tokio::spawn(run_llm(msg, cfg, ml_url, grpc_url, provider, tx));
                             }
 
                             Action::TogglePipeline => {
@@ -816,7 +820,7 @@ async fn post_agent_steer(
 
     let res = client
         .post(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
+        .header("X-API-Key", api_key)
         .json(&serde_json::json!({
             "message": message,
         }))
@@ -1003,7 +1007,7 @@ async fn run_llm(
     message: String,
     config: presets::QueryConfig,
     neoland_gateway_url: String,
-    server_url: String,
+    grpc_url: String,
     provider: LlmProvider,
     tx: mpsc::Sender<LlmEvent>,
 ) {
@@ -1063,8 +1067,7 @@ async fn run_llm(
         },
         Err(e) => {
             tracing::warn!(error = %e, "TUI: UnifiedLLMClient failed, trying gRPC fallback");
-            if let Err(grpc_err) =
-                try_grpc_fallback(&message, &server_url, &config, &tx, start).await
+            if let Err(grpc_err) = try_grpc_fallback(&message, &grpc_url, &config, &tx, start).await
             {
                 tx.send(LlmEvent::Error(format!("all backends failed: {}", grpc_err)))
                     .await
@@ -1076,14 +1079,14 @@ async fn run_llm(
 
 async fn try_grpc_fallback(
     message: &str,
-    server_url: &str,
+    grpc_url: &str,
     config: &presets::QueryConfig,
     tx: &mpsc::Sender<LlmEvent>,
     start: std::time::Instant,
 ) -> Result<()> {
     use crate::llamachat::{llama_service_client::LlamaServiceClient, ChatRequest};
 
-    let mut client = LlamaServiceClient::connect(server_url.to_string()).await?;
+    let mut client = LlamaServiceClient::connect(grpc_url.to_string()).await?;
 
     let request = ChatRequest {
         prompt: message.to_string(),

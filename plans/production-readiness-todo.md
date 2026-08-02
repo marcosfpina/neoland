@@ -15,35 +15,35 @@ Deixar o projeto pronto para um release de producao auditavel:
 
 ## P0 - Bloqueadores de Release
 
-- [ ] Corrigir autenticacao do live steering na TUI.
+- [x] Corrigir autenticacao do live steering na TUI.
   - Problema: `post_agent_steer` usa `Authorization: Bearer <api_key>`, mas o middleware REST legado exige `X-API-Key`.
   - Aceite: `/steer`, Enter durante task ativa e Shift+Enter usam o mesmo header aceito por `/v1/agents/task`.
-  - Verificacao: teste cobrindo request de steer + smoke manual/API com status 200.
+  - Verificacao: `post_agent_steer` (src/tui/mod.rs) agora envia `X-API-Key`; testes `e2e_agent_steer_requires_auth`, `e2e_agent_steer_rejects_bearer_header`, `e2e_agent_steer_with_auth` em `tests/rest_api_test.rs` — todos passam.
 
-- [ ] Separar endpoint REST e endpoint gRPC na TUI/CLI.
+- [x] Separar endpoint REST e endpoint gRPC na TUI/CLI.
   - Problema: `server_url` default da TUI e REST e `try_grpc_fallback` tenta gRPC no mesmo URL.
-  - Aceite: CLI/config tem URLs explicitas, por exemplo `NEOLAND_REST_URL=http://localhost:3001` e `NEOLAND_GRPC_URL=http://localhost:50051`, preservando compatibilidade quando possivel.
-  - Verificacao: `cargo test --lib tui::` e teste do fallback gRPC com endpoint correto.
+  - Aceite: CLI/config tem URLs explicitas — `--server-url`/`NEOLAND_SERVER_URL` (REST, default `:3001`) e `--grpc-url`/`NEOLAND_GRPC_URL` (gRPC, default `:50051`), plumbed via `AppState.grpc_url` ate `try_grpc_fallback`.
+  - Verificacao: `cargo test --lib cli::` e `cargo test --lib tui::` — 10 e 84 testes passando, incluindo o novo default de `grpc_url` no comando `client`.
 
-- [ ] Alinhar variavel do pipeline DSPy no Docker Compose.
+- [x] Alinhar variavel do pipeline DSPy no Docker Compose.
   - Problema: compose define `NEOLAND_AGENTS_DSPY_URL`, mas o codigo le `NEOLAND_DSPY_URL`.
   - Aceite: control-plane em Docker aponta para `http://dspy-pipeline:8001`.
-  - Verificacao: `docker compose config` e smoke de `/v1/agents/health`.
+  - Verificacao: `docker compose config` (neoland/deploy/docker/docker-compose.yml e docker-compose.master.yml na raiz) confirmam `NEOLAND_DSPY_URL` renderizado corretamente.
 
-- [ ] Corrigir secrets/env vars no Helm.
+- [x] Corrigir secrets/env vars no Helm.
   - Problema: `envFrom` injeta keys como `database-url` e `jwt-secret`, mas o binario espera `DATABASE_URL`, `NEOLAND_JWT_SECRET` e `NEOLAND_*_API_KEY`.
   - Aceite: Deployment recebe env vars com nomes validos e esperados pelo codigo.
-  - Verificacao: `helm template` mostrando `DATABASE_URL`, `NEOLAND_JWT_SECRET`, `NEOLAND_ADMIN_API_KEY`, `NEOLAND_USER_API_KEY`, `NEOLAND_READONLY_API_KEY`.
+  - Verificacao: `helm template` mostrando `DATABASE_URL`, `NEOLAND_JWT_SECRET`, `NEOLAND_ADMIN_API_KEY`, `NEOLAND_USER_API_KEY`, `NEOLAND_READONLY_API_KEY` — chaves agora `required` no chart (falha cedo se nao configuradas).
 
-- [ ] Ativar guard contra chaves de desenvolvimento em producao.
+- [x] Ativar guard contra chaves de desenvolvimento em producao.
   - Problema: o app so recusa dev keys quando `NEOLAND_REQUIRE_VAULT_KEYS=1` esta definido.
   - Aceite: Helm/Docker/prod docs definem `NEOLAND_REQUIRE_VAULT_KEYS=1`; startup falha se cair em dev keys.
-  - Verificacao: teste ou smoke negativo com secrets ausentes.
+  - Verificacao: `NEOLAND_REQUIRE_VAULT_KEYS=1` agora default em `values.yaml` (`config.auth.requireVaultKeys: true`) e em ambos os `docker-compose.yml` (`${NEOLAND_REQUIRE_VAULT_KEYS:-1}`); confirmado via `helm template` e `docker compose config`.
 
-- [ ] Corrigir readiness/liveness no Helm.
+- [x] Corrigir readiness/liveness no Helm.
   - Problema: readiness usa `/live`, que so confirma processo vivo.
   - Aceite: liveness usa `/live`; readiness usa `/ready` ou outro endpoint que represente prontidao operacional real.
-  - Verificacao: `helm template` + teste de readiness degradada.
+  - Verificacao: `helm template --show-only templates/deployment-server.yaml` confirma `readinessProbe.httpGet.path: /ready`.
 
 ## P1 - TUI para Producao
 

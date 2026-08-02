@@ -36,6 +36,10 @@ pub enum Commands {
         #[arg(long, env = "NEOLAND_SERVER_URL", default_value = "http://localhost:3001")]
         server_url: String,
 
+        /// URL do servidor gRPC (usado pelo fallback direto de LLM)
+        #[arg(long, env = "NEOLAND_GRPC_URL", default_value = "http://localhost:50051")]
+        grpc_url: String,
+
         /// URL do gateway LLM principal
         #[arg(
             long = "neoland-gateway-url",
@@ -241,8 +245,9 @@ mod tests {
         .expect("client parses");
 
         match cli.command {
-            Commands::Client { server_url, neoland_gateway_url } => {
+            Commands::Client { server_url, grpc_url, neoland_gateway_url } => {
                 assert_eq!(server_url, "http://localhost:3001");
+                assert_eq!(grpc_url, "http://localhost:50051");
                 assert_eq!(neoland_gateway_url, "http://localhost:8080");
             },
             _ => panic!("expected client command"),
