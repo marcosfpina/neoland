@@ -105,7 +105,7 @@ resources:
 # Health probes
 livenessProbe:
   httpGet:
-    path: /health
+    path: /live
     port: 3001
   initialDelaySeconds: 10
   periodSeconds: 15

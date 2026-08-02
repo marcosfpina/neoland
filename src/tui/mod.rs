@@ -121,6 +121,12 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
         grpc_url.to_string(),
         neoland_gateway_url.to_string(),
     );
+    if api_key.trim().is_empty() {
+        app.add_notification(
+            NotificationLevel::Warning,
+            "NEOLAND_API_KEY ausente; configure a chave antes de enviar tarefas",
+        );
+    }
     check_server_health(&mut app).await;
 
     let mut tick = tokio::time::interval(Duration::from_millis(80));
@@ -274,6 +280,13 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
                             },
 
                             Action::SubmitTask(task) => {
+                                if api_key.trim().is_empty() {
+                                    app.add_notification(
+                                        NotificationLevel::Error,
+                                        "tarefa não enviada: defina NEOLAND_API_KEY",
+                                    );
+                                    continue 'main;
+                                }
                                 app.add_user_message(&task);
                                 app.name_active_session_from(&task);
                                 app.set_active_session_status(app::SessionStatus::Active);
@@ -288,6 +301,13 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
                             }
 
                             Action::QueueTask(task) => {
+                                if api_key.trim().is_empty() {
+                                    app.add_notification(
+                                        NotificationLevel::Error,
+                                        "tarefa não enfileirada: defina NEOLAND_API_KEY",
+                                    );
+                                    continue 'main;
+                                }
                                 app.add_user_message(&task);
                                 let (task_id, _) = app.enqueue_task(task);
                                 let task_short = task_id.to_string()[..6].to_string();
@@ -299,6 +319,13 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
                                 app.auto_scroll = true;
                             }
                             Action::ResolveBreakpoint { resolution, instruction } => {
+                                if api_key.trim().is_empty() {
+                                    app.add_notification(
+                                        NotificationLevel::Error,
+                                        "breakpoint não resolvido: defina NEOLAND_API_KEY",
+                                    );
+                                    continue 'main;
+                                }
                                 let srv = app.server_url.clone();
                                 let session = app.active_session;
                                 let key = api_key.clone();
@@ -314,6 +341,13 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
                             }
 
                             Action::SteerTask(msg) => {
+                                if api_key.trim().is_empty() {
+                                    app.add_notification(
+                                        NotificationLevel::Error,
+                                        "steering não enviado: defina NEOLAND_API_KEY",
+                                    );
+                                    continue 'main;
+                                }
                                 let srv = app.server_url.clone();
                                 let key = api_key.clone();
                                 let session = app.active_session;

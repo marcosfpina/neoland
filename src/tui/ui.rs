@@ -1268,9 +1268,13 @@ mod tests {
 
     #[test]
     fn renders_without_panic_when_narrow() {
-        // Narrow terminal must not panic (side columns + Min(0) center clamp).
+        // Release-supported terminal sizes must render without panics, including
+        // the 80x24 baseline and a typical 120x30 terminal.
         let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
-        let _ = render_to_string(&mut app, 40, 20);
+        for (width, height) in [(80, 24), (120, 30)] {
+            let text = render_to_string(&mut app, width, height);
+            assert!(text.contains("Neoland"), "brand missing at {width}x{height}");
+        }
     }
 
     #[test]

@@ -1508,22 +1508,7 @@ pub async fn callback_google_handler(
     let user = crate::auth::routes::upsert_oauth_user(db, &user_info)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let role = if user.is_owner { "admin" } else { "user" };
-    let access_token = crate::auth::jwt::create_access_token(
-        user.id,
-        "",
-        role,
-        &user.email,
-        &user.display_name,
-        &state.jwt_secret,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let refresh_token = crate::auth::jwt::create_refresh_token();
-    Ok(Json(serde_json::json!({
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": { "id": user.id, "email": user.email, "display_name": user.display_name, "role": role }
-    })))
+    issue_auth_tokens(&state, db, user).await
 }
 
 #[utoipa::path(
@@ -1551,10 +1536,29 @@ pub async fn callback_github_handler(
     let user = crate::auth::routes::upsert_oauth_user(db, &user_info)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    issue_auth_tokens(&state, db, user).await
+}
+
+async fn tenant_slug(db: &sqlx::PgPool, tenant_id: Option<uuid::Uuid>) -> Option<String> {
+    let tenant_id = tenant_id?;
+    sqlx::query_scalar("SELECT slug FROM tenants WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn issue_auth_tokens(
+    state: &AppState,
+    db: &sqlx::PgPool,
+    user: crate::auth::types::User,
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let role = if user.is_owner { "admin" } else { "user" };
+    let tenant = tenant_slug(db, user.tenant_id).await.unwrap_or_default();
     let access_token = crate::auth::jwt::create_access_token(
         user.id,
-        "",
+        &tenant,
         role,
         &user.email,
         &user.display_name,
@@ -1562,10 +1566,37 @@ pub async fn callback_github_handler(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let refresh_token = crate::auth::jwt::create_refresh_token();
+    let token_hash = crate::auth::jwt::hash_refresh_token(&refresh_token);
+    let expires_at = chrono::Utc::now()
+        + chrono::Duration::seconds(crate::auth::jwt::refresh_token_lifetime_secs());
+
+    sqlx::query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)")
+        .bind(user.id)
+        .bind(token_hash)
+        .bind(expires_at)
+        .execute(db)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, user_id = %user.id, "Failed to persist OAuth session");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let _ = sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+        .bind(user.id)
+        .execute(db)
+        .await;
+
     Ok(Json(serde_json::json!({
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "user": { "id": user.id, "email": user.email, "display_name": user.display_name, "role": role }
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "role": role,
+            "tenant": tenant,
+        }
     })))
 }
 
@@ -1577,11 +1608,45 @@ pub async fn callback_github_handler(
     responses((status = 200, description = "New access token", body = RefreshResponse))
 )]
 pub async fn refresh_token_handler(
-    State(_state): State<Arc<AppState>>,
-    Json(_body): Json<serde_json::Value>,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<crate::openapi::RefreshRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: validate refresh token from DB, create new access token
-    Err(StatusCode::NOT_IMPLEMENTED)
+    let db = state.db_pool.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let token_hash = crate::auth::jwt::hash_refresh_token(&body.refresh_token);
+    let session = sqlx::query_as::<_, crate::auth::types::Session>(
+        "SELECT * FROM sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()",
+    )
+    .bind(token_hash)
+    .fetch_optional(db)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "Failed to validate refresh token");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let user = sqlx::query_as::<_, crate::auth::types::User>("SELECT * FROM users WHERE id = $1")
+        .bind(session.user_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Failed to load refresh-token user");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let role = if user.is_owner { "admin" } else { "user" };
+    let tenant = tenant_slug(db, user.tenant_id).await.unwrap_or_default();
+    let access_token = crate::auth::jwt::create_access_token(
+        user.id,
+        &tenant,
+        role,
+        &user.email,
+        &user.display_name,
+        &state.jwt_secret,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({ "access_token": access_token })))
 }
 
 #[utoipa::path(
@@ -1612,10 +1677,22 @@ pub async fn auth_me_handler(
     responses((status = 200, description = "Session revoked", body = LogoutResponse))
 )]
 pub async fn logout_handler(
-    State(_state): State<Arc<AppState>>,
-    Json(_body): Json<serde_json::Value>,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<crate::openapi::RefreshRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: revoke refresh token from DB
+    let db = state.db_pool.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let token_hash = crate::auth::jwt::hash_refresh_token(&body.refresh_token);
+    sqlx::query(
+        "UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL",
+    )
+    .bind(token_hash)
+    .execute(db)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "Failed to revoke refresh token");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     Ok(Json(serde_json::json!({ "message": "Logged out" })))
 }
 
@@ -1698,8 +1775,9 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         }
     };
 
-    // Initialize AgentOrchestrator (multi-agent DSPy pipeline)
-    let agent_orchestrator = {
+    // One shared database pool backs authentication and the agent orchestrator.
+    // Without it both features fail closed while health-only/local inference remains available.
+    let db_pool = {
         let db_url = std::env::var("NEOLAND_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .ok();
@@ -1707,123 +1785,131 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
             Some(url) => {
                 use sqlx::postgres::PgPoolOptions;
                 match PgPoolOptions::new().max_connections(5).connect(&url).await {
-                    Ok(pool) => {
-                        let cfg = crate::config::Config::load();
-                        match AgentOrchestrator::new(pool, &cfg.agents) {
-                            Ok(orch) => {
-                                // Initialize Native MCP Server and Background Task
-                                let (bp_tx, mut bp_rx) = tokio::sync::mpsc::channel(100);
-                                let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> =
-                                    vec![Box::new(crate::tools::shell::RunShellCommand)];
-                                let native_mcp = NativeMcpServer::new(tools, bp_tx);
-
-                                // We will attach the task listener later, for now we just attach
-                                // the MCP to the orchestrator
-                                let orch = orch.with_native_mcp(native_mcp);
-
-                                // Optionally attach NATS publisher (Ciclo 1 — Fase B)
-                                let orch = if cfg.nats.enabled {
-                                    use crate::agents::nats::NatsPublisher;
-                                    match tokio::time::timeout(
-                                        Duration::from_secs(2),
-                                        NatsPublisher::connect(&cfg.nats),
-                                    )
-                                    .await
-                                    {
-                                        Ok(Ok(publisher)) => {
-                                            info!(url = %cfg.nats.url, "NATS publisher attached");
-                                            orch.with_nats(publisher)
-                                        },
-                                        Ok(Err(e)) => {
-                                            tracing::warn!(error = %e, "NATS connect failed — events disabled");
-                                            orch
-                                        },
-                                        Err(_) => {
-                                            tracing::warn!(
-                                                url = %cfg.nats.url,
-                                                "NATS connect timed out — events disabled"
-                                            );
-                                            orch
-                                        },
-                                    }
-                                } else {
-                                    orch
-                                };
-                                // Optionally attach MCP tool registry (Phase 3)
-                                let orch = if cfg.mcp.enabled {
-                                    use crate::mcp::{McpClient, McpRegistry};
-                                    match McpClient::spawn(&cfg.mcp.binary).await {
-                                        Ok(client) => match McpRegistry::new(client).await {
-                                            Ok(reg) => {
-                                                info!(
-                                                    tools = reg.tools().len(),
-                                                    binary = %cfg.mcp.binary,
-                                                    "MCP registry initialized"
-                                                );
-                                                orch.with_mcp(Arc::new(reg))
-                                            },
-                                            Err(e) => {
-                                                tracing::warn!(error = %e, "MCP tool discovery failed — MCP disabled");
-                                                orch
-                                            },
-                                        },
-                                        Err(e) => {
-                                            tracing::warn!(error = %e, "MCP spawn failed — MCP disabled");
-                                            orch
-                                        },
-                                    }
-                                } else {
-                                    orch
-                                };
-                                // Optionally attach Matrix client (Phase 4)
-                                let orch = if cfg.matrix.enabled {
-                                    let mc = MatrixClient::new(&cfg.matrix.base_url);
-                                    info!(url = %cfg.matrix.base_url, "Matrix client attached");
-                                    orch.with_matrix(Arc::new(mc))
-                                } else {
-                                    orch
-                                };
-                                let orch = orch.with_event_bus(event_tx.clone());
-                                info!(
-                                    dspy_url = %cfg.agents.dspy_url,
-                                    "🤖 Agent orchestrator initialized"
-                                );
-                                let orch_arc = Arc::new(orch);
-                                let orch_clone = orch_arc.clone();
-                                tokio::spawn(async move {
-                                    while let Some(req) = bp_rx.recv().await {
-                                        orch_clone
-                                            .register_breakpoint(
-                                                req.session_id,
-                                                req.tool_name.clone(),
-                                                req.resolve_tx,
-                                            )
-                                            .await;
-                                        orch_clone.publish(AgentEvent::BreakpointHit {
-                                            session_id: req.session_id,
-                                            tool: req.tool_name,
-                                            args_summary: req.args_summary,
-                                        });
-                                    }
-                                });
-                                Some(orch_arc)
-                            },
-                            Err(e) => {
-                                tracing::warn!(error = %e, "AgentOrchestrator init failed");
-                                None
-                            },
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Agent pool connection failed — orchestrator disabled");
+                    Ok(pool) => Some(pool),
+                    Err(error) => {
+                        tracing::warn!(%error, "Database connection failed — auth sessions and orchestrator disabled");
                         None
                     },
                 }
             },
             None => {
-                info!("DATABASE_URL not set — agent orchestrator disabled");
+                info!("DATABASE_URL not set — auth sessions and agent orchestrator disabled");
                 None
             },
+        }
+    };
+
+    // Initialize AgentOrchestrator (multi-agent DSPy pipeline)
+    let agent_orchestrator = {
+        match db_pool.clone() {
+            Some(pool) => {
+                let cfg = crate::config::Config::load();
+                match AgentOrchestrator::new(pool, &cfg.agents) {
+                    Ok(orch) => {
+                        // Initialize Native MCP Server and Background Task
+                        let (bp_tx, mut bp_rx) = tokio::sync::mpsc::channel(100);
+                        let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> =
+                            vec![Box::new(crate::tools::shell::RunShellCommand)];
+                        let native_mcp = NativeMcpServer::new(tools, bp_tx);
+
+                        // We will attach the task listener later, for now we just attach
+                        // the MCP to the orchestrator
+                        let orch = orch.with_native_mcp(native_mcp);
+
+                        // Optionally attach NATS publisher (Ciclo 1 — Fase B)
+                        let orch = if cfg.nats.enabled {
+                            use crate::agents::nats::NatsPublisher;
+                            match tokio::time::timeout(
+                                Duration::from_secs(2),
+                                NatsPublisher::connect(&cfg.nats),
+                            )
+                            .await
+                            {
+                                Ok(Ok(publisher)) => {
+                                    info!(url = %cfg.nats.url, "NATS publisher attached");
+                                    orch.with_nats(publisher)
+                                },
+                                Ok(Err(e)) => {
+                                    tracing::warn!(error = %e, "NATS connect failed — events disabled");
+                                    orch
+                                },
+                                Err(_) => {
+                                    tracing::warn!(
+                                        url = %cfg.nats.url,
+                                        "NATS connect timed out — events disabled"
+                                    );
+                                    orch
+                                },
+                            }
+                        } else {
+                            orch
+                        };
+                        // Optionally attach MCP tool registry (Phase 3)
+                        let orch = if cfg.mcp.enabled {
+                            use crate::mcp::{McpClient, McpRegistry};
+                            match McpClient::spawn(&cfg.mcp.binary).await {
+                                Ok(client) => match McpRegistry::new(client).await {
+                                    Ok(reg) => {
+                                        info!(
+                                            tools = reg.tools().len(),
+                                            binary = %cfg.mcp.binary,
+                                            "MCP registry initialized"
+                                        );
+                                        orch.with_mcp(Arc::new(reg))
+                                    },
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, "MCP tool discovery failed — MCP disabled");
+                                        orch
+                                    },
+                                },
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "MCP spawn failed — MCP disabled");
+                                    orch
+                                },
+                            }
+                        } else {
+                            orch
+                        };
+                        // Optionally attach Matrix client (Phase 4)
+                        let orch = if cfg.matrix.enabled {
+                            let mc = MatrixClient::new(&cfg.matrix.base_url);
+                            info!(url = %cfg.matrix.base_url, "Matrix client attached");
+                            orch.with_matrix(Arc::new(mc))
+                        } else {
+                            orch
+                        };
+                        let orch = orch.with_event_bus(event_tx.clone());
+                        info!(
+                            dspy_url = %cfg.agents.dspy_url,
+                            "🤖 Agent orchestrator initialized"
+                        );
+                        let orch_arc = Arc::new(orch);
+                        let orch_clone = orch_arc.clone();
+                        tokio::spawn(async move {
+                            while let Some(req) = bp_rx.recv().await {
+                                orch_clone
+                                    .register_breakpoint(
+                                        req.session_id,
+                                        req.tool_name.clone(),
+                                        req.resolve_tx,
+                                    )
+                                    .await;
+                                orch_clone.publish(AgentEvent::BreakpointHit {
+                                    session_id: req.session_id,
+                                    tool: req.tool_name,
+                                    args_summary: req.args_summary,
+                                });
+                            }
+                        });
+                        Some(orch_arc)
+                    },
+                    Err(e) => {
+                        tracing::warn!(error = %e, "AgentOrchestrator init failed");
+                        None
+                    },
+                }
+            },
+            None => None,
         }
     };
 
@@ -1838,7 +1924,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         start_time: Instant::now(),
         agent_orchestrator,
         event_bus: event_tx,
-        db_pool: None,
+        db_pool,
         jwt_secret: crate::config::Config::load().auth.jwt.secret.into_bytes(),
         oauth_base_url: crate::config::Config::load().auth.oauth.base_url,
     });

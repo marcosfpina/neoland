@@ -2,7 +2,12 @@
 
 **Autonomous AI Engineering Platform** — Multi-agent ADR pipeline with TUI, Web Console, and Desktop app
 
-**Version**: 0.0.1 · **Status**: Enterprise Ready · **Score**: 94/100 · [ROADMAP](ROADMAP.md)
+**Version**: 0.0.1 · **Status**: Release candidate · [ROADMAP](ROADMAP.md)
+
+The core product is implemented, but a public production release still depends on
+the environment-backed gates listed below. “Release candidate” is intentional: it
+does not imply that the soak period, cross-platform installers, or compliance audit
+have been completed.
 
 ---
 
@@ -101,7 +106,7 @@ chat bubbles, pipeline tree with confidence badges:
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Rust unit tests | ✅ 242 passed, 17 ignored | `cargo test --workspace` |
+| Rust workspace tests | ✅ 301 core passed, 18 ignored; 16 web passed | `cargo test --workspace --lib` |
 | Clippy (all targets) | ✅ 0 warnings | `cargo clippy --all-targets -- -D warnings` |
 | Clippy (WASM) | ✅ 0 warnings | `cargo clippy -p neoland-web --target wasm32-unknown-unknown` |
 | Web Console tests | ✅ 16/16 passed | `cargo test -p neoland-web` |
@@ -109,7 +114,10 @@ chat bubbles, pipeline tree with confidence badges:
 | Python contracts | ✅ 26/26 passed | `pytest -m contract` |
 | WASM compilation | ✅ Clean | `cargo check -p neoland-web --target wasm32-unknown-unknown` |
 | Doctor | ✅ `ok: true` | `just doctor` |
-| Full-stack smoke | ✅ 9/9 layers | `just smoke` |
+| Docker Compose syntax | ✅ Valid | `docker compose config --quiet` |
+| Full-stack smoke | ⏳ Requires local services + LLM credentials | `just smoke` |
+| Helm render/lint | ⏳ Requires Kubernetes Helm CLI | `helm lint deploy/helm/neoland` |
+| Native desktop installers | ⏳ Not yet produced in CI | `just desktop-build` |
 
 ---
 
@@ -148,7 +156,7 @@ just dev-web
 # Open http://localhost:8080 in your browser
 ```
 
-### Docker Compose (full stack)
+### Docker Compose (local full stack)
 
 ```bash
 cd deploy/docker/
@@ -161,6 +169,30 @@ docker compose up -d
 curl http://localhost:3001/health | jq .
 ```
 
+## Production deployment
+
+Local development defaults are not production defaults. Before deploying with
+Docker or Helm:
+
+- Generate unique `NEOLAND_ADMIN_API_KEY`, `NEOLAND_USER_API_KEY`, and
+  `NEOLAND_READONLY_API_KEY` values; never reuse the examples.
+- Set `NEOLAND_JWT_SECRET`, database credentials, and provider credentials through
+  a secret manager or the platform's secret mechanism.
+- Apply all SQL files under `migrations/` in numeric order.
+- Keep `NEOLAND_REQUIRE_VAULT_KEYS=1`; startup must reject development keys.
+- Terminate TLS at a trusted reverse proxy or configure native mTLS listeners.
+- Use `/live` for liveness and `/ready` for readiness.
+- Run `just validate-all`, then the environment-backed `just smoke` before traffic.
+- Take and verify a backup before rollout. Restore and rollback procedures are in
+  [`scripts/backup/README.md`](scripts/backup/README.md) and
+  [`docs/runbooks/neoland-disaster-recovery.md`](docs/runbooks/neoland-disaster-recovery.md).
+
+The supported deployment paths are the Nix release artifact
+(`nix build .#neoland-full`), Docker Compose for a single host, and the Helm chart
+under `deploy/helm/neoland/`. The Ubuntu bare-metal build path is documented in
+[`docs/neoland-quickstart.md`](docs/neoland-quickstart.md), but is not yet an
+audited production path.
+
 ---
 
 ## CLI reference
@@ -172,6 +204,20 @@ neoland doctor     # environment diagnostics (--json for machine output)
 neoland test       # health checks
 neoland restart    # kill + restart server
 ```
+
+Running `neoland` without a subcommand starts the server. The concrete entrypoints
+are `src/bin/neoland.rs` (Rust CLI), `deploy/docker/entrypoint.sh` (container),
+`agents/neoland_agents/app.py` (DSPy/FastAPI), and `web/src/main.rs` (Web Console).
+
+Runtime endpoint variables are intentionally separate:
+
+| Boundary | Variable | Default |
+|---|---|---|
+| REST control plane | `NEOLAND_SERVER_URL` | `http://localhost:3001` |
+| gRPC control plane | `NEOLAND_GRPC_URL` | `http://localhost:50051` |
+| DSPy pipeline | `NEOLAND_DSPY_URL` | `http://localhost:8001` |
+| LLM gateway | `NEOLAND_GATEWAY_URL` | `http://localhost:8080` |
+| PostgreSQL | `DATABASE_URL` | environment-specific |
 
 Aliases set by `nix develop`: `nsrv` (server), `ncli` (client), `nd` (doctor), `nt` (test).
 
@@ -200,7 +246,7 @@ src/
 
 ```
 agents/neoland_agents/
-├── app.py             FastAPI · /health · /run · /sessions
+├── app.py             FastAPI · /health · /v1/pipeline/run · /v1/pipeline/session/{id}
 ├── signatures/        DSPy contracts (4 agents)
 ├── modules/           Junior · Senior · Architect · TechLeader
 ├── pipeline/          Orchestrator · checkpoint persistence
@@ -306,7 +352,7 @@ Nix flake provides:
 - **SecureLLM Bridge Redis** — caching disabled without Redis (non-blocking)
 - **CPU inference** — Candle/Qwen is dev-only (~5–10 tok/s); use llama.cpp/vLLM for production
 - **Nix WASM build** — `nix build .#neoland-web` requires network on first run (cargo deps); cached thereafter
-- **gRPC-web** — not yet bridged (v0.3.0); Web Console uses REST/SSE only
+- **gRPC-web client** — server-side bridge is enabled; the Web Console currently uses REST/SSE
 - **Non-Nix install** — Ubuntu bare metal path documented but not yet validated end-to-end
 
 ---
@@ -327,4 +373,4 @@ Nix flake provides:
 Proprietary — Internal Research Project
 
 **Maintained by**: VoidNxSEC Team  
-**Last validated**: 2026-07-16 · build clean · REST/gRPC/LLM-gateway healthy · Web Console compiling for WASM
+**Last validated**: 2026-08-02 · targeted auth/TUI tests and Docker Compose config clean; environment-backed release gates remain listed in the roadmap
