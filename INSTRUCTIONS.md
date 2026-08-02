@@ -5,12 +5,18 @@ This file describes how work moves across VoidNX Labs projects.
 The goal is to reduce drift, reduce repeated explanation, and make the next
 step easier to find.
 
+The work philosophy involves distinguishing between two communication methodologies: humans and machines.
+
+Humans receive dedicated treatment, while specialized work is carried out for machines to achieve true alignment.
+
 ## 1. Working Ground
 
-VoidNX Labs works Nix-first.
+VoidNX Labs works Nix-first, however, it is not limited to that—which is merely a courtesy—; concise roadmaps addressing future integrations with other platforms should also be provided.
 
 Nix is the primary platform for development environments, project commands,
-package definitions, checks, local services, and reproducible execution.
+package definitions, checks, local services, and reproducible execution. 
+
+That doesn't make the project "Nix-first"—well, it *could*, if... Anyway, you get the idea, right?
 
 The default execution pattern is:
 
