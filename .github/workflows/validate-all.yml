@@ -122,8 +122,8 @@ jobs:
             > release-evidence/helm-render.yaml
           grep -q 'path: /live' release-evidence/helm-render.yaml
           grep -q 'path: /ready' release-evidence/helm-render.yaml
-          grep -q 'name: NEOLAND_JWT_SECRET' release-evidence/helm-render.yaml
-          grep -q 'name: DATABASE_URL' release-evidence/helm-render.yaml
+          grep -q '^  NEOLAND_JWT_SECRET:' release-evidence/helm-render.yaml
+          grep -q '^  DATABASE_URL:' release-evidence/helm-render.yaml
 
       - uses: actions/upload-artifact@v6
         if: always()
