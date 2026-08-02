@@ -671,15 +671,25 @@ pub fn render_restart_report(report: &RestartReport) -> String {
 }
 
 pub fn find_neoland_pid(processes: &str) -> Option<String> {
-    find_pid_in_lines(processes.lines().filter(|line| line.contains("neoland server"))).or_else(
-        || {
-            find_pid_in_lines(
-                processes
-                    .lines()
-                    .filter(|line| line.contains("neoland") && !line.contains("grep")),
-            )
-        },
-    )
+    find_pid_in_lines(processes.lines().filter(|line| is_neoland_server_process(line)))
+}
+
+/// Um processo conta como servidor quando o binário é `neoland` e o argumento
+/// seguinte é `server`, uma flag, ou ausente (`neoland` sem subcomando sobe o
+/// servidor). Subcomandos como `test`/`doctor`/`client` não contam — o match
+/// antigo por substring fazia o próprio `neoland test` aparecer como servidor.
+fn is_neoland_server_process(line: &str) -> bool {
+    let mut tokens = line.split_whitespace();
+    while let Some(token) = tokens.next() {
+        let basename = token.rsplit('/').next().unwrap_or(token);
+        if basename == "neoland" {
+            return match tokens.next() {
+                None => true,
+                Some(next) => next == "server" || next.starts_with('-'),
+            };
+        }
+    }
+    false
 }
 
 pub fn default_config_paths(home: Option<String>) -> Vec<PathBuf> {
@@ -832,6 +842,24 @@ user 1000 0.0 0.1 123 456 pts/1 Sl+ 00:00 cargo test\nuser 4242 0.0 0.1 123 456 
                          00:00 /tmp/target/debug/neoland client\n";
 
         assert_eq!(find_neoland_pid(processes).as_deref(), Some("4242"));
+    }
+
+    #[test]
+    fn find_neoland_pid_ignores_non_server_subcommands_and_paths() {
+        // O próprio `neoland test` e processos cujo cwd/args contêm o caminho
+        // do repo não podem contar como servidor rodando.
+        let processes = "\
+user 1111 0.0 0.1 123 456 pts/1 Sl+ 00:00 /tmp/target/debug/neoland test\nuser 2222 0.0 0.1 123 \
+                         456 pts/2 Sl+ 00:00 /tmp/target/debug/neoland doctor --json\nuser 3333 \
+                         0.0 0.1 123 456 pts/3 Sl+ 00:00 vim /home/u/deploy/neoland/src/cli.rs\n";
+        assert_eq!(find_neoland_pid(processes), None);
+
+        // `neoland` sem subcomando (default = server) e com flags globais contam.
+        let bare = "user 4444 0.0 0.1 123 456 pts/4 Sl+ 00:00 /nix/store/abc/bin/neoland\n";
+        assert_eq!(find_neoland_pid(bare).as_deref(), Some("4444"));
+
+        let with_flag = "user 5555 0.0 0.1 123 456 ? Sl 00:00 neoland --log-level debug\n";
+        assert_eq!(find_neoland_pid(with_flag).as_deref(), Some("5555"));
     }
 
     #[tokio::test]
