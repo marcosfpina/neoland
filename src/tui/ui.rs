@@ -1172,7 +1172,7 @@ mod tests {
 
     #[test]
     fn renders_three_columns_and_header() {
-        let mut app = AppState::new("http://x".into(), "http://y".into());
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
         let text = render_to_string(&mut app, 120, 40);
         assert!(text.contains("Neoland"), "header brand missing");
         assert!(text.contains("Sessions"), "sessions column missing");
@@ -1182,7 +1182,7 @@ mod tests {
 
     #[test]
     fn renders_conversation_bubbles() {
-        let mut app = AppState::new("http://x".into(), "http://y".into());
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
         app.add_user_message("optimize this script");
         app.add_assistant_message("Use multiprocessing:\n```python\nPool().map(f, xs)\n```");
         let text = render_to_string(&mut app, 120, 40);
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn welcome_shown_when_empty() {
-        let mut app = AppState::new("http://x".into(), "http://y".into());
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
         let text = render_to_string(&mut app, 120, 40);
         assert!(text.contains("Welcome to"), "welcome card missing");
         assert!(text.contains("assist you today"), "welcome tagline missing");
@@ -1218,7 +1218,7 @@ mod tests {
         }
 
         use crate::tui::app::{Session, SessionStatus, StageStatus};
-        let mut app = AppState::new("http://x".into(), "http://y".into());
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
         app.theme = Theme::NeonGlass;
         dump(&mut app, 120, 28, "WELCOME (empty conversation)");
 
@@ -1268,14 +1268,18 @@ mod tests {
 
     #[test]
     fn renders_without_panic_when_narrow() {
-        // Narrow terminal must not panic (side columns + Min(0) center clamp).
-        let mut app = AppState::new("http://x".into(), "http://y".into());
-        let _ = render_to_string(&mut app, 40, 20);
+        // Release-supported terminal sizes must render without panics, including
+        // the 80x24 baseline and a typical 120x30 terminal.
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
+        for (width, height) in [(80, 24), (120, 30)] {
+            let text = render_to_string(&mut app, width, height);
+            assert!(text.contains("Neoland"), "brand missing at {width}x{height}");
+        }
     }
 
     #[test]
     fn theme_switch_changes_rendered_colors() {
-        let mut app = AppState::new("http://x".into(), "http://y".into());
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
         app.theme = Theme::TokyoNight;
         let mut t1 = Terminal::new(TestBackend::new(120, 40)).unwrap();
         t1.draw(|f| render(f, &mut app)).unwrap();

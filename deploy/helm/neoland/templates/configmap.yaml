@@ -17,4 +17,5 @@ data:
   NEOLAND_NATS_URL: {{ .Values.config.nats.url | quote }}
   NEOLAND_NATS_ENABLED: {{ .Values.config.nats.enabled | quote }}
   NEOLAND_OAUTH_BASE_URL: {{ .Values.config.auth.oauthBaseUrl | quote }}
+  NEOLAND_REQUIRE_VAULT_KEYS: {{ .Values.config.auth.requireVaultKeys | ternary "1" "0" | quote }}
   RUST_LOG: {{ .Values.config.logLevel | quote }}

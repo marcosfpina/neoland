@@ -59,8 +59,10 @@ async fn main() {
             }
         },
 
-        Commands::Client { server_url, neoland_gateway_url } => {
-            if let Err(e) = neoland::tui::run_client(&server_url, &neoland_gateway_url).await {
+        Commands::Client { server_url, grpc_url, neoland_gateway_url } => {
+            if let Err(e) =
+                neoland::tui::run_client(&server_url, &grpc_url, &neoland_gateway_url).await
+            {
                 eprintln!("❌ Erro no cliente TUI: {}", e);
                 std::process::exit(1);
             }

@@ -6,7 +6,10 @@ name: Validate All
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
+    branches: [main]
     tags:
       - "v*"
   schedule:
@@ -86,6 +89,49 @@ jobs:
       - name: Contract tests
         run: cd agents && poetry run pytest tests/ -m contract -v
 
+  infra-render:
+    name: Docker Compose · Helm render
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v4
+
+      - name: Validate Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          NEOLAND_ADMIN_API_KEY: ci-admin-api-key
+          NEOLAND_USER_API_KEY: ci-user-api-key
+          NEOLAND_READONLY_API_KEY: ci-readonly-api-key
+          LLM_API_KEY: ci-placeholder-not-used
+        run: docker compose -f deploy/docker/docker-compose.yml config --quiet
+
+      - name: Lint and render Helm chart
+        run: |
+          mkdir -p release-evidence
+          values=(
+            --set config.auth.jwtSecret=ci-jwt-secret
+            --set config.auth.adminApiKey=ci-admin-api-key
+            --set config.auth.userApiKey=ci-user-api-key
+            --set config.auth.readonlyApiKey=ci-readonly-api-key
+            --set postgresql.auth.password=ci-postgres-password
+          )
+          helm lint deploy/helm/neoland "${values[@]}"
+          helm template neoland deploy/helm/neoland "${values[@]}" \
+            > release-evidence/helm-render.yaml
+          grep -q 'path: /live' release-evidence/helm-render.yaml
+          grep -q 'path: /ready' release-evidence/helm-render.yaml
+          grep -q 'name: NEOLAND_JWT_SECRET' release-evidence/helm-render.yaml
+          grep -q 'name: DATABASE_URL' release-evidence/helm-render.yaml
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: infra-render-${{ github.run_attempt }}
+          path: release-evidence/
+          if-no-files-found: error
+
   nix-outputs:
     name: Nix build (neoland · web · full)
     runs-on: ubuntu-latest
@@ -124,7 +170,52 @@ jobs:
   gate:
     name: Release gate
     runs-on: ubuntu-latest
-    needs: [rust-quality, tls-smoke, python-contracts, nix-outputs]
+    if: always()
+    needs: [rust-quality, tls-smoke, python-contracts, infra-render, nix-outputs]
     steps:
-      - name: All validations green
-        run: echo "✅ validate-all — gate completo verde"
+      - name: Write release evidence
+        env:
+          RUST_RESULT: ${{ needs.rust-quality.result }}
+          TLS_RESULT: ${{ needs.tls-smoke.result }}
+          PYTHON_RESULT: ${{ needs.python-contracts.result }}
+          INFRA_RESULT: ${{ needs.infra-render.result }}
+          NIX_RESULT: ${{ needs.nix-outputs.result }}
+        run: |
+          mkdir -p release-evidence
+          {
+            echo '# Neoland release evidence'
+            echo
+            echo "- Revision: \`${GITHUB_SHA}\`"
+            echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo
+            echo '| Gate | Result |'
+            echo '|---|---|'
+            echo "| Rust fmt, clippy, tests | ${RUST_RESULT} |"
+            echo "| TLS/mTLS smoke | ${TLS_RESULT} |"
+            echo "| Python contracts | ${PYTHON_RESULT} |"
+            echo "| Docker Compose + Helm | ${INFRA_RESULT} |"
+            echo "| Nix outputs + wrapper | ${NIX_RESULT} |"
+          } | tee release-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: release-evidence-${{ github.run_attempt }}
+          path: release-evidence/summary.md
+          if-no-files-found: error
+
+      - name: Enforce release gate
+        env:
+          RESULTS: >-
+            ${{ needs.rust-quality.result }}
+            ${{ needs.tls-smoke.result }}
+            ${{ needs.python-contracts.result }}
+            ${{ needs.infra-render.result }}
+            ${{ needs.nix-outputs.result }}
+        run: |
+          if [ "$RESULTS" != "success success success success success" ]; then
+            echo "Release gate failed: $RESULTS" >&2
+            exit 1
+          fi
+          echo "validate-all: all technical release gates are green"

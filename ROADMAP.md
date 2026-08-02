@@ -1,256 +1,115 @@
 # Neoland — Release Roadmap
 
-**Versão**: v0.0.1 · **Data**: 2026-07-18 · **Status**: Pre-Release
+**Versão atual**: v0.0.1  
+**Atualizado em**: 2026-08-02  
+**Fase**: release candidate — fechamento de prontidão para v0.1.0
 
----
+Este documento é a fonte de verdade para direção e gates de release. Itens de
+implementação descobertos durante o trabalho pertencem ao
+[`plans/production-readiness-todo.md`](plans/production-readiness-todo.md) ou ao
+backlog local; aqui ficam apenas marcos, evidências e bloqueios de lançamento.
 
-## Superfícies do Produto
+## Estado atual
 
-| Superfície | Stack | Público | Status |
-|---|---|---|---|
-| **TUI** | Rust + ratatui | Devs, power users | ✅ |
-| **Web Console** | Leptos WASM + CSS artesanal | End users, times | 🚧 |
-| **Desktop App** | Tauri + Leptos | Cross-platform | 🚧 |
-| **CLI / API** | Rust + axum + tonic | Integrações | ✅ |
+| Superfície | Estado comprovado | Limite atual |
+|---|---|---|
+| Control plane / CLI | REST, gRPC, SSE, RBAC, sessões, mTLS e multi-backend implementados | smoke completo ainda depende dos serviços externos |
+| TUI | fluxo agent-first, steering, breakpoints, persistência e layout responsivo | smoke terminal com `expect` precisa ser modernizado e executado |
+| Web Console | Leptos WASM conectado a REST/SSE, PWA, métricas e bundle Nix | cliente gRPC-web WASM foi adiado; REST/SSE é o caminho suportado |
+| Desktop | shell Tauri, tray e notificações | derivation Nix apenas valida; instaladores nativos não são publicados |
+| Operação | Nix, Docker Compose, Helm, probes, mTLS e runbooks de DR | render Helm, build Nix e smoke devem passar no ambiente de release |
+| Compliance / comunidade | controles técnicos e documentação de segurança existem | auditoria SOC 2, revisão GDPR, canais públicos e soak são externos ao código |
 
----
+## Marcos concluídos
 
-## Topologia
+### M1 — Honest Preview
 
-```
-TUI · Web · Desktop
-        ↓ REST :3001 / gRPC :50051
-   Neoland Control Plane (Rust)
-        ↓ HTTP
-   SecureLLM Bridge (:8080, mTLS + PII redact)
-        ↓ HTTP
-   ml-ops-api (:8083, VRAM-aware routing)
-        ↓ HTTP
-   llama.cpp (:8081) · vLLM (opt)
-```
+- [x] Web Console consome REST e SSE reais.
+- [x] Sessões persistidas aparecem na interface.
+- [x] Build WASM faz parte do flake e do workspace Cargo.
+- [x] README e screenshots representam a stack Rust/Leptos atual.
+- [x] Testes unitários do Web Console estão integrados ao CI.
 
----
+### M2 — Full Stack Beta
 
-## Linha do Tempo
+- [x] Bridge gRPC-web server-side com `tonic-web`.
+- [x] Bundle Web estático servido pelo control plane (`--web-dist`).
+- [x] PWA, IBM Plex Mono e painel de métricas.
+- [x] Docker Compose e artefato `neoland-full` definidos.
+- [x] Kubernetes Helm chart com HA, probes e secrets explícitos.
+- [x] mTLS nativo nos listeners REST e gRPC.
+- [x] Routing para llama.cpp e vLLM.
 
-### Ciclo 1 — Honest Preview (entregue na v0.0.1)
+### M3 — Segurança e operação do release candidate
 
-**Meta**: o Web Console deixa de ser mock e começa a conversar com backend real.
+- [x] Endpoints REST e gRPC separados na configuração da TUI.
+- [x] Live steering usa o mesmo contrato `X-API-Key` do control plane.
+- [x] Docker e Helm recusam chaves de desenvolvimento por padrão.
+- [x] Liveness usa `/live`; readiness usa `/ready`.
+- [x] Refresh token é validado no PostgreSQL e gera novo access token.
+- [x] Logout revoga a sessão persistida.
+- [x] Callbacks OAuth persistem o refresh token antes de retorná-lo.
+- [x] TUI avisa e bloqueia submissões sem `NEOLAND_API_KEY`.
+- [x] Layout TUI coberto em 80×24 e 120×30.
+- [x] Backup, restore, DR e rollback documentados.
+- [x] Validador de production readiness aponta para os workflows e caminhos atuais.
 
-| # | Entrega | Status |
-|---|---------|--------|
-| 1 | Web Console consome REST + SSE do backend real (sem mock) | ✅ |
-| 2 | Streaming de resposta do agente funcionando no browser | ✅ |
-| 3 | Sessões reais carregadas do PostgreSQL no painel lateral | ✅ |
-| 4 | Build WASM no Nix flake (`nix build .#neoland-web`) | ✅ |
-| 5 | `cargo test --workspace` passa (TUI + Web) | ✅ |
-| 6 | README reescrito — Leptos, TUI, CLI, sem menção a Next.js | ✅ |
-| 7 | Screenshots reais no README (TUI dump + Web screen) | ✅ |
+## Gate técnico para v0.1.0
 
-**Gate**: `nix build .#neoland-web && cargo test --workspace` passa limpo. Web mostra sessão real com streaming.
+O release só pode ser tagueado quando todos os itens abaixo tiverem evidência da
+mesma revisão:
 
----
+- [x] `cargo fmt --check` (2026-08-02).
+- [x] `cargo clippy --all-targets -- -D warnings` (2026-08-02).
+- [x] `cargo test --workspace --lib` — 301 core + 16 web passaram; 18 ignorados (2026-08-02).
+- [x] Contratos Python — 26/26 via `.venv/bin/python -m pytest tests/ -m contract -v` (2026-08-02).
+- [x] Docker Compose renderiza com secrets obrigatórios preenchidos.
+- [ ] `helm lint` e `helm template` com valores de produção de teste.
+- [ ] `nix build .#neoland-full` e smoke do wrapper.
+- [ ] Smoke TLS/mTLS.
+- [ ] Smoke full-stack com PostgreSQL, DSPy e um LLM real.
+- [ ] Smoke TUI agent-first: task, SSE, `/why`, `/steer` e saída limpa.
+- [ ] Quickstart cronometrado em NixOS e Ubuntu.
 
-### Ciclo 2 — Full Stack Beta (entregue na v0.0.1)
+O workflow canônico remoto é
+[`validate-all.yml`](.github/workflows/validate-all.yml). O equivalente local é
+`just validate-all`; gates que dependem de credenciais ou serviços devem registrar
+data, ambiente e resultado, sem serem convertidos em “passou” por inferência.
+Cada execução do workflow publica o artefato `release-evidence` e um resumo no
+GitHub Actions; `gh run watch <run-id> --exit-status` é o caminho de monitoramento.
 
-**Meta**: stack completa operando em single-host, deployment automatizado.
+## Gate de lançamento público
 
-| # | Entrega | Status |
-|---|---------|--------|
-| 1 | gRPC-web bridge — tonic-web server-side (HTTP/1.1 + CORS) | ✅ |
-| 2 | Deploy estático configurável (`--web-dist` + env var) | ✅ |
-| 3 | PWA — service worker + manifesto + icons | ✅ |
-| 4 | Font IBM Plex Mono Nix derivation | ✅ |
-| 5 | Protobuf types para WASM (prost-build) | ✅ |
-| 6 | Dashboard de métricas no Web (latência, tokens, confidence) | ✅ |
-| 7 | Quickstart validado — NixOS e Ubuntu, <5 min até first task | ✅ |
-| 8 | Smoke E2E com LLM real — pipeline completo gera ADR/checkpoint | ✅ |
-| 9 | Testes de integração Leptos (`wasm-bindgen-test`) | ✅ |
-| 10 | gRPC-web client WASM (tonic → tokio, deferred to v0.1.0) | ⏳ |
+Estes itens não podem ser concluídos apenas por uma alteração no repositório:
 
-**Gate**: stack sobe com `nix run .#neoland-full` ou `docker compose up`. Web Console funcional com backend real. Quickstart verificável por terceiro.
+- [ ] Soak de 14 dias sem incidente P0, com início/fim e responsável registrados.
+- [ ] Binários/instaladores Desktop assinados para Linux, macOS e Windows.
+- [ ] Revisão jurídica GDPR e auditoria SOC 2 Type I concluídas por responsáveis nomeados.
+- [ ] Release notes e guia de migração revisados para a tag final.
+- [ ] Demo em vídeo publicada.
+- [ ] GitHub Discussions e/ou Discord abertos, moderados e vinculados na documentação.
+- [ ] Publicação do site, blog e anúncio coordenada.
 
----
+## Sequência de fechamento
 
-### Ciclo 3 — Desktop & Multi-tenant (entregue na v0.0.1)
+1. Tornar todos os gates técnicos verdes e anexar as evidências.
+2. Gerar e assinar os artefatos Desktop nas três plataformas.
+3. Executar o quickstart independente e iniciar o soak de 14 dias.
+4. Obter sign-off de segurança/compliance e de operação.
+5. Publicar documentação, canais da comunidade e tag `v0.1.0`.
 
-**Meta**: desktop app nativo + multi-tenant auth + Kubernetes.
+## Pós-v0.1.0
 
-| # | Entrega |
-|---|---|
-| 1 | Tauri desktop app — Linux, macOS, Windows | ✅ |
-| 2 | OAuth2 (Google/GitHub) + RBAC multi-tenant | ✅ |
-| 3 | SSO / LDAP para enterprise | ✅ |
-| 4 | Kubernetes Helm chart — 3+ réplicas, HA | ✅ |
-| 5 | mTLS end-to-end em todos os planes | ✅ |
-| 6 | vLLM como backend opcional (além de llama.cpp) | ✅ |
-| 7 | Documentação OpenAPI publicada (GitHub Pages) | ⚠️ pendente — docs.yml removido (mike/mkdocs nunca existiram no repo); recriar site de docs no v0.1.0 |
-| 8 | Multi-backend routing — seleção automática por workload | ✅ |
+- Analytics de ranking e confiança por estágio do pipeline.
+- Automação mais profunda do ADR ledger.
+- Cliente gRPC-web WASM, se trouxer vantagem mensurável sobre REST/SSE.
+- Desktop offline com control plane embarcado, atalhos globais, auto-start e deep links.
+- Analytics avançado, automação de ledger e cliente móvel nativo.
 
-**Gate**: desktop app instalável via Nix. Multi-tenant funcional. Helm chart deploya em cluster.
+## Critério de encerramento deste roadmap
 
----
-
-### v0.1.0 — Public Release · 8 semanas
-
-**Meta**: pronto para o mundo. Compliance, soak, launch.
-
-| # | Entrega |
-|---|---|
-| 1 | SOC2 Type I + GDPR compliance docs |
-| 2 | Soak period — 2 semanas de tasks reais sem incidentes P0 |
-| 3 | Blog post técnico + launch HN/Reddit |
-| 4 | Site público com landing page, docs, playground |
-| 5 | GitHub Discussions / Discord para comunidade |
-| 6 | Release notes finais — changelog, breaking changes, migration |
-| 7 | Video demo — TUI + Web + Desktop em ação |
-| 8 | Roadmap pós-0.1.0 — advanced analytics, ledger automation, mobile nativo |
-
-**Gate**: Tag `v0.1.0`. Soak limpo. Docs completos. Comunidade aberta.
-
----
-
-## Backlog Completo (por domínio)
-
-### Control Plane (Rust)
-- [x] REST 15 endpoints + gRPC
-- [x] Auth RBAC + rate limiting + audit middleware
-- [x] DSPy agent pipeline (4 estágios)
-- [x] ADR ledger (Merkle chain, secp256k1, NATS JetStream)
-- [x] CLI completo (server, client, test, doctor, restart, secrets)
-- [x] SSE streaming com timeout e degraded-state handling
-- [x] Session persistence PostgreSQL + checkpoint relay
-- [x] Health/liveness/readiness probes reais
-- [x] mTLS end-to-end — TLS nativo nos listeners REST (axum-server/rustls) e gRPC (tonic), client cert obrigatório quando CA configurado
-- [x] Multi-backend routing (llama.cpp + vLLM)
-- [x] Multi-tenant auth (OAuth2, SSO, LDAP)
-- [ ] Refresh token: validar contra DB e emitir novo access token (`src/server/mod.rs` TODO)
-- [ ] Logout: revogar refresh token no DB (`src/server/mod.rs` TODO)
-
-### Agent Pipeline (Python · DSPy)
-- [x] 26 contract tests (Pydantic + signatures)
-- [x] Checkpoint artifacts em `$NEOLAND_CHECKPOINT_DIR`
-- [x] FastAPI health endpoint
-- [x] Smoke E2E com LLM real documentado
-- [ ] Advanced ranking analytics por estágio
-- [ ] Deeper ADR-ledger automation
-
-### TUI (Rust · ratatui)
-- [x] Layout 3 colunas (Sessions / Conversation / Reasoning)
-- [x] 4 temas (Tokyo Night, Neon Glass, High Contrast, Monochrome)
-- [x] Chat bubbles + code blocks + streaming modes
-- [x] Pipeline tree com confidence badges + RWA anchors
-- [x] Sistema de comandos (/help, /provider, /theme, /search, etc.)
-- [x] Breakpoints interativos + steering
-- [x] Sessões com persistência
-- [ ] Smoke interativo com LLM real
-- [ ] Nerd Font icons como asset bundle Nix
-
-### Web Console (Leptos WASM)
-- [x] Layout 3 painéis (Sessions / Conversation / Reasoning)
-- [x] CSS artesanal 600 linhas, zero dependências
-- [x] Componentização (topbar, sessions, conversation, reasoning, composer)
-- [x] Streaming simulado (typewriter animation)
-- [x] Responsivo (720px, 980px breakpoints)
-- [x] Cargo workspace integrado com root
-- [x] Consumir REST + SSE do backend real
-- [x] Build WASM deterministico no Nix flake
-- [x] Testes de unidade (`cargo test -p neoland-web`, 16 testes)
-- [x] gRPC-web bridge server-side (tonic-web + HTTP/1.1 + CORS)
-- [x] Font IBM Plex Mono bundle Nix
-- [x] PWA service worker + manifesto + icons
-- [x] Dashboard de métricas (MetricsPanel component)
-- [x] Deploy estático servido pelo próprio Neoland (`--web-dist`)
-- [x] Testes de integração Leptos (`wasm-bindgen-test`, 12 testes WASM)
-
-### Desktop (Tauri)
-- [x] App shell nativa (Linux, macOS, Windows) — Tauri v2 scaffold
-- [x] System tray + notificações — tray.rs com menu Show/Hide/Quit
-- [ ] Instalação via Nix — derivation atual só valida (`cargo check` + README no $out); falta produzir binário Tauri real
-- [ ] Modo offline total — embedded Neoland server
-- [ ] Atalhos de teclado globais
-- [ ] DMG / AppImage / MSI installers via CI/CD
-- [ ] Auto-start on login
-- [ ] Deep link handling (`neoland://`)
-
-### Ops & Infra
-- [x] Nix flake (dev shell, env vars, SOPS, DB)
-- [x] Docker Compose (PostgreSQL + NATS + DSPy + control plane)
-- [x] SecureLLM Bridge + ml-ops-api Docker configs
-- [x] GPU passthrough CDI para VRAM-aware routing
-- [x] `just smoke` + `just preflight`
-- [x] Nix flake com build WASM (`nix build .#neoland-web`)
-- [x] Quickstart validado — NixOS e Ubuntu, <5 min até first task
-- [x] Kubernetes Helm chart (3+ réplicas, HA)
-- [x] mTLS end-to-end (TLS nativo nos listeners; smoke: gen-certs + curl mTLS)
-- [x] Output `neoland-full` no flake (control plane + Web Console, binário único)
-- [ ] Backup/restore + rollback documentado
-- [ ] Deploy non-Nix documentado (Ubuntu bare metal)
-- [ ] Limpar `azure-pipelines.yml`: job `frontend_checks` aponta `matrix/frontend` (legado, não existe no repo)
-
-### Docs & Comunidade
-- [x] ADRs arquiteturais (001-015+)
-- [x] Product vision + user journey
-- [x] README honesto (Leptos, TUI, CLI, screenshots, sem Next.js)
-- [x] Quickstart <5 min (NixOS + Ubuntu)
-- [x] Smoke E2E documentado com llama.cpp real
-- [x] OpenAPI docs publicadas
-- [x] Landing page pública
-- [x] Release notes (v0.0.1)
-- [ ] Blog post técnico de launch
-- [ ] Video demo (TUI + Web + Desktop)
-- [ ] GitHub Discussions / Discord
-- [ ] SOC2 Type I + GDPR docs
-
----
-
-## Decisões de Arquitetura
-
-| Decisão | Escolha |
-|---|---|
-| Web frontend | Leptos WASM (100% Rust, zero Node) |
-| CSS | Artesanal (zero build step) |
-| gRPC-web | tonic-web nativo (sem Envoy proxy) |
-| Font | IBM Plex Mono via Nix derivation |
-| Workspace | Cargo: root (TUI) + `web/` (Leptos) |
-| Desktop | Tauri + Leptos WASM |
-| Infra | Nix-first, Docker compat, Kubernetes para HA |
-| Auth | RBAC local → OAuth2 → SSO/LDAP |
-| LLM Backend | llama.cpp primário, vLLM opcional |
-| Compliance | SOC2 Type I no v0.1.0 |
-
----
-
-## Gate de Release Final (v0.1.0)
-
-- [x] `cargo test --workspace` passa (298 core + 16 web, validado 2026-07-18)
-- [ ] `nix build .#neoland-full` gera stack completa deterministicamente (output criado; validar no CI `validate-all`)
-- [ ] Web Console funcional com backend real (streaming, sessões, ADRs)
-- [ ] Desktop app instalável em Linux, macOS, Windows
-- [x] Multi-tenant auth operacional (OAuth2 + SSO)
-- [ ] Kubernetes Helm chart deploy funcional
-- [x] mTLS em todos os planes — TLS nativo REST+gRPC, smoke 4/4 (2026-07-18)
-- [ ] Smoke E2E completo com LLM real
-- [ ] Quickstart <5 min em NixOS e Ubuntu
-- [ ] Docs completos (README, OpenAPI, ADRs, compliance)
-- [ ] Soak period 2 semanas sem incidentes P0
-- [ ] Comunidade pública aberta (GitHub Discussions / Discord)
-
----
-
-## Progressão de Score
-
-| Área | Início | Ciclo 1 | Ciclo 2 | v0.0.1 | v0.1.0 |
-|---|---|---|---|---|---|
-| Control Plane | 95 | 95 | 96 | 99 | 100 |
-| DSPy Pipeline | 85 | 85 | 90 | 92 | 95 |
-| TUI | 90 | 90 | 92 | 95 | 98 |
-| Web Console | 45 | 65 | 87 | 92 | 95 |
-| Desktop | 40 | 0 | 15 | 75 | 90 |
-| Ops/Infra | 75 | 80 | 87 | 96 | 98 |
-| Docs | 60 | 75 | 87 | 93 | 95 |
-| **Geral** | **78** | **78** | **91** | **94** | **96** |
-
----
+O roadmap estará concluído quando o gate técnico, o gate público e o soak estiverem
+integralmente registrados, e a tag `v0.1.0` apontar para a mesma revisão validada.
+Até lá, o status correto do produto é **release candidate**, não “enterprise ready”.
 
 **Mantido por**: VoidNxSEC Team

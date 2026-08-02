@@ -19,7 +19,7 @@ use super::app::NotificationLevel;
 use super::commands::Command;
 
 fn app() -> AppState {
-    AppState::new("http://x".into(), "http://y".into())
+    AppState::new("http://x".into(), "http://g".into(), "http://y".into())
 }
 
 fn key(app: &mut AppState, code: KeyCode, mods: KeyModifiers) -> Action {

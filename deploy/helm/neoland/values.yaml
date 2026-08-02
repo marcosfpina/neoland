@@ -57,11 +57,17 @@ config:
   # Authentication (v0.0.1)
   auth:
     jwtSecret: "" # MUST be set via secrets — see secret.yaml
+    adminApiKey: "" # MUST be set via secrets — see secret.yaml
+    userApiKey: "" # MUST be set via secrets — see secret.yaml
+    readonlyApiKey: "" # MUST be set via secrets — see secret.yaml
     oauthBaseUrl: "https://neoland.example.com"
     googleClientId: ""
     googleClientSecret: ""
     githubClientId: ""
     githubClientSecret: ""
+    # Refuse to start with fallback dev API keys — fail closed when the
+    # secrets above aren't set for a production release.
+    requireVaultKeys: true
 
 # Service
 service:
@@ -99,14 +105,14 @@ resources:
 # Health probes
 livenessProbe:
   httpGet:
-    path: /health
+    path: /live
     port: 3001
   initialDelaySeconds: 10
   periodSeconds: 15
 
 readinessProbe:
   httpGet:
-    path: /live
+    path: /ready
     port: 3001
   initialDelaySeconds: 5
   periodSeconds: 10

@@ -18,3 +18,5 @@ node_modules/
 securellm-bridge
 .validate-logs/runtime/
 .validate-logs/bootstrap/
+/result
+/result-*

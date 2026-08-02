@@ -30,15 +30,15 @@ test_result() {
     if [ "$status" = "PASS" ]; then
         echo -e "✅ ${GREEN}PASS${NC} - $name"
         [ -n "$details" ] && echo -e "   ${details}"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     elif [ "$status" = "FAIL" ]; then
         echo -e "❌ ${RED}FAIL${NC} - $name"
         [ -n "$details" ] && echo -e "   ${RED}${details}${NC}"
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
     else
         echo -e "⏳ ${YELLOW}PENDING${NC} - $name"
         [ -n "$details" ] && echo -e "   ${details}"
-        ((PENDING++))
+        PENDING=$((PENDING + 1))
     fi
 }
 
@@ -138,24 +138,15 @@ fi
 echo ""
 echo -e "${BLUE}━━━ Phase 3: CI/CD Pipeline ━━━${NC}"
 
-# GitHub Actions
-if [ -f ".github/workflows/test.yml" ]; then
-    test_result "GitHub Actions (test.yml)" "PASS"
-else
-    test_result "GitHub Actions (test.yml)" "FAIL"
-fi
-
-if [ -f ".github/workflows/lint.yml" ]; then
-    test_result "GitHub Actions (lint.yml)" "PASS"
-else
-    test_result "GitHub Actions (lint.yml)" "FAIL"
-fi
-
-if [ -f ".github/workflows/build.yml" ]; then
-    test_result "GitHub Actions (build.yml)" "PASS"
-else
-    test_result "GitHub Actions (build.yml)" "FAIL"
-fi
+# GitHub Actions — these are the current release gates. Keep this list in
+# sync with the workflows that actually own CI, full validation and security.
+for workflow in ci.yml validate-all.yml secret-scan.yml trivy.yml; do
+    if [ -f ".github/workflows/${workflow}" ]; then
+        test_result "GitHub Actions (${workflow})" "PASS"
+    else
+        test_result "GitHub Actions (${workflow})" "FAIL"
+    fi
+done
 
 # Pre-commit hooks
 if [ -f ".githooks/pre-commit" ] && [ -x ".githooks/pre-commit" ]; then
@@ -203,7 +194,7 @@ else
 fi
 
 # Alert rules
-if [ -f "prometheus/alerts.yml" ]; then
+if [ -f "deploy/prometheus/alerts.yml" ]; then
     test_result "Prometheus Alert Rules" "PASS"
 else
     test_result "Prometheus Alert Rules" "PENDING" "Not yet implemented (Phase 4.4)"
@@ -213,10 +204,10 @@ echo ""
 echo -e "${BLUE}━━━ Phase 5: Infrastructure & Scalability ━━━${NC}"
 
 # Kubernetes manifests
-if [ -d "k8s" ] || [ -d "kubernetes" ]; then
-    test_result "Kubernetes Manifests" "PASS"
+if [ -f "deploy/helm/neoland/Chart.yaml" ]; then
+    test_result "Kubernetes Helm chart" "PASS"
 else
-    test_result "Kubernetes Manifests" "PENDING" "Not yet implemented (Phase 5)"
+    test_result "Kubernetes Helm chart" "FAIL"
 fi
 
 # Docker/Container
@@ -227,7 +218,12 @@ else
 fi
 
 # Database migrations
-test_result "Database Migrations" "PENDING" "SQLite/Vector DB not yet fully integrated"
+MIGRATION_COUNT=$(find migrations -maxdepth 1 -name "*.sql" 2>/dev/null | wc -l || echo "0")
+if [ "$MIGRATION_COUNT" -ge 1 ]; then
+    test_result "Database Migrations ($MIGRATION_COUNT)" "PASS"
+else
+    test_result "Database Migrations" "FAIL"
+fi
 
 # Service mesh
 test_result "Service Mesh Integration" "PENDING" "Not yet implemented (Phase 5)"
@@ -244,17 +240,17 @@ else
 fi
 
 # API Documentation
-if [ -f "docs/API.md" ]; then
-    test_result "API Documentation" "PASS"
+if [ -f "src/openapi.rs" ] && grep -q "OpenApi" src/openapi.rs; then
+    test_result "OpenAPI Documentation" "PASS" "Generated from src/openapi.rs and served by the control plane"
 else
-    test_result "API Documentation" "PENDING" "Not yet implemented"
+    test_result "OpenAPI Documentation" "FAIL"
 fi
 
 # Security documentation
-if [ -f "SECURITY.md" ]; then
+if [ -f "docs/neoland-authentication.md" ] && [ -f "docs/neoland-sops-setup.md" ]; then
     test_result "Security Documentation" "PASS"
 else
-    test_result "Security Documentation" "PENDING" "Not yet implemented"
+    test_result "Security Documentation" "FAIL"
 fi
 
 # Compliance docs
@@ -295,7 +291,7 @@ cat > /tmp/neoland-validation-report.json <<EOF
     "phase2_testing": "PARTIAL",
     "phase3_cicd": "COMPLETE",
     "phase4_operational": "PARTIAL",
-    "phase5_infrastructure": "NOT_STARTED",
+    "phase5_infrastructure": "PARTIAL",
     "phase6_compliance": "NOT_STARTED"
   }
 }

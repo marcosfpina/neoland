@@ -77,9 +77,10 @@ services:
       NEOLAND_LLM_PROVIDER: ${NEOLAND_LLM_PROVIDER:-openai}
       NEOLAND_LLM_MODEL: ${NEOLAND_LLM_MODEL:-gpt-4o-mini}
       NEOLAND_NATS_URL: nats://nats:4222
-      NEOLAND_AGENTS_DSPY_URL: http://dspy-pipeline:8001
+      NEOLAND_DSPY_URL: http://dspy-pipeline:8001
       NEOLAND_SHM_PATH: /run/neoland/agent-flags.shm
       NEOLAND_CHECKPOINT_DIR: /var/lib/neoland/checkpoints/adr
+      NEOLAND_REQUIRE_VAULT_KEYS: ${NEOLAND_REQUIRE_VAULT_KEYS:-1}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - shm_ipc:/run/neoland

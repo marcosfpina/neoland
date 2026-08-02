@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "neoland")]
-#[command(version = "0.0.1")]
+#[command(version)]
 #[command(about = "Neoland — Autonomous AI Engineering Platform", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
@@ -36,6 +36,10 @@ pub enum Commands {
         #[arg(long, env = "NEOLAND_SERVER_URL", default_value = "http://localhost:3001")]
         server_url: String,
 
+        /// URL do servidor gRPC (usado pelo fallback direto de LLM)
+        #[arg(long, env = "NEOLAND_GRPC_URL", default_value = "http://localhost:50051")]
+        grpc_url: String,
+
         /// URL do gateway LLM principal
         #[arg(
             long = "neoland-gateway-url",
@@ -52,7 +56,7 @@ pub enum Commands {
         rest_endpoint: String,
 
         /// Endpoint gRPC para testes
-        #[arg(long, default_value = "http://localhost:3001")]
+        #[arg(long, default_value = "http://localhost:50051")]
         grpc_endpoint: String,
 
         /// Renderiza o relatório em JSON
@@ -132,6 +136,16 @@ impl Cli {
 }
 
 fn should_default_to_server(args: &[String]) -> bool {
+    // `neoland --help` / `--version` devem mostrar o help/versão da raiz
+    // (lista de subcomandos), não ser reescritos para `neoland server --help`.
+    let wants_help_or_version = args
+        .iter()
+        .skip(1)
+        .any(|arg| matches!(arg.as_str(), "-h" | "--help" | "-V" | "--version"));
+    if wants_help_or_version {
+        return false;
+    }
+
     match args.get(1).map(String::as_str) {
         None => true,
         Some(arg) if arg.starts_with('-') => true,
@@ -231,8 +245,9 @@ mod tests {
         .expect("client parses");
 
         match cli.command {
-            Commands::Client { server_url, neoland_gateway_url } => {
+            Commands::Client { server_url, grpc_url, neoland_gateway_url } => {
                 assert_eq!(server_url, "http://localhost:3001");
+                assert_eq!(grpc_url, "http://localhost:50051");
                 assert_eq!(neoland_gateway_url, "http://localhost:8080");
             },
             _ => panic!("expected client command"),
@@ -270,5 +285,31 @@ mod tests {
     fn does_not_default_when_subcommand_is_explicit() {
         let args = vec!["neoland".to_string(), "doctor".to_string()];
         assert!(!should_default_to_server(&args));
+    }
+
+    #[test]
+    fn does_not_default_when_help_or_version_is_requested() {
+        for flag in ["-h", "--help", "-V", "--version"] {
+            let args = vec!["neoland".to_string(), flag.to_string()];
+            assert!(!should_default_to_server(&args), "flag {flag} must reach root parser");
+        }
+
+        // Help depois de flags globais também deve mostrar o help da raiz.
+        let args = vec![
+            "neoland".to_string(),
+            "--log-level".to_string(),
+            "debug".to_string(),
+            "--help".to_string(),
+        ];
+        assert!(!should_default_to_server(&args));
+    }
+
+    #[test]
+    fn root_help_lists_subcommands() {
+        let mut cmd = Cli::command();
+        let help = cmd.render_long_help().to_string();
+        for sub in ["server", "client", "test", "restart", "doctor", "gen-certs"] {
+            assert!(help.contains(sub), "root help must list `{sub}`");
+        }
     }
 }

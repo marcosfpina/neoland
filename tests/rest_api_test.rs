@@ -556,6 +556,73 @@ async fn e2e_agent_tools_with_auth() {
     }
 }
 
+#[tokio::test]
+async fn e2e_agent_steer_requires_auth() {
+    ensure_server_ready().await;
+
+    let client = http_client();
+    let resp = client
+        .post(format!(
+            "{BASE_URL}/v1/agents/session/00000000-0000-0000-0000-000000000000/steer"
+        ))
+        .json(&serde_json::json!({"message": "test steer"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/session/:id/steer failed");
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "Steer without auth should return 401");
+}
+
+#[tokio::test]
+async fn e2e_agent_steer_rejects_bearer_header() {
+    // Regression test: the TUI used to send `Authorization: Bearer <key>` for
+    // live-steering while the REST auth middleware only accepts `X-API-Key`,
+    // which made `/steer` silently 401 for every real user. Guard against
+    // that header ever coming back.
+    ensure_server_ready().await;
+
+    let client = http_client();
+    let resp = client
+        .post(format!(
+            "{BASE_URL}/v1/agents/session/00000000-0000-0000-0000-000000000000/steer"
+        ))
+        .header("Authorization", format!("Bearer {ADMIN_API_KEY}"))
+        .json(&serde_json::json!({"message": "test steer"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/session/:id/steer with Bearer header failed");
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "Steer with only an Authorization: Bearer header must still 401 — only X-API-Key is accepted"
+    );
+}
+
+#[tokio::test]
+async fn e2e_agent_steer_with_auth() {
+    ensure_server_ready().await;
+
+    let client = http_client();
+    let resp = client
+        .post(format!(
+            "{BASE_URL}/v1/agents/session/00000000-0000-0000-0000-000000000000/steer"
+        ))
+        .header("X-API-Key", ADMIN_API_KEY)
+        .json(&serde_json::json!({"message": "test steer"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/session/:id/steer with X-API-Key failed");
+
+    let status = resp.status();
+    assert_ne!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "Steer with a valid X-API-Key must pass auth (got 401)"
+    );
+    println!("Agent steer with admin key: HTTP {status}");
+}
+
 // =============================================================================
 // OpenAPI / Swagger endpoint tests
 // =============================================================================
