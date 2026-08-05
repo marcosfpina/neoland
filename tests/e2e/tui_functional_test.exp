@@ -1,0 +1,139 @@
+#!/usr/bin/expect -f
+# Functional test for startup, commands, error handling, and clean shutdown.
+
+set timeout 20
+set binary [lindex $argv 0]
+set server_url [lindex $argv 1]
+set grpc_url [lindex $argv 2]
+set gateway_url [lindex $argv 3]
+set config_dir [lindex $argv 4]
+set mode [lindex $argv 5]
+set api_key [lindex $argv 6]
+
+# Ratatui redraws the complete screen on every tick. Keep CI logs readable;
+# explicit failure messages below retain the relevant diagnostic signal.
+log_user 0
+
+if {$mode == "missing-key"} {
+    set api_key ""
+}
+
+spawn -noecho env TERM=xterm-256color XDG_CONFIG_HOME=$config_dir NEOLAND_API_KEY=$api_key \
+    $binary client --server-url $server_url --grpc-url $grpc_url \
+    --neoland-gateway-url $gateway_url
+# Expect creates a PTY with a 0x0 window in headless CI. Ratatui correctly
+# renders an empty frame at that size, so assign a realistic terminal before
+# waiting for the first screen.
+exec stty rows 40 cols 120 < $spawn_out(slave,name)
+
+expect {
+    -re {Neoland|NEOLAND} {}
+    eof { puts "FAIL: TUI exited during startup ($mode)"; exit 1 }
+    timeout { puts "FAIL: TUI startup timed out ($mode)"; exit 1 }
+}
+
+send -- "/help\r"
+sleep 1
+expect {
+    -re {Commands} {}
+    timeout { puts "FAIL: /help did not render"; exit 1 }
+}
+# `?` is an unambiguous single-byte toggle. A lone ESC can be held by terminal
+# parsers while they wait to decide whether it starts an Alt-key sequence.
+send -- "?"
+sleep 1
+
+# Dismiss any startup warning so command confirmations are independently
+# observable. The missing-key behavior is asserted again below on submission.
+send -- "\033"
+sleep 1
+
+send -- "/theme high-contrast\r"
+sleep 1
+expect {
+    -re {theme.*→.*high-contrast} {}
+    timeout { puts "FAIL: /theme did not apply"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "/stream thinking\r"
+sleep 1
+expect {
+    -re {stream.*→.*thinking} {}
+    timeout { puts "FAIL: /stream did not apply"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "/preset safe\r"
+sleep 1
+expect {
+    -re {preset.*→.*safe} {}
+    timeout { puts "FAIL: /preset did not apply"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "/provider local\r"
+sleep 1
+expect {
+    -re {provider.*→.*local} {}
+    timeout { puts "FAIL: /provider did not apply"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "/queue\r"
+sleep 1
+expect {
+    -re {Queue} {}
+    timeout { puts "FAIL: /queue did not render"; exit 1 }
+}
+
+send -- "/search Queue\r"
+sleep 1
+expect {
+    -re {/search:.*match} {}
+    timeout { puts "FAIL: /search did not report matches"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "/new\r"
+sleep 1
+expect {
+    -re {nova.*sess} {}
+    timeout { puts "FAIL: /new did not create a session"; exit 1 }
+}
+send -- "\033"
+sleep 1
+
+send -- "functional e2e task\r"
+sleep 1
+if {$mode == "missing-key"} {
+    expect {
+        -re {NEOLAND_API_KEY} {}
+        timeout { puts "FAIL: missing API key did not block task"; exit 1 }
+    }
+} else {
+    expect {
+        -re {server returned 503|error:} {}
+        timeout { puts "FAIL: authenticated pipeline error was not surfaced"; exit 1 }
+    }
+}
+
+send -- "\003"
+expect {
+    eof {}
+    timeout { puts "FAIL: Ctrl+C did not exit cleanly"; exit 1 }
+}
+
+catch wait result
+set exit_code [lindex $result 3]
+if {$exit_code != 0} {
+    puts "FAIL: TUI exited with status $exit_code ($mode)"
+    exit 1
+}
+
+puts "PASS: TUI functional flow ($mode)"

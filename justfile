@@ -121,6 +121,10 @@ visual:
 test-tui:
     cargo test --lib tui::
 
+# Real pseudo-terminal functional test: startup, commands, failures, restart, exit
+test-tui-e2e:
+    nix develop --command bash tests/e2e/run_e2e.sh
+
 # ─── Check & Lint ─────────────────────────────────────────────────────────
 
 # Validate compilation (lib only, fast)
@@ -331,6 +335,9 @@ validate-all:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
     cargo test --workspace --lib
+    cargo test --test rest_api_test
+    cd agents && poetry run pytest tests/ -m contract -v
+    nix develop --command bash tests/e2e/run_e2e.sh
     nix build .#neoland-full
     just tls-smoke
 

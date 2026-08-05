@@ -89,6 +89,27 @@ jobs:
       - name: Contract tests
         run: cd agents && poetry run pytest tests/ -m contract -v
 
+  functional-e2e:
+    name: REST + TUI functional E2E
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config expect curl
+
+      - name: REST API E2E
+        run: cargo test --test rest_api_test -- --nocapture
+
+      - name: TUI functional E2E
+        run: bash tests/e2e/run_e2e.sh
+
   infra-render:
     name: Docker Compose · Helm render
     runs-on: ubuntu-latest
@@ -171,13 +192,14 @@ jobs:
     name: Release gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [rust-quality, tls-smoke, python-contracts, infra-render, nix-outputs]
+    needs: [rust-quality, tls-smoke, python-contracts, functional-e2e, infra-render, nix-outputs]
     steps:
       - name: Write release evidence
         env:
           RUST_RESULT: ${{ needs.rust-quality.result }}
           TLS_RESULT: ${{ needs.tls-smoke.result }}
           PYTHON_RESULT: ${{ needs.python-contracts.result }}
+          FUNCTIONAL_RESULT: ${{ needs.functional-e2e.result }}
           INFRA_RESULT: ${{ needs.infra-render.result }}
           NIX_RESULT: ${{ needs.nix-outputs.result }}
         run: |
@@ -194,6 +216,7 @@ jobs:
             echo "| Rust fmt, clippy, tests | ${RUST_RESULT} |"
             echo "| TLS/mTLS smoke | ${TLS_RESULT} |"
             echo "| Python contracts | ${PYTHON_RESULT} |"
+            echo "| REST + TUI functional E2E | ${FUNCTIONAL_RESULT} |"
             echo "| Docker Compose + Helm | ${INFRA_RESULT} |"
             echo "| Nix outputs + wrapper | ${NIX_RESULT} |"
           } | tee release-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -211,10 +234,11 @@ jobs:
             ${{ needs.rust-quality.result }}
             ${{ needs.tls-smoke.result }}
             ${{ needs.python-contracts.result }}
+            ${{ needs.functional-e2e.result }}
             ${{ needs.infra-render.result }}
             ${{ needs.nix-outputs.result }}
         run: |
-          if [ "$RESULTS" != "success success success success success" ]; then
+          if [ "$RESULTS" != "success success success success success success" ]; then
             echo "Release gate failed: $RESULTS" >&2
             exit 1
           fi

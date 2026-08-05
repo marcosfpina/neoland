@@ -9,8 +9,11 @@ set -euo pipefail
 
 BIN="${1:-./target/debug/neoland}"
 TLS_DIR="secrets/tls"
-REST_URL="https://localhost:3001/health"
-SERVER_LOG="$(mktemp)"
+REST_PORT="${NEOLAND_TLS_SMOKE_REST_PORT:-30443}"
+GRPC_PORT="${NEOLAND_TLS_SMOKE_GRPC_PORT:-50443}"
+REST_URL="https://localhost:${REST_PORT}/health"
+TMP_ROOT="$(mktemp -d -t neoland-tls-smoke.XXXXXX)"
+SERVER_LOG="$TMP_ROOT/server.log"
 
 if [[ ! -f "$TLS_DIR/ca/ca.crt" ]]; then
   echo "Certificados não encontrados — rodando gen-certs.sh --auto"
@@ -20,10 +23,12 @@ fi
 echo "▶ Subindo server com mTLS (log: $SERVER_LOG)..."
 RUST_BACKTRACE=1 \
 NEOLAND_SKIP_EMBEDDINGS=1 \
+NEOLAND_NATS_ENABLED=false \
+AUDIT_LOG_PATH="$TMP_ROOT/audit.log" \
 NEOLAND_TLS_CA_CERT="$TLS_DIR/ca/ca.crt" \
 NEOLAND_TLS_SERVER_CERT="$TLS_DIR/server/server.crt" \
 NEOLAND_TLS_SERVER_KEY="$TLS_DIR/server/server.key" \
-"$BIN" server > "$SERVER_LOG" 2>&1 &
+"$BIN" server --rest-port "$REST_PORT" --grpc-port "$GRPC_PORT" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
 cleanup() {
@@ -33,7 +38,8 @@ cleanup() {
     echo "── diagnóstico: server vivo? ──"
     if kill -0 "$SERVER_PID" 2>/dev/null; then
       echo "server VIVO (pid $SERVER_PID) — listeners:"
-      ss -tlnp 2>/dev/null | grep -E '3001|50051' || echo "  (nenhum listener em 3001/50051)"
+      ss -tlnp 2>/dev/null | grep -E "${REST_PORT}|${GRPC_PORT}" \
+        || echo "  (nenhum listener em ${REST_PORT}/${GRPC_PORT})"
     else
       wait "$SERVER_PID" 2>/dev/null
       echo "server MORTO — exit code: $?"
@@ -50,6 +56,8 @@ cleanup() {
     curl --version | head -1
   fi
   kill "$SERVER_PID" 2>/dev/null || true
+  wait "$SERVER_PID" 2>/dev/null || true
+  rm -rf "$TMP_ROOT"
   exit $status
 }
 trap cleanup EXIT
@@ -80,13 +88,13 @@ fi
 echo "  ✅ rejeitado"
 
 echo "▶ 3/4 HTTP puro deve falhar..."
-if curl -s --max-time 10 "http://localhost:3001/health" > /dev/null 2>&1; then
+if curl -s --max-time 10 "http://localhost:${REST_PORT}/health" > /dev/null 2>&1; then
   echo "  ❌ ERRO: HTTP puro foi aceito"; exit 1
 fi
 echo "  ✅ rejeitado"
 
-echo "▶ 4/4 Handshake TLS no gRPC (:50051)..."
-echo | openssl s_client -connect localhost:50051 \
+echo "▶ 4/4 Handshake TLS no gRPC (:${GRPC_PORT})..."
+echo | openssl s_client -connect "localhost:${GRPC_PORT}" \
   -CAfile "$TLS_DIR/ca/ca.crt" \
   -cert "$TLS_DIR/client/client.crt" \
   -key "$TLS_DIR/client/client.key" 2>/dev/null \

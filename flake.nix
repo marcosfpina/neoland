@@ -426,6 +426,7 @@
               rustup
               python313
               poetry
+              expect # strict terminal E2E tests for the TUI
               # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
               stdenv.cc.cc.lib
               glib

@@ -46,6 +46,11 @@ fn spawn_server_thread() {
         std::env::set_var("NEOLAND_DSPY_URL", "http://127.0.0.1:9");
         std::env::set_var("NEOLAND_PIPELINE_TIMEOUT_SECS", "2");
         std::env::set_var("NEOLAND_NATS_ENABLED", "false");
+        std::env::set_var("AUDIT_LOG_PATH", "/tmp/neoland-rest-api-test-audit.log");
+        // These tests intentionally exercise database-degraded behavior. Do not
+        // inherit the developer shell database or its /run-backed mmap paths.
+        std::env::remove_var("DATABASE_URL");
+        std::env::remove_var("NEOLAND_DATABASE_URL");
         // Avoid blocking server startup on a HuggingFace Hub download —
         // CI runners have no cached model and may lack network access to
         // huggingface.co, which was pushing the /health check past its

@@ -1407,9 +1407,12 @@ fn init_audit_logger() -> anyhow::Result<(AuditLogger, String)> {
     match AuditLogger::new(DEFAULT_AUDIT_LOG_PATH) {
         Ok(audit_logger) => Ok((audit_logger, DEFAULT_AUDIT_LOG_PATH.to_string())),
         Err(err)
-            if err
-                .downcast_ref::<std::io::Error>()
-                .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied) =>
+            if err.downcast_ref::<std::io::Error>().is_some_and(|io_err| {
+                matches!(
+                    io_err.kind(),
+                    std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+                )
+            }) =>
         {
             let mut last_fallback_error = None;
 

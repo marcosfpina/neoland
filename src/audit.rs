@@ -229,6 +229,12 @@ impl AuditLogger {
             std::fs::create_dir_all(parent)?;
         }
 
+        // Validate the complete destination during startup. A parent directory
+        // may already exist on a read-only filesystem, in which case
+        // `create_dir_all` succeeds and the first security event would fail much
+        // later, after the service had already reported itself as available.
+        OpenOptions::new().create(true).append(true).open(&log_path)?;
+
         Ok(Self { log_path, alert_handler: Arc::new(RwLock::new(None)) })
     }
 

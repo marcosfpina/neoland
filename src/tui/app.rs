@@ -1075,11 +1075,9 @@ impl AppState {
         }
     }
 
-    /// Dismiss the oldest notification.
+    /// Dismiss the currently visible (newest) notification.
     pub fn dismiss_notification(&mut self) {
-        if !self.notifications.is_empty() {
-            self.notifications.remove(0);
-        }
+        self.notifications.pop();
     }
 
     /// Remove expired notifications (older than 8s).
@@ -1513,5 +1511,17 @@ mod tests {
         let mut a = AppState::new("u".into(), "g".into(), "m".into());
         a.history_prev();
         assert_eq!(a.history_idx, None);
+    }
+
+    #[test]
+    fn dismiss_notification_removes_the_newest_feedback() {
+        let mut a = AppState::new("u".into(), "g".into(), "m".into());
+        a.add_notification(NotificationLevel::Warning, "older warning");
+        a.add_notification(NotificationLevel::Success, "latest command");
+
+        a.dismiss_notification();
+
+        assert_eq!(a.notifications.len(), 1);
+        assert_eq!(a.notifications[0].message, "older warning");
     }
 }
