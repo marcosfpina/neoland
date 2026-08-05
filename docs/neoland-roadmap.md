@@ -1,9 +1,11 @@
-> **Source-of-truth movida para `ROADMAP.md` na raiz do projeto (2026-05-31). Este arquivo é histórico.**
+> **Source-of-truth movida para `ROADMAP.md` na raiz do projeto (2026-05-31).**
+> Este arquivo é um snapshot histórico de 2026-05-17. Percentuais, gaps e nomes
+> de frontend abaixo não representam o release candidate atual.
 
 # Neoland Roadmap To Responsible Public Release
 
 **Last Updated**: 2026-05-17
-**Current Reading**: **78/100 toward responsible public pre-release**
+**Historical Reading**: **78/100 toward responsible public pre-release**
 **Definition of prod for Neoland**: public access and public sharing with honest scope, safe defaults, visible limitations, and a recoverable operating path.
 **Rule**: when roadmap text and code diverge, code wins and this file must be updated.
 

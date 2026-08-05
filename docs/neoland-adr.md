@@ -789,7 +789,7 @@ Enterprise | Custom      | Unlimited, 24/7 support, SLA
 
 **Positivas**:
 
-- ✅ **Enterprise Ready**: Compliance + Multi-tenancy + HA
+- 🎯 **Enterprise-readiness target**: compliance sign-off + multi-tenancy + HA evidence
 - ✅ **Revenue Stream**: Recurring SaaS revenue
 - ✅ **Competitive Moat**: Observability integrada = diferencial
 

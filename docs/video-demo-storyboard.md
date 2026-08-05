@@ -175,7 +175,9 @@ neoland-7d4f8b9c-fghij     1/1     Running
 neoland-7d4f8b9c-klmno     1/1     Running
 ```
 
-**VO**: "One Helm command deploys the full stack — 3 replicas, auto-scaling to 10, PostgreSQL with pgvector, NATS JetStream for event streaming, and mTLS between every service. Production-ready in under a minute."
+**VO**: "The Helm chart renders a three-replica control plane with autoscaling,
+health probes and explicit PostgreSQL and NATS dependencies. Live-environment
+validation remains a release gate."
 
 ---
 
@@ -188,7 +190,7 @@ neoland-7d4f8b9c-klmno     1/1     Running
 ║  github.com/VoidNxSEC/neoland       ║
 ║                                      ║
 ║  MIT License · Open Source           ║
-║  100% Rust · Nix reproducible        ║
+║  Rust UI/control plane · Python DSPy ║
 ╚══════════════════════════════════════╝
 
        Star it. Fork it. Ship ADRs.
@@ -211,11 +213,11 @@ neoland-7d4f8b9c-klmno     1/1     Running
 - **SFX**: Subtle keyboard clicks on typing scenes, soft "whoosh" on transitions
 
 ### Key Messages (must land)
-1. **100% Rust** — no Python, no Node, no Envoy
+1. **Rust operator surfaces** — control plane, TUI and Leptos WASM; Python DSPy orchestration
 2. **4-stage agent pipeline** — Junior → Senior → Architect → Tech-Leader
 3. **Multi-backend routing** — local, GPU, cloud, automatic
 4. **Enterprise auth** — OAuth2, SSO, LDAP, RBAC
-5. **Production deployment** — `helm install`, 3 replicas, mTLS
+5. **Release-candidate deployment** — CI-rendered Helm, probes and mTLS smoke
 6. **Open source** — MIT, reproducible Nix builds
 
 ### B-Roll (optional, for longer version)

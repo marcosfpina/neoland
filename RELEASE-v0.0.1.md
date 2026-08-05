@@ -1,17 +1,28 @@
-# Neoland v0.0.1 — "Enterprise Ready"
+# Neoland v0.0.1 — Release Candidate Baseline
 
-**Data**: 2026-07-18 · **Codename**: Enterprise Ready  
+**Data**: 2026-07-18 · **Codename**: Release Candidate Baseline
 **Tipo**: Initial Release · **Status**: Pre-Release
+
+> **Accuracy note (2026-08-02):** this document describes the v0.0.1
+> pre-release feature set. It is not evidence that Neoland is production-ready
+> or enterprise-ready. Current status and release gates live in
+> [`ROADMAP.md`](ROADMAP.md).
 
 ---
 
 ## 🎯 Overview
 
-Neoland v0.0.1 is the **initial public release**, aggregating every development cycle to date into a single enterprise-ready baseline: authentication, encryption, observability, and high availability. Every control plane requires OAuth2 or API key authentication, both listeners (REST and gRPC) serve native TLS/mTLS, and the platform ships with a production-grade Helm chart. All versioning starts here — future releases follow from 0.0.1.
+Neoland v0.0.1 is the initial pre-release baseline, aggregating authentication,
+encryption, observability and HA-oriented deployment configuration. REST and
+gRPC support native TLS/mTLS, and the Helm chart is render-validated in CI;
+live-environment, soak, compliance and signed-distribution gates remain open.
 
 ### What's Neoland?
 
-An **autonomous AI engineering platform** that runs a 4-stage DSPy agent pipeline (Junior → Senior → Architect → Tech-Leader) to generate Architecture Decision Records (ADRs). Ships with a TUI, Web Console (Leptos WASM), and Desktop app (Tauri). **100% Rust** from the control plane to the browser.
+An AI engineering platform that runs a 4-stage Python DSPy agent pipeline
+(Junior → Senior → Architect → Tech-Leader) to generate Architecture Decision
+Records (ADRs). Its operator surfaces use Rust: control plane, TUI, Leptos WASM
+Web Console and the Tauri desktop shell.
 
 ---
 
@@ -46,7 +57,7 @@ An **autonomous AI engineering platform** that runs a 4-stage DSPy agent pipelin
 ### Kubernetes Helm Chart (#4)
 - **HA deployment**: 3 replicas default, HPA up to 10
 - **Rolling updates**: `maxUnavailable: 1`, `maxSurge: 1`
-- **Health checks**: Liveness (`/health`) + Readiness (`/live`) probes
+- **Health checks**: Liveness (`/live`) + Readiness (`/ready`) probes
 - **Ingress**: nginx + cert-manager TLS with Let's Encrypt
 - **Resources**: 500m CPU / 512Mi request, 2000m CPU / 2Gi limit
 - **Anti-affinity**: Pods spread across nodes
@@ -175,7 +186,7 @@ docker compose up -d
 - [ ] SOC2 Type I + GDPR compliance
 - [ ] Soak period — 2 weeks of real tasks, zero P0 incidents
 - [ ] Public launch: landing page, blog post, community
-- [ ] Refresh-token validation/revocation backed by DB
+- [x] Refresh-token validation/revocation backed by DB
 - [ ] Native desktop binaries via Nix (current derivation validates only)
 
 ---
