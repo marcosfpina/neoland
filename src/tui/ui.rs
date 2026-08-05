@@ -178,7 +178,9 @@ pub fn render(f: &mut Frame<'_>, app: &mut AppState) {
 
 /// Normal TUI layout (no overlays).
 fn render_normal(f: &mut Frame<'_>, ui_area: Rect, app: &mut AppState) {
-    let notif_height: u16 = if app.notifications.is_empty() { 0 } else { 1 };
+    // One row for content plus one for the bottom border. With a one-row area
+    // Ratatui renders only the border and silently hides the notification.
+    let notif_height: u16 = if app.notifications.is_empty() { 0 } else { 2 };
     let [header, notif, canvas, input] = Layout::vertical([
         Constraint::Length(2),            // Header
         Constraint::Length(notif_height), // Notification bar
@@ -325,7 +327,10 @@ fn render_header(f: &mut Frame<'_>, area: Rect, app: &AppState) {
 /// Notification bar — renders the most recent notification as a colored line.
 fn render_notification_bar(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     let pal = app.theme.palette();
-    if let Some(n) = app.notifications.first() {
+    // Show the newest feedback. Displaying the oldest item made command
+    // confirmations appear missing for up to eight seconds behind a prior
+    // warning, even though the command had already taken effect.
+    if let Some(n) = app.notifications.last() {
         let (icon, color, label) = match n.level {
             NotificationLevel::Error => ("󰅖", pal.error, "Error"),
             NotificationLevel::Warning => ("󰀦", pal.warning, "Warning"),
@@ -807,6 +812,16 @@ fn render_conversation_panel(f: &mut Frame<'_>, area: Rect, app: &mut AppState) 
         }
     }
 
+    // Operational and command feedback still arrives through `output_text`
+    // (health failures, queue status, cancellation, provider errors, etc.).
+    // Keep it visible without duplicating a final assistant message that was
+    // already committed to the conversation.
+    let output_is_duplicate =
+        app.messages.last().map(|m| m.content.as_str()) == Some(app.output_text.as_str());
+    if !app.output_text.trim().is_empty() && !output_is_duplicate {
+        push_bubble(&mut lines, &MessageRole::System, &app.output_text, inner_w, &pal, false);
+    }
+
     render_panel_content(f, area, app, Panel::Conversation, " 󰭹 Conversation ", false, lines);
 }
 
@@ -1178,6 +1193,29 @@ mod tests {
         assert!(text.contains("Sessions"), "sessions column missing");
         assert!(text.contains("Conversation"), "conversation column missing");
         assert!(text.contains("Reasoning"), "reasoning column missing");
+    }
+
+    #[test]
+    fn renders_latest_notification_message() {
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
+        app.add_notification(NotificationLevel::Warning, "older warning");
+        app.add_notification(NotificationLevel::Success, "theme → high-contrast");
+
+        let text = render_to_string(&mut app, 120, 40);
+
+        assert!(text.contains("theme → high-contrast"), "latest notification missing");
+        assert!(!text.contains("older warning"), "stale notification rendered first");
+    }
+
+    #[test]
+    fn renders_operational_output_without_chat_messages() {
+        let mut app = AppState::new("http://x".into(), "http://g".into(), "http://y".into());
+        app.output_text = "── Queue ──\n  queued:  0".into();
+
+        let text = render_to_string(&mut app, 120, 40);
+
+        assert!(text.contains("Queue"), "command output missing");
+        assert!(text.contains("queued:"), "command details missing");
     }
 
     #[test]

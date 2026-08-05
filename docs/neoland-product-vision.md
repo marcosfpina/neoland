@@ -2,10 +2,10 @@
 
 > **Visão de Produto**: Tornar IA local acessível e visual para usuários não-técnicos
 
-> Current status note (2026-05-17): use this as aspirational product context.
-> The current delivery target is the responsible public pre-release tracked in
-> [`neoland-roadmap.md`](neoland-roadmap.md), with the workbench and TUI focused
-> on verified operator/code-task flows first.
+> Current status note (2026-08-02): this is aspirational product context. Version
+> labels and mockups below are historical planning concepts, not shipped-release
+> claims. The canonical release target and evidence live in
+> [`ROADMAP.md`](../ROADMAP.md).
 
 ---
 
@@ -73,7 +73,7 @@ flowchart TD
 
 ## 🎨 UI Evolution Roadmap
 
-### **v0.2.0 - TUI (Now)** ✅
+### **Historical concept: v0.2.0 TUI milestone**
 
 **Target**: Developers + Power Users
 
@@ -304,7 +304,7 @@ User → Neoland Cloud (tenant) → Spectre (multi-tenant)
 │                                                        │
 │         ✅ Local-first (your GPU)                      │
 │         ✅ Open source (MIT)                           │
-│         ✅ Enterprise-ready (SOC2)                     │
+│         ◇ Release candidate · public gates tracked     │
 │                                                        │
 │    [Try Demo]  [Read Docs]  [Star on GitHub ⭐ 2.3k]  │
 │                                                        │

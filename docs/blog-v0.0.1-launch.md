@@ -1,14 +1,22 @@
-# Neoland: An Autonomous AI Engineering Platform — 100% Rust, From Kernel to Browser
+# Neoland: Rust Control Plane and UI with DSPy Agent Orchestration
 
-**We built an AI platform that writes Architecture Decision Records autonomously. Here's how we did it entirely in Rust — control plane, WebAssembly frontend, and desktop app.**
+> **Publication status:** draft. Do not publish as a production announcement.
+> Neoland remains a release candidate; see [`ROADMAP.md`](../ROADMAP.md) for
+> current evidence and open gates.
+
+**We built an AI platform that assists with Architecture Decision Records using
+a Rust control plane and operator surfaces plus a Python DSPy pipeline.**
 
 ---
 
 Six months ago, we asked: *"What if an AI could autonomously reason about system architecture, propose trade-offs, and generate auditable decision records — without a human in the loop?"*
 
-Today, **Neoland v0.0.1** ships as the answer. It's a production-grade, multi-tenant platform that runs a 4-stage agent pipeline to produce Architecture Decision Records (ADRs). And we built the **entire stack in Rust** — control plane, TUI, WebAssembly SPA, and native desktop app.
+Today, **Neoland v0.0.1** is a pre-release baseline. It combines a multi-tenant
+Rust control plane, TUI, WebAssembly SPA and desktop shell with a 4-stage Python
+DSPy pipeline for Architecture Decision Records (ADRs).
 
-No Python microservices. No Node.js bundler. No Envoy sidecar. Just Rust.
+The supported browser path uses Leptos WASM without a JavaScript application
+framework; agent orchestration remains a separate Python service.
 
 ---
 
@@ -35,11 +43,11 @@ llama.cpp (local)    vLLM (GPU cluster)    External APIs
                                               (DeepSeek, Gemini, Groq)
 ```
 
-### Why Rust All The Way Down?
+### Why Rust Across The Operator Surfaces?
 
 - **Zero-cost abstractions**: The control plane handles gRPC streaming, JWT validation, mTLS handshakes, and LLM inference routing at sub-millisecond latency — with no GC pauses.
 - **WASM in the browser**: Leptos compiles to WebAssembly. No JavaScript framework, no virtual DOM diffing, no `node_modules`. The entire Web Console is a 600-line CSS file + compiled Rust.
-- **Single binary deployment**: `cargo build --release` produces one binary that serves REST, gRPC, WebSocket, static files, and the Web Console WASM bundle.
+- **Focused control-plane binary**: `cargo build --release` produces the Rust control plane that serves REST, gRPC, SSE and optional static Web assets; the DSPy pipeline remains external.
 - **Deterministic builds**: The Nix flake locks every dependency — including the Leptos WASM toolchain and IBM Plex Mono font — to exact hashes. `nix build .#neoland-full` reproduces the entire stack bit-for-bit.
 
 ---
@@ -157,7 +165,11 @@ The WASM bundle is built deterministically via the Nix flake and served by the s
 
 ---
 
-## Performance
+## Performance (historical, not release evidence)
+
+The measurements below were recorded for an earlier draft but do not yet carry
+the revision, harness and raw output required by the roadmap claim policy. They
+must be reproduced before publication.
 
 Measured on a Hetzner CX32 (8 vCPU, 16 GB RAM) with llama.cpp running locally:
 
@@ -172,9 +184,9 @@ Measured on a Hetzner CX32 (8 vCPU, 16 GB RAM) with llama.cpp running locally:
 
 ---
 
-## What's Next: v1.0.0
+## What's Next: v0.1.0
 
-The v1.0.0 public release (target: August 2026) adds:
+The v0.1.0 public release requires:
 
 - **Soak period**: 2 weeks of real tasks without P0 incidents
 - **SOC2 Type I + GDPR compliance**: Formal docs and audit trails

@@ -46,8 +46,17 @@ else
   fail "REST API E2E failed"
 fi
 
-# ── Gate 4: Python contract tests ────────────────────────────────────────
-section "Gate 4: Python contract tests (pytest -m contract)"
+# ── Gate 4: TUI functional E2E ──────────────────────────────────────────
+section "Gate 4: TUI functional E2E"
+
+if nix develop --command bash tests/e2e/run_e2e.sh 2>&1 | tee -a "$LOG"; then
+  ok "TUI functional E2E passed"
+else
+  fail "TUI functional E2E failed"
+fi
+
+# ── Gate 5: Python contract tests ────────────────────────────────────────
+section "Gate 5: Python contract tests (pytest -m contract)"
 
 if nix develop --command bash -c "cd agents && poetry run pytest tests/ -m contract -q" 2>&1 | tee -a "$LOG"; then
   ok "Python contract tests passed"
@@ -55,8 +64,8 @@ else
   fail "Python contract tests failed"
 fi
 
-# ── Gate 5: neoland doctor ──────────────────────────────────────────────
-section "Gate 5: neoland doctor --json"
+# ── Gate 6: neoland doctor ──────────────────────────────────────────────
+section "Gate 6: neoland doctor --json"
 
 DOCTOR=$(nix develop --command cargo run --bin neoland --quiet -- doctor --json 2>/dev/null || echo "")
 if [ -n "$DOCTOR" ]; then
@@ -66,13 +75,13 @@ else
   fail "doctor failed to respond"
 fi
 
-# ── Gate 6: Full stack smoke ─────────────────────────────────────────────
-section "Gate 6: Full stack smoke"
+# ── Gate 7: Full stack task smoke ────────────────────────────────────────
+section "Gate 7: Full stack task smoke"
 
-if bash scripts/smoke-full-stack.sh 2>&1 | tee -a "$LOG"; then
-  ok "Full stack smoke passed"
+if bash scripts/smoke-full-stack.sh --task 2>&1 | tee -a "$LOG"; then
+  ok "Full stack task smoke passed"
 else
-  fail "Full stack smoke failed — check layer availability"
+  fail "Full stack task smoke failed — check PostgreSQL, DSPy, and LLM availability"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────

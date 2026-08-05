@@ -2,7 +2,11 @@
 
 **First public release candidate — TUI + CLI + API.**
 
-All release gates passed on 2026-06-02:
+> **Historical draft:** this file predates the canonical release gate. Claims
+> below describe a partial validation snapshot and must not be read as current
+> release evidence. See [`ROADMAP.md`](ROADMAP.md).
+
+Partial validation recorded on 2026-06-02:
 
 | Gate | Result |
 |------|--------|
@@ -11,7 +15,7 @@ All release gates passed on 2026-06-02:
 | E2E REST tests (22/22) | ✅ |
 | Python contracts (26/26) | ✅ |
 | Doctor (`ok: true`) | ✅ |
-| Full-stack smoke (9/9 layers) | ✅ |
+| Full-stack smoke (9/9 layers) | Historical claim; current real-LLM smoke remains pending |
 
 ## What's in this release
 
@@ -45,7 +49,7 @@ All release gates passed on 2026-06-02:
 - HashiCorp Vault integration with env fallback chain
 - Structured audit logging, brute-force detection, input sanitization
 
-## What's next (v0.2.0 Honest Preview)
+## Historical next slice (formerly called v0.2.0 Honest Preview)
 
 - [ ] Leptos WASM Web Console connected to backend (REST + SSE streaming)
 - [ ] Build WASM in Nix flake (`nix build .#neoland-web`)

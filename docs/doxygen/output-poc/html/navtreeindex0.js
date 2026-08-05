@@ -1,0 +1,25 @@
+var NAVTREEINDEX0 =
+{
+"annotated.html":[0,0],
+"classes.html":[0,1],
+"functions.html":[0,2,0],
+"functions_vars.html":[0,2,1],
+"index.html":[],
+"pages.html":[],
+"structComponentHealth.html":[0,0,0],
+"structComponentHealth.html#a1118a667e11965835c68a0e4626f2981":[0,0,0,1],
+"structComponentHealth.html#a404210c2c2a9e4a239dbe71f6822f3b9":[0,0,0,0],
+"structComponentHealth.html#ab372959646d384ce98add04cba49ae3d":[0,0,0,3],
+"structComponentHealth.html#ae473547570746a6d19ff34aae958fd7b":[0,0,0,2],
+"structHealthResponse.html":[0,0,1],
+"structHealthResponse.html#a4d865e4ad20085f14149d3a9a8ab881a":[0,0,1,2],
+"structHealthResponse.html#a8b5ffa70b811ae142f7b64a86d1c08a9":[0,0,1,0],
+"structHealthResponse.html#aa8d1f358312df89159245e57a77019ed":[0,0,1,3],
+"structHealthResponse.html#acf3f281a8b544017df37f314c6ac6af2":[0,0,1,1],
+"structLivenessResponse.html":[0,0,2],
+"structLivenessResponse.html#a0125777603f8114c6eda3c3942b828e1":[0,0,2,0],
+"structReadinessResponse.html":[0,0,3],
+"structReadinessResponse.html#a4124269c45ac475fda1cfcbe000a91e5":[0,0,3,1],
+"structReadinessResponse.html#aadbc0ceb1a81f5075f991c13eb5943c5":[0,0,3,0],
+"structShutdownHandler.html":[0,0,4]
+};

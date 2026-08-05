@@ -373,4 +373,6 @@ Nix flake provides:
 Proprietary — Internal Research Project
 
 **Maintained by**: VoidNxSEC Team  
-**Last validated**: 2026-08-02 · targeted auth/TUI tests and Docker Compose config clean; environment-backed release gates remain listed in the roadmap
+**Last validated**: 2026-08-02 · PR #10 release gate passed Rust, Python contracts,
+Web/WASM, Docker/Helm, TLS/mTLS and Nix output checks; real-LLM full-stack,
+authenticated TUI, independent quickstart and public-release gates remain in the roadmap

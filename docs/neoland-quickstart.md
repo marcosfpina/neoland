@@ -1,8 +1,10 @@
 # Neoland Quick Start Guide
 
-**Last Updated**: 2026-07-16 · **Version**: v0.2.0 Honest Preview
+**Last Updated**: 2026-08-02 · **Version**: v0.1.0 release candidate
 
-Get up and running with Neoland in under 5 minutes.
+Development quickstart for the current release candidate. Completion time still
+requires independent measurement on NixOS and Ubuntu before the release can
+claim a sub-five-minute setup.
 
 ---
 
@@ -29,7 +31,8 @@ just dev
 just dev-web
 ```
 
-That's it. Two commands. Under 5 minutes.
+These are the shortest supported development paths. Actual setup time depends on
+toolchain downloads, caches and external services.
 
 ---
 

@@ -139,15 +139,15 @@ Next:
 
 Done:
 
-- readiness recalibrated to 78/100;
+- numeric readiness score removed in favor of evidence-backed release gates;
 - current project snapshot and roadmap updated;
 - older archive/checkpoint docs marked as historical context.
 
 Next:
 
-- [ ] update README/quickstart public claims after the next fixes;
+- [x] align README/quickstart public claims with release-candidate status;
 - [ ] remove or soften unverified SLO/performance claims;
-- [ ] keep "pre-release beta" language until the full runtime smoke passes.
+- [x] keep release-candidate language until the full runtime and public gates pass.
 
 ---
 

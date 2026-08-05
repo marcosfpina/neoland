@@ -1,174 +1,82 @@
 #!/usr/bin/env bash
-# E2E Test Runner for NEOLAND TUI
-# Runs all end-to-end tests in sequence
+# Strict functional E2E for the real Neoland TUI.
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Configuration
-SERVER_URL="${SERVER_URL:-http://localhost:3001}"
-ML_API_URL="${ML_API_URL:-http://localhost:8000}"
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$E2E_DIR/../.." && pwd)"
+REST_PORT="${NEOLAND_E2E_REST_PORT:-3101}"
+GRPC_PORT="${NEOLAND_E2E_GRPC_PORT:-51051}"
+SERVER_URL="http://127.0.0.1:${REST_PORT}"
+GRPC_URL="http://127.0.0.1:${GRPC_PORT}"
+GATEWAY_URL="${NEOLAND_E2E_GATEWAY_URL:-http://127.0.0.1:9}"
+API_KEY="neoland_admin_dev_key_change_in_production"
+TMP_ROOT="$(mktemp -d -t neoland-tui-e2e.XXXXXX)"
+SERVER_PID=""
 
-# Test results
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
-TESTS_SKIPPED=0
+cleanup() {
+    if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    rm -rf "$TMP_ROOT"
+}
+trap cleanup EXIT INT TERM
 
-echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   NEOLAND E2E Test Suite                  ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "${BLUE}Configuration:${NC}"
-echo -e "  Server URL:  ${SERVER_URL}"
-echo -e "  ML API URL:  ${ML_API_URL}"
-echo -e "  Project:     ${PROJECT_ROOT}"
-echo -e "  E2E Tests:   ${E2E_DIR}"
-echo ""
+for tool in cargo curl expect; do
+    command -v "$tool" >/dev/null || {
+        echo "TUI E2E requires '$tool'" >&2
+        exit 1
+    }
+done
 
-# Check prerequisites
-echo -e "${BLUE}Checking prerequisites...${NC}"
-
-if ! command -v expect &> /dev/null; then
-    echo -e "${RED}❌ FAIL: expect not installed${NC}"
-    echo -e "   Install: sudo apt install expect (Debian/Ubuntu)"
-    echo -e "           sudo dnf install expect (Fedora/RHEL)"
-    echo -e "           brew install expect (macOS)"
-    exit 1
-fi
-echo -e "${GREEN}✅ expect installed${NC}"
-
-if ! command -v cargo &> /dev/null; then
-    echo -e "${RED}❌ FAIL: cargo not installed${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ cargo installed${NC}"
-
-# Build project first
-echo ""
-echo -e "${BLUE}Building project...${NC}"
 cd "$PROJECT_ROOT"
-if cargo build --release; then
-    echo -e "${GREEN}✅ Build successful${NC}"
-else
-    echo -e "${RED}❌ FAIL: Build failed${NC}"
-    exit 1
-fi
+cargo build --bin neoland
 
-# Check if server is running
-echo ""
-echo -e "${BLUE}Checking server availability...${NC}"
-if curl -s "${SERVER_URL}/health" > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Server is running at ${SERVER_URL}${NC}"
-else
-    echo -e "${YELLOW}⚠️  WARNING: Server not responding at ${SERVER_URL}${NC}"
-    echo -e "   Starting server in background..."
-    cargo run --release --bin neoland -- server &
-    SERVER_PID=$!
-    sleep 5
+env -u DATABASE_URL -u NEOLAND_DATABASE_URL \
+    AUDIT_LOG_PATH="$TMP_ROOT/audit.log" \
+    XDG_CONFIG_HOME="$TMP_ROOT/server-config" \
+    NEOLAND_SKIP_EMBEDDINGS=true \
+    NEOLAND_NATS_ENABLED=false \
+    NEOLAND_DSPY_URL=http://127.0.0.1:9 \
+    RUST_LOG=error \
+    target/debug/neoland server \
+        --rest-port "$REST_PORT" \
+        --grpc-port "$GRPC_PORT" \
+        --web-dist web/dist \
+        >"$TMP_ROOT/server.log" 2>&1 &
+SERVER_PID=$!
 
-    if curl -s "${SERVER_URL}/health" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Server started successfully${NC}"
-    else
-        echo -e "${RED}❌ FAIL: Could not start server${NC}"
-        kill $SERVER_PID 2>/dev/null || true
+for _ in $(seq 1 80); do
+    if curl --fail --silent "$SERVER_URL/live" >/dev/null; then
+        break
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "TUI E2E server exited during startup" >&2
+        sed -n '1,240p' "$TMP_ROOT/server.log" >&2
         exit 1
     fi
-fi
-
-# Run tests
-echo ""
-echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   Running E2E Tests                        ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
-echo ""
-
-run_test() {
-    local test_name="$1"
-    local test_file="$2"
-    local skip_reason="$3"
-
-    TESTS_RUN=$((TESTS_RUN + 1))
-
-    if [ -n "$skip_reason" ]; then
-        echo -e "${YELLOW}⏭️  SKIP: ${test_name}${NC}"
-        echo -e "   Reason: ${skip_reason}"
-        TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
-        return 0
-    fi
-
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}Running: ${test_name}${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-    if expect "$test_file" "$SERVER_URL" "$ML_API_URL"; then
-        echo -e "${GREEN}✅ PASS: ${test_name}${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}❌ FAIL: ${test_name}${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
+    sleep 0.25
+done
+curl --fail --silent "$SERVER_URL/live" >/dev/null || {
+    echo "TUI E2E server did not become live" >&2
+    sed -n '1,240p' "$TMP_ROOT/server.log" >&2
+    exit 1
 }
 
-# Test 1: Smoke Test
-run_test "TUI Smoke Test" "${E2E_DIR}/tui_smoke_test.exp"
+run_tui() {
+    local mode="$1"
+    local config_dir="$TMP_ROOT/client-$mode"
+    mkdir -p "$config_dir"
+    expect "$E2E_DIR/tui_functional_test.exp" \
+        "$PROJECT_ROOT/target/debug/neoland" \
+        "$SERVER_URL" "$GRPC_URL" "$GATEWAY_URL" "$config_dir" "$mode" "$API_KEY"
+}
 
-# Test 2: Presets Test
-run_test "TUI Presets Test" "${E2E_DIR}/tui_presets_test.exp"
+# Missing-key behavior and authenticated degraded behavior are separate runs.
+# Running a third time catches state/restart regressions in prefs and sessions.
+run_tui missing-key
+run_tui authenticated
+run_tui restart
 
-# Test 3: Fallback Test (optional - requires ml-offload to be down)
-if [ "${RUN_FALLBACK_TEST}" = "1" ]; then
-    run_test "TUI Fallback Chain Test" "${E2E_DIR}/tui_fallback_test.exp"
-else
-    run_test "TUI Fallback Chain Test" "${E2E_DIR}/tui_fallback_test.exp" "Requires ml-offload to be stopped (set RUN_FALLBACK_TEST=1)"
-fi
-
-# Cleanup
-if [ -n "$SERVER_PID" ]; then
-    echo ""
-    echo -e "${BLUE}Stopping background server...${NC}"
-    kill $SERVER_PID 2>/dev/null || true
-    echo -e "${GREEN}✅ Cleanup complete${NC}"
-fi
-
-# Final report
-echo ""
-echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   Test Results Summary                     ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "  Tests Run:     ${TESTS_RUN}"
-echo -e "  ${GREEN}Tests Passed:  ${TESTS_PASSED}${NC}"
-echo -e "  ${RED}Tests Failed:  ${TESTS_FAILED}${NC}"
-echo -e "  ${YELLOW}Tests Skipped: ${TESTS_SKIPPED}${NC}"
-echo ""
-
-if [ $TESTS_FAILED -eq 0 ]; then
-    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║   ✅ All E2E tests passed!                ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
-    exit 0
-else
-    echo -e "${RED}╔════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║   ❌ Some E2E tests failed                ║${NC}"
-    echo -e "${RED}╚════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${YELLOW}Debugging tips:${NC}"
-    echo -e "  1. Check server logs: journalctl -u neoland -f"
-    echo -e "  2. Verify server health: curl ${SERVER_URL}/health"
-    echo -e "  3. Check ml-offload: curl ${ML_API_URL}/health"
-    echo -e "  4. Run tests individually:"
-    echo -e "     expect ${E2E_DIR}/tui_smoke_test.exp ${SERVER_URL} ${ML_API_URL}"
-    echo ""
-    exit 1
-fi
+echo "TUI functional E2E: 3/3 passed"

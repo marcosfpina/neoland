@@ -2,7 +2,11 @@
 
 **Web Console funcional + Nix WASM build + testes completos.**
 
-All release gates passed on 2026-07-16:
+> **Historical preview draft:** v0.2.0 is not the current release status. This
+> file records a development snapshot; canonical status and gates live in
+> [`ROADMAP.md`](ROADMAP.md).
+
+Partial validation recorded on 2026-07-16:
 
 | Gate | Result |
 |---|---|
@@ -15,7 +19,7 @@ All release gates passed on 2026-07-16:
 | WASM compilation | ✅ |
 | Format check | ✅ |
 | Doctor (`ok: true`) | ✅ |
-| Full-stack smoke (9/9 layers) | ✅ |
+| Full-stack smoke (9/9 layers) | Historical claim; current real-LLM smoke remains pending |
 
 ## What's new in v0.2.0
 

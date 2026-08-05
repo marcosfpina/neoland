@@ -27,6 +27,37 @@ use app::{
 use events::Action;
 use ui::render;
 
+/// Restores the terminal when any TUI branch returns early. This prevents a
+/// draw or input error from leaving the user's shell in raw mode with a hidden
+/// cursor.
+struct TerminalRestoreGuard {
+    active: bool,
+}
+
+impl TerminalRestoreGuard {
+    fn armed() -> Self {
+        Self { active: true }
+    }
+
+    fn restore(&mut self) -> Result<()> {
+        if self.active {
+            disable_raw_mode()?;
+            execute!(io::stdout(), LeaveAlternateScreen, cursor::Show)?;
+            self.active = false;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for TerminalRestoreGuard {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = disable_raw_mode();
+            let _ = execute!(io::stdout(), LeaveAlternateScreen, cursor::Show);
+        }
+    }
+}
+
 // ── Agent stream events (TUI-internal) ───────────────────────────────
 
 enum AgentStreamEvent {
@@ -98,6 +129,7 @@ enum LlmEvent {
 
 pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &str) -> Result<()> {
     enable_raw_mode()?;
+    let mut restore_guard = TerminalRestoreGuard::armed();
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
     let backend = CrosstermBackend::new(stdout);
@@ -542,8 +574,8 @@ pub async fn run_client(server_url: &str, grpc_url: &str, neoland_gateway_url: &
         }
     }
 
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+    terminal.show_cursor()?;
+    restore_guard.restore()?;
 
     Ok(())
 }

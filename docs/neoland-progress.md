@@ -1,15 +1,15 @@
 > **Source-of-truth movida para `ROADMAP.md` na raiz do projeto (2026-05-31). Este arquivo é histórico.**
 >
-> Para o status atual (v0.2.0 Honest Preview), consulte:
+> Todo o conteúdo abaixo é um snapshot de 2026-05-17 e não descreve o estado
+> atual. Para o release candidate e suas evidências, consulte:
 > - [`ROADMAP.md`](../ROADMAP.md)
 > - [`docs/neoland-project-snapshot.md`](neoland-project-snapshot.md)
-> - [`RELEASE-v0.2.0.md`](../RELEASE-v0.2.0.md)
 
 # Neoland Delivery Progress (HISTÓRICO)
 
 **Last Updated**: 2026-05-17
-**Current Status**: integrated pre-release beta; not a release candidate yet
-**Public Release Readiness**: **78/100**
+**Historical Status At Snapshot Date**: integrated pre-release beta
+**Historical Readiness Estimate**: **78/100** (not a current release claim)
 **Rust baseline**: `cargo test --lib --quiet` -> **226 passed, 17 ignored**
 **Source-of-truth rule**: code, routes, tests, and runtime wiring win over older status docs.
 

@@ -9,6 +9,16 @@ implementação descobertos durante o trabalho pertencem ao
 [`plans/production-readiness-todo.md`](plans/production-readiness-todo.md) ou ao
 backlog local; aqui ficam apenas marcos, evidências e bloqueios de lançamento.
 
+## Política de claims
+
+- O status público permanece **release candidate** até todos os gates deste
+  documento estarem concluídos na mesma revisão.
+- Uma capacidade implementada ou um job isolado verde não torna o produto
+  “production-ready” ou “enterprise-ready”.
+- Contagens, desempenho e smokes devem informar comando, ambiente, data e revisão.
+- Documentos históricos devem ser identificados como snapshots; não podem ser
+  usados como evidência do estado atual.
+
 ## Estado atual
 
 | Superfície | Estado comprovado | Limite atual |
@@ -64,9 +74,9 @@ mesma revisão:
 - [x] `cargo test --workspace --lib` — 301 core + 16 web passaram; 18 ignorados (2026-08-02).
 - [x] Contratos Python — 26/26 via `.venv/bin/python -m pytest tests/ -m contract -v` (2026-08-02).
 - [x] Docker Compose renderiza com secrets obrigatórios preenchidos.
-- [ ] `helm lint` e `helm template` com valores de produção de teste.
-- [ ] `nix build .#neoland-full` e smoke do wrapper.
-- [ ] Smoke TLS/mTLS.
+- [x] `helm lint` e `helm template` com valores de produção de teste (PR #10, 2026-08-02).
+- [x] `nix build .#neoland-full` e smoke do wrapper (PR #10, 2026-08-02).
+- [x] Smoke TLS/mTLS (PR #10, 2026-08-02).
 - [ ] Smoke full-stack com PostgreSQL, DSPy e um LLM real.
 - [ ] Smoke TUI agent-first: task, SSE, `/why`, `/steer` e saída limpa.
 - [ ] Quickstart cronometrado em NixOS e Ubuntu.
@@ -77,6 +87,10 @@ O workflow canônico remoto é
 data, ambiente e resultado, sem serem convertidos em “passou” por inferência.
 Cada execução do workflow publica o artefato `release-evidence` e um resumo no
 GitHub Actions; `gh run watch <run-id> --exit-status` é o caminho de monitoramento.
+O conjunto do PR [#10](https://github.com/VoidNxSEC/neoland/pull/10) fechou com
+33 checks aprovados, 3 skips condicionais e zero falhas. A evidência final de
+`main` pertence ao run
+[#30766604569](https://github.com/VoidNxSEC/neoland/actions/runs/30766604569).
 
 ## Gate de lançamento público
 

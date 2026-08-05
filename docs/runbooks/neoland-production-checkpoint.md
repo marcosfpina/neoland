@@ -1,7 +1,11 @@
 # NEOLAND Production Readiness Checkpoint
+> **Historical planning snapshot:** percentages below are estimates from
+> 2026-01-31/2026-03-29, not current release evidence. Use
+> [`ROADMAP.md`](../../ROADMAP.md) for the active gate.
+
 **Date**: 2026-01-31 (Updated: 2026-03-29)
 **Version**: 0.1.0
-**Overall Status**: 85% Production Ready (weighted score)
+**Historical Estimate**: 85% toward the planning checklist
 
 ---
 
@@ -31,7 +35,7 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Rust 2021 Edition | ✅ | Stable, production-ready |
+| Rust 2021 Edition | ✅ | Stable toolchain baseline |
 | Nix Flake | ✅ | Reproducible builds working |
 | Git Repository | ✅ | Clean, organized, well-documented |
 | Project Structure | ✅ | Modular architecture |
@@ -375,9 +379,9 @@ Critical path items completed:
 3. Alerting Rules (10h)
 4. Structured Logging (12h)
 
-**Result**: Production-ready for internal/beta use
+**Historical target**: internal/beta operating baseline; not a production-readiness claim
 
-### Option 2: Full Production Ready
+### Option 2: Historical Full-Production Target
 **Target**: 100% readiness in 284 hours (~35 days)
 1. Complete Option 1 (36h)
 2. E2E Security Testing (28h)
@@ -385,7 +389,7 @@ Critical path items completed:
 4. Kubernetes Deployment (80h)
 5. Compliance Documentation (140h)
 
-**Result**: Enterprise-grade production deployment
+**Historical target**: candidate for enterprise review after evidence and external sign-off
 
 ---
 

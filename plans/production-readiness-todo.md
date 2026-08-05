@@ -152,7 +152,7 @@ Deixar o projeto pronto para um release de producao auditavel:
 
 ## Criterio de Done para Prod
 
-- [ ] Todos os P0 fechados.
+- [x] Todos os P0 fechados.
 - [ ] README alinhado ao estado real.
 - [ ] Docker Compose smoke aprovado.
 - [ ] Helm render/lint aprovado com secrets corretos.

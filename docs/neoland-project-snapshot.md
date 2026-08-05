@@ -1,10 +1,10 @@
 # Project Snapshot: Neoland
 
-**Last Meta-Sync**: 2026-07-16
+**Last Meta-Sync**: 2026-08-02
 **Primary Engine**: Rust + Python + Leptos WASM
 **Ecosystem Role**: control plane, web console, TUI, and agent-orchestration component
-**Current Delivery Readiness**: 78/100 (v0.2.0 Honest Preview complete)
-**Rule**: code, routes, tests, and runtime wiring win over older roadmap copy.
+**Current Delivery Readiness**: v0.1.0 release candidate; public-release gates remain open
+**Rule**: [`ROADMAP.md`](../ROADMAP.md), code, routes, tests, and runtime wiring win over older copy. Numeric readiness scores are not release evidence.
 
 ---
 
@@ -31,11 +31,11 @@ Operator
 
 | Surface | Stack | Status |
 |---------|-------|--------|
-| **TUI** | Rust + ratatui · 4 themes · chat bubbles · pipeline tree | ✅ Stable |
-| **Web Console** | Leptos WASM + CSS artesanal · 3-panel SPA · SSE streaming | ✅ Honest Preview (v0.2.0) |
-| **Desktop** | Tauri + Leptos (reuses WASM bundle) | ✅ v0.0.1 |
-| **CLI / API** | Rust + axum + tonic · 15 REST endpoints + gRPC | ✅ Stable |
-| **Agent Pipeline** | Python · DSPy 3.x · FastAPI · 4-stage | ✅ Stable |
+| **TUI** | Rust + ratatui · 4 themes · chat bubbles · pipeline tree | Implemented; authenticated terminal smoke pending |
+| **Web Console** | Leptos WASM + CSS artesanal · 3-panel SPA · SSE streaming | CI-validated for unit, WASM, browser and bundle paths |
+| **Desktop** | Tauri + Leptos (reuses WASM bundle) | Shell and derivation exist; signed installers pending |
+| **CLI / API** | Rust + axum + tonic · REST + gRPC | Unit/TLS validated; external-service smoke pending |
+| **Agent Pipeline** | Python · DSPy 3.x · FastAPI · 4-stage | Contract-tested; real-LLM full-stack smoke pending |
 
 ---
 
@@ -91,20 +91,24 @@ Protected:
 
 ---
 
-## Delivery Evidence (v0.2.0)
+## Delivery Evidence (v0.1.0 release candidate)
+
+Evidence below is from the PR #10 change set on 2026-08-02. The canonical
+post-merge evidence is linked from [`ROADMAP.md`](../ROADMAP.md).
 
 | Gate | Result |
 |------|--------|
-| Rust unit tests | ✅ 275 passed, 18 ignored |
+| Rust workspace library tests | ✅ 301 core passed, 18 ignored; 16 web passed |
 | Web Console tests | ✅ 16/16 passed |
 | Clippy (all targets) | ✅ 0 warnings |
 | Clippy (WASM) | ✅ 0 warnings |
-| E2E REST tests | ✅ 22/22 passed |
 | Python contracts | ✅ 26/26 passed |
-| WASM compilation | ✅ Clean |
+| Web workflow | ✅ unit, check, clippy, browser WASM tests and release bundle |
+| Docker Compose + Helm | ✅ config, lint, render, probes and secret keys |
+| Nix outputs | ✅ flake check, `neoland`, `neoland-web`, `neoland-full`, wrapper help |
+| TLS/mTLS smoke | ✅ CI smoke passed |
 | Format check | ✅ |
-| Doctor (`ok: true`) | ✅ |
-| Full-stack smoke | ✅ 9/9 layers |
+| Full-stack smoke with real LLM | ⏳ Required before v0.1.0 |
 
 ---
 
@@ -133,15 +137,15 @@ Protected:
 | `src/commands.rs` doctor | gateway/ml-ops/llama probed, DSPy :8001/health missing | add DSPy probe |
 | `web/src/main.rs` SSE | stream generation guard works, but no explicit close on old EventSources | add `.close()` via stored handle (v0.3.0) |
 | `web/src/api.rs` dead code | API surface includes unused endpoints (steer, get_session) | wire them as UI features ship |
-| Deploy stack | Docker/Helm exist, no canonical smoke path | define one blessed boot/health/task path |
-| gRPC-web | not yet bridged | tonic-web nativo (v0.3.0) |
+| Deploy stack | Render/build gates exist; live external stack is not exercised | define one blessed boot/health/task path with a real LLM |
+| Release evidence | CI evidence exists for technical jobs | repeat independent quickstart and complete public gates |
 
 ---
 
 ## Source Of Truth
 
 - **Roadmap**: [`ROADMAP.md`](../ROADMAP.md) (canonical)
-- **Release Notes**: [`RELEASE-v0.2.0.md`](../RELEASE-v0.2.0.md)
+- **Release status and gates**: [`ROADMAP.md`](../ROADMAP.md)
 - **Architecture**: [`docs/neoland-architecture.md`](neoland-architecture.md)
 - **Quickstart**: [`docs/neoland-quickstart.md`](neoland-quickstart.md)
 - **ADRs**: [`docs/ADR/`](ADR/)
