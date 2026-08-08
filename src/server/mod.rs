@@ -22,10 +22,6 @@ use axum::{
     routing::{get, patch, post},
     Router,
 };
-use tower_http::cors::CorsLayer;
-// Integration dependencies (currently used for demonstration)
-// use securellm_core;
-use intelagent_core::TaskId;
 use llamachat::{
     llama_service_server::{LlamaService, LlamaServiceServer},
     AddDocumentRequest, AddDocumentResponse, ChatRequest, ChatResponse, SearchRequest,
@@ -38,6 +34,7 @@ use tokio_stream::{
     StreamExt as _,
 };
 use tonic::{transport::Server as GrpcServer, Request, Response, Status};
+use tower_http::cors::CorsLayer;
 use tracing::Instrument; // Phase 4.2: For span instrumentation
 
 use crate::mcp::server::{BreakpointResolution, NativeMcpServer};
@@ -1802,10 +1799,6 @@ pub async fn run_server_with(
             .map_err(|e| anyhow::anyhow!("VectorStore mutex poisoned during init: {}", e))?;
         let _ = vs.add_document("System: Use [[CMD:move_ws:N]] for workspace movement.", "sys");
     }
-
-    // Phantom Integration Check
-    let phantom_task_id = TaskId::new();
-    info!("[PHANTOM] Integrated. Ready for Task: {}", phantom_task_id);
 
     // Initialize secrets manager (Phase 1.2 / 4.7: Vault integration)
     let secrets_manager = Arc::new(SecretsManager::new().await?);
