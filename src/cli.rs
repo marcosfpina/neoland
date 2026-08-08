@@ -17,17 +17,17 @@ pub struct Cli {
 pub enum Commands {
     /// Inicia o servidor gRPC + REST
     Server {
-        /// Porta gRPC
-        #[arg(long, default_value = "50051")]
-        grpc_port: u16,
+        /// Porta gRPC (fallback: NEOLAND_GRPC_PORT, neoland.toml; default 50051)
+        #[arg(long)]
+        grpc_port: Option<u16>,
 
-        /// Porta REST API
-        #[arg(long, default_value = "3001")]
-        rest_port: u16,
+        /// Porta REST API (fallback: NEOLAND_REST_PORT, neoland.toml; default 3001)
+        #[arg(long)]
+        rest_port: Option<u16>,
 
         /// Caminho para o bundle estático do Web Console (Leptos WASM)
-        #[arg(long, env = "NEOLAND_WEB_DIST_DIR", default_value = "web/dist")]
-        web_dist: String,
+        #[arg(long, env = "NEOLAND_WEB_DIST_DIR")]
+        web_dist: Option<String>,
     },
 
     /// Inicia o cliente TUI (Terminal User Interface)
@@ -175,14 +175,36 @@ mod tests {
     fn parses_server_defaults() {
         let cli = Cli::try_parse_from(["neoland", "server"]).expect("server parses");
         match cli.command {
-            Commands::Server { grpc_port, rest_port, web_dist } => {
-                assert_eq!(grpc_port, 50051);
-                assert_eq!(rest_port, 3001);
-                assert_eq!(web_dist, "web/dist");
+            // Sem flags: os campos ficam None e a resolução final (env > TOML >
+            // default) acontece via Config no bin. web_dist pode vir do env
+            // NEOLAND_WEB_DIST_DIR do ambiente de teste, então não é assertado.
+            Commands::Server { grpc_port, rest_port, web_dist: _ } => {
+                assert_eq!(grpc_port, None);
+                assert_eq!(rest_port, None);
             },
             _ => panic!("expected server command"),
         }
         assert_eq!(cli.log_level, "info");
+    }
+
+    #[test]
+    fn server_flags_override_defaults() {
+        let cli = Cli::try_parse_from([
+            "neoland",
+            "server",
+            "--grpc-port",
+            "6000",
+            "--rest-port",
+            "6001",
+        ])
+        .expect("server parses");
+        match cli.command {
+            Commands::Server { grpc_port, rest_port, .. } => {
+                assert_eq!(grpc_port, Some(6000));
+                assert_eq!(rest_port, Some(6001));
+            },
+            _ => panic!("expected server command"),
+        }
     }
 
     #[test]
@@ -278,10 +300,9 @@ mod tests {
         let cli = Cli::try_parse_from(with_default).expect("server parses with global flags");
 
         match cli.command {
-            Commands::Server { grpc_port, rest_port, web_dist } => {
-                assert_eq!(grpc_port, 50051);
-                assert_eq!(rest_port, 3001);
-                assert_eq!(web_dist, "web/dist");
+            Commands::Server { grpc_port, rest_port, web_dist: _ } => {
+                assert_eq!(grpc_port, None);
+                assert_eq!(rest_port, None);
             },
             _ => panic!("expected server command"),
         }

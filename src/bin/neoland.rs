@@ -53,6 +53,12 @@ async fn main() {
     // Match subcommands
     match cli.command {
         Commands::Server { grpc_port, rest_port, web_dist } => {
+            // Precedência: flag CLI > env (NEOLAND_*) > neoland.toml > default.
+            // Config::load() já aplica env sobre TOML; a flag só entra se passada.
+            let config = Config::load();
+            let grpc_port = grpc_port.unwrap_or(config.server.grpc_port);
+            let rest_port = rest_port.unwrap_or(config.server.rest_port);
+            let web_dist = web_dist.unwrap_or_else(|| config.server.web_dist_dir.clone());
             if let Err(e) = server::run_server(grpc_port, rest_port, &web_dist).await {
                 eprintln!("❌ Server error: {}", e);
                 std::process::exit(1);
