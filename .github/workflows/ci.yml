@@ -44,8 +44,51 @@ jobs:
       - name: Unit tests (web)
         run: cargo test -p neoland-web --verbose
 
+      - name: Integration tests (in-process server, ephemeral ports)
+        run: cargo test --test rest_api_test --test grpc_integration_test --test agent_contract_test
+
       - name: Check WASM target
         run: cargo check -p neoland-web --target wasm32-unknown-unknown
+
+  e2e-db:
+    name: E2E (Postgres + pgvector + migrations)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: neoland_test
+          POSTGRES_USER: neoland
+          POSTGRES_PASSWORD: neoland_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U neoland -d neoland_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://neoland:neoland_test@localhost:5432/neoland_test
+      # Missing services must turn this job red, never silently skip
+      NEOLAND_TEST_REQUIRE_DEPS: "1"
+      NEOLAND_SKIP_EMBEDDINGS: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config
+
+      - name: Apply migrations (embedded)
+        run: cargo run -q -- migrate
+
+      - name: Session persistence e2e
+        run: cargo test --test agent_session_test
 
   tls-smoke:
     name: TLS/mTLS smoke (REST + gRPC)

@@ -1718,10 +1718,28 @@ pub async fn logout_handler(
 }
 
 pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> anyhow::Result<()> {
-    use tracing::info;
-
     let grpc_addr: std::net::SocketAddr = format!("[::]:{}", grpc_port).parse()?;
     let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
+    let grpc_listener = tokio::net::TcpListener::bind(grpc_addr).await?;
+    let rest_listener = tokio::net::TcpListener::bind(rest_addr).await?;
+    run_server_with(grpc_listener, rest_listener, web_dist_dir, None).await
+}
+
+/// Inner server entry point over pre-bound listeners.
+///
+/// Tests bind port 0, read `local_addr()` and pass an external shutdown
+/// sender to stop the server cleanly; production (`run_server`) passes
+/// `None` and relies on the SIGTERM/Ctrl+C signal task.
+pub async fn run_server_with(
+    grpc_listener: tokio::net::TcpListener,
+    rest_listener: tokio::net::TcpListener,
+    web_dist_dir: &str,
+    external_shutdown: Option<tokio::sync::broadcast::Sender<()>>,
+) -> anyhow::Result<()> {
+    use tracing::info;
+
+    let grpc_addr = grpc_listener.local_addr()?;
+    let rest_addr = rest_listener.local_addr()?;
 
     info!("🚀 Inicializando Neoland Server...");
     info!("📡 gRPC endpoint: {}", grpc_addr);
@@ -1973,7 +1991,8 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
     // Graceful shutdown: SIGTERM/Ctrl+C drains both servers instead of cutting
     // in-flight requests. If either server exits on its own, the other is shut
     // down too (preserves the previous fail-fast semantics of tokio::select!).
-    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    let shutdown_tx =
+        external_shutdown.unwrap_or_else(|| tokio::sync::broadcast::channel::<()>(1).0);
     {
         let tx = shutdown_tx.clone();
         tokio::spawn(async move {
@@ -2000,9 +2019,12 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         .accept_http1(true)
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(LlamaServiceServer::new(MyLlamaService { state: grpc_state }))
-        .serve_with_shutdown(grpc_addr, async move {
-            let _ = grpc_shutdown.recv().await;
-        });
+        .serve_with_incoming_shutdown(
+            tokio_stream::wrappers::TcpListenerStream::new(grpc_listener),
+            async move {
+                let _ = grpc_shutdown.recv().await;
+            },
+        );
 
     // 2. Start REST Server (Axum)
     // Protected routes with full security stack (Phase 1.4 + 4.2)
@@ -2108,17 +2130,16 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
             });
         }
         Box::pin(
-            axum_server::bind_rustls(rest_addr, rustls_config)
+            axum_server::from_tcp_rustls(rest_listener.into_std()?, rustls_config)
                 .handle(tls_handle)
                 .serve(app.into_make_service()),
         )
     } else {
         info!("🔓 TLS not configured — use a reverse proxy (nginx/Caddy) for production");
         info!("✅ REST API rodando em http://{}", rest_addr);
-        let listener = tokio::net::TcpListener::bind(rest_addr).await?;
         let mut rest_shutdown = shutdown_tx.subscribe();
         Box::pin(async move {
-            axum::serve(listener, app)
+            axum::serve(rest_listener, app)
                 .with_graceful_shutdown(async move {
                     let _ = rest_shutdown.recv().await;
                 })

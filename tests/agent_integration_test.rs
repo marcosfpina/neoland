@@ -10,6 +10,8 @@
 //!   DATABASE_URL=postgres://... LLM_API_KEY=sk-... cargo test
 //! agent_integration -- --test-threads=1
 
+mod common;
+
 use neoland::{
     agents::{client::AgentDecision, orchestrator::AgentOrchestrator},
     config::Config,
@@ -45,11 +47,11 @@ async fn build_orchestrator() -> Option<AgentOrchestrator> {
 #[tokio::test]
 async fn test_agent_pipeline_health_check() {
     if !dspy_available() {
-        eprintln!("Skipping: DSPy pipeline not running on :8001");
+        common::skip_or_fail("DSPy pipeline", "start agents/ on :8001");
         return;
     }
     let Some(orch) = build_orchestrator().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -63,11 +65,11 @@ async fn test_agent_pipeline_health_check() {
 #[tokio::test]
 async fn test_execute_task_returns_valid_decision() {
     if !dspy_available() {
-        eprintln!("Skipping: DSPy pipeline not running on :8001");
+        common::skip_or_fail("DSPy pipeline", "start agents/ on :8001");
         return;
     }
     let Some(orch) = build_orchestrator().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -109,11 +111,11 @@ async fn test_execute_task_returns_valid_decision() {
 #[tokio::test]
 async fn test_execute_task_persists_session() {
     if !dspy_available() {
-        eprintln!("Skipping: DSPy pipeline not running on :8001");
+        common::skip_or_fail("DSPy pipeline", "start agents/ on :8001");
         return;
     }
     let Some(orch) = build_orchestrator().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -138,11 +140,11 @@ async fn test_execute_task_persists_session() {
 #[tokio::test]
 async fn test_execute_two_tasks_same_session_increments_count() {
     if !dspy_available() {
-        eprintln!("Skipping: DSPy pipeline not running on :8001");
+        common::skip_or_fail("DSPy pipeline", "start agents/ on :8001");
         return;
     }
     let Some(orch) = build_orchestrator().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
