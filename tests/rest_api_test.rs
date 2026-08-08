@@ -214,8 +214,12 @@ async fn e2e_chat_with_valid_readonly_key() {
         .await
         .expect("POST /v1/chat/completions with readonly key failed");
 
-    assert_ne!(resp.status(), StatusCode::UNAUTHORIZED, "Readonly key should pass auth");
-    println!("Chat with readonly key: HTTP {}", resp.status());
+    // RBAC: a valid read-only key authenticates (not 401) but may not write.
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "Readonly key must be forbidden on POST /v1/chat/completions"
+    );
 }
 
 #[tokio::test]
@@ -636,5 +640,63 @@ async fn e2e_rate_limiting_excess_requests_blocked() {
     assert!(
         rate_limited_count > 0,
         "Expected at least some requests to be rate-limited (limit is 100 req/min)"
+    );
+}
+
+// =============================================================================
+// RBAC enforcement (write endpoints require User+)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_rbac_readonly_cannot_submit_task() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .post(format!("{base}/v1/agents/task"))
+        .header("X-API-Key", dev_keys::READONLY)
+        .json(&serde_json::json!({"task": "should be forbidden"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/task");
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN, "readonly key must not submit tasks");
+}
+
+#[tokio::test]
+async fn e2e_rbac_readonly_cannot_call_tools() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .post(format!("{base}/v1/agents/tools/call"))
+        .header("X-API-Key", dev_keys::READONLY)
+        .json(&serde_json::json!({
+            "session_id": "00000000-0000-0000-0000-000000000000",
+            "name": "run_shell_command",
+            "arguments": {"command": "echo forbidden"}
+        }))
+        .send()
+        .await
+        .expect("POST /v1/agents/tools/call");
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "readonly key must never reach shell execution"
+    );
+}
+
+#[tokio::test]
+async fn e2e_rbac_readonly_can_still_read() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .get(format!("{base}/v1/agents/sessions"))
+        .header("X-API-Key", dev_keys::READONLY)
+        .send()
+        .await
+        .expect("GET /v1/agents/sessions");
+    // 200 with DB, 503 without — never 401/403: reads stay ReadOnly+.
+    assert!(
+        resp.status() == StatusCode::OK || resp.status() == StatusCode::SERVICE_UNAVAILABLE,
+        "readonly GET must not be blocked by RBAC (got {})",
+        resp.status()
     );
 }

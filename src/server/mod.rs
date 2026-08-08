@@ -556,6 +556,7 @@ async fn liveness_handler() -> Json<health::LivenessResponse> {
 
 async fn rest_chat_handler(
     State(state): State<Arc<AppState>>,
+    _auth: RequireUser,
     Json(mut req): Json<RestChatRequest>,
 ) -> Result<axum::response::Response, StatusCode> {
     let handler_start = Instant::now();
@@ -753,6 +754,50 @@ async fn rate_limit_middleware(
     Ok(next.run(req).await)
 }
 
+/// RBAC extractor: the request's API key must carry the User role or higher.
+///
+/// `auth_middleware` validates the key and injects [`crate::auth::ApiKey`]
+/// into request extensions; until now no handler ever read it back, so a
+/// read-only key could hit every write endpoint (including shell execution
+/// via /v1/agents/tools/call). Appearing in the handler signature makes the
+/// requirement impossible to forget on new routes.
+pub struct RequireUser(#[allow(dead_code)] pub(crate) crate::auth::ApiKey);
+
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for RequireUser
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        require_role(parts, crate::auth::Role::User).map(Self)
+    }
+}
+
+fn require_role(
+    parts: &axum::http::request::Parts,
+    required: crate::auth::Role,
+) -> Result<crate::auth::ApiKey, (StatusCode, Json<serde_json::Value>)> {
+    let info = parts.extensions.get::<crate::auth::ApiKey>().cloned().ok_or((
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "Authentication required"})),
+    ))?;
+    if info.role.has_permission(&required) {
+        Ok(info)
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": format!("Requires {required:?} role or higher"),
+            })),
+        ))
+    }
+}
+
 /// In-flight request tracking for the ACTIVE_CONNECTIONS gauge.
 /// Drop guard so the decrement survives handler panics/unwinds.
 async fn track_connections_middleware(
@@ -945,7 +990,7 @@ pub(crate) struct AgentTaskBody {
 }
 
 /// POST /v1/agents/task — submit a task to the multi-agent DSPy pipeline.
-/// Requires User+ auth (enforced by auth_middleware).
+/// Requires User+ role (enforced by the RequireUser extractor).
 /// POST /v1/agents/task — submit a task to the multi-agent DSPy pipeline.
 /// Runs Junior → Senior → (Architect?) → TechLeader and returns the full result
 /// plus an ADR checkpoint written to disk.
@@ -963,6 +1008,7 @@ pub(crate) struct AgentTaskBody {
 )]
 pub(crate) async fn submit_agent_task(
     State(state): State<Arc<AppState>>,
+    _auth: RequireUser,
     Json(body): Json<AgentTaskBody>,
 ) -> impl IntoResponse {
     let orchestrator = match &state.agent_orchestrator {
@@ -1035,6 +1081,7 @@ pub(crate) struct ListSessionsQuery {
 async fn steer_agent_task(
     State(state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
+    _auth: RequireUser,
     Json(body): Json<AgentSteerBody>,
 ) -> impl IntoResponse {
     let orchestrator = match &state.agent_orchestrator {
@@ -1155,10 +1202,11 @@ async fn get_session_messages(
 }
 
 /// PATCH /v1/agents/session/:id/name — update session display name.
-/// Requires User+ auth (enforced by auth_middleware).
+/// Requires User+ role (enforced by the RequireUser extractor).
 async fn set_session_name(
     State(state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
+    _auth: RequireUser,
     Json(body): Json<SetNameBody>,
 ) -> impl IntoResponse {
     let orchestrator = match &state.agent_orchestrator {
@@ -1311,6 +1359,7 @@ pub struct ToolCallPayload {
 )]
 pub async fn call_agent_tool(
     State(state): State<Arc<AppState>>,
+    _auth: RequireUser,
     Json(payload): Json<ToolCallPayload>,
 ) -> Result<Json<crate::mcp::types::CallToolResult>, StatusCode> {
     let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
@@ -1339,6 +1388,7 @@ pub struct BreakpointResolvePayload {
 pub async fn resolve_agent_breakpoint(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<uuid::Uuid>,
+    _auth: RequireUser,
     Json(payload): Json<BreakpointResolvePayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
