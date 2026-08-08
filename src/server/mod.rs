@@ -795,6 +795,30 @@ fn require_role(
     }
 }
 
+/// Dependency extractor: the agent orchestrator, or a uniform 503.
+///
+/// The exact "Agent pipeline not configured (DATABASE_URL required)" body
+/// was previously copy-pasted in six handlers; three others answered a
+/// bare 503 with no body. One definition, one behavior.
+pub struct AgentPipelineDep(pub(crate) Arc<AgentOrchestrator>);
+
+#[axum::async_trait]
+impl axum::extract::FromRequestParts<Arc<AppState>> for AgentPipelineDep {
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        state.agent_orchestrator.clone().map(Self).ok_or((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Agent pipeline not configured (DATABASE_URL required)"
+            })),
+        ))
+    }
+}
+
 /// In-flight request tracking for the ACTIVE_CONNECTIONS gauge.
 /// Drop guard so the decrement survives handler panics/unwinds.
 async fn track_connections_middleware(
@@ -1006,19 +1030,9 @@ pub(crate) struct AgentTaskBody {
 pub(crate) async fn submit_agent_task(
     State(state): State<Arc<AppState>>,
     _auth: RequireUser,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<AgentTaskBody>,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     let session_id = body.session_id.unwrap_or_else(uuid::Uuid::new_v4);
 
     let start_event = AuditEvent::new(AuditAction::AgentTaskStart)
@@ -1076,22 +1090,12 @@ pub(crate) struct ListSessionsQuery {
 /// POST /v1/agents/session/:id/steer — send human intervention message to
 /// active task
 async fn steer_agent_task(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
     _auth: RequireUser,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<AgentSteerBody>,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     match orchestrator.steer_task(id, body.message).await {
         Ok(_) => (
             StatusCode::OK,
@@ -1124,20 +1128,10 @@ async fn steer_agent_task(
     )
 )]
 pub(crate) async fn get_agent_session(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     match orchestrator.get_session(id).await {
         Ok(session) => match serde_json::to_value(&session) {
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
@@ -1161,20 +1155,10 @@ pub(crate) async fn get_agent_session(
 /// GET /v1/agents/session/:id/messages — retrieve messages for a session.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
 async fn get_session_messages(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     match orchestrator.get_session_messages(id).await {
         Ok(messages) => match serde_json::to_value(&messages) {
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
@@ -1201,22 +1185,12 @@ async fn get_session_messages(
 /// PATCH /v1/agents/session/:id/name — update session display name.
 /// Requires User+ role (enforced by the RequireUser extractor).
 async fn set_session_name(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
     _auth: RequireUser,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<SetNameBody>,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     match orchestrator.set_session_name(id, &body.name).await {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({"status": "ok"}))).into_response(),
         Err(e) => {
@@ -1248,20 +1222,10 @@ async fn set_session_name(
     )
 )]
 pub(crate) async fn list_agent_sessions(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
+    AgentPipelineDep(orchestrator): AgentPipelineDep,
     Query(query): Query<ListSessionsQuery>,
 ) -> impl IntoResponse {
-    let orchestrator = match &state.agent_orchestrator {
-        Some(o) => o.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"})),
-            )
-                .into_response()
-        },
-    };
-
     let limit = query.limit.unwrap_or(24).clamp(1, 100) as i64;
 
     match orchestrator.list_sessions(limit).await {
@@ -1331,9 +1295,9 @@ pub(crate) async fn agent_health_handler(State(state): State<Arc<AppState>>) -> 
     responses((status = 200, description = "List of available native tools"))
 )]
 pub async fn list_agent_tools(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
+    AgentPipelineDep(orch): AgentPipelineDep,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     let tools = mcp.list_tools();
@@ -1355,11 +1319,11 @@ pub struct ToolCallPayload {
     request_body = ToolCallPayload,
 )]
 pub async fn call_agent_tool(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     _auth: RequireUser,
+    AgentPipelineDep(orch): AgentPipelineDep,
     Json(payload): Json<ToolCallPayload>,
 ) -> Result<Json<crate::mcp::types::CallToolResult>, StatusCode> {
-    let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     match mcp.call_tool(payload.session_id, &payload.name, payload.arguments).await {
@@ -1383,13 +1347,12 @@ pub struct BreakpointResolvePayload {
     request_body = BreakpointResolvePayload,
 )]
 pub async fn resolve_agent_breakpoint(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(session_id): Path<uuid::Uuid>,
     _auth: RequireUser,
+    AgentPipelineDep(orch): AgentPipelineDep,
     Json(payload): Json<BreakpointResolvePayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let orch = state.agent_orchestrator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-
     let resolution = match payload.resolution.as_str() {
         "approve" => BreakpointResolution::Approve,
         "steer" => BreakpointResolution::Steer(payload.instruction.unwrap_or_default()),
