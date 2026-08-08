@@ -532,7 +532,8 @@ pub(crate) async fn health_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<health::HealthResponse> {
     let uptime = state.start_time.elapsed().as_secs();
-    let response = health::perform_health_check(Some(uptime)).await;
+    let response =
+        health::perform_health_check(Some(uptime), &state.auth_manager, &state.audit_logger).await;
     Json(response)
 }
 
@@ -750,6 +751,23 @@ async fn rate_limit_middleware(
     }
 
     Ok(next.run(req).await)
+}
+
+/// In-flight request tracking for the ACTIVE_CONNECTIONS gauge.
+/// Drop guard so the decrement survives handler panics/unwinds.
+async fn track_connections_middleware(
+    req: HttpRequest<Body>,
+    next: Next,
+) -> axum::response::Response {
+    struct ConnGuard;
+    impl Drop for ConnGuard {
+        fn drop(&mut self) {
+            crate::metrics::ACTIVE_CONNECTIONS.dec();
+        }
+    }
+    crate::metrics::ACTIVE_CONNECTIONS.inc();
+    let _guard = ConnGuard;
+    next.run(req).await
 }
 
 /// Correlation ID middleware (Phase 4.2)
@@ -2057,6 +2075,9 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
             .fallback(tower_http::services::ServeFile::new(web_dist.join("index.html")))
     };
 
+    // Keep MEMORY_USAGE_BYTES fresh (registered gauges stay 0 otherwise)
+    crate::metrics::spawn_resource_collector();
+
     // Combine all routes
     let app = Router::new()
         .merge(protected_routes)
@@ -2064,6 +2085,7 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         .merge(crate::openapi::router())
         .fallback_service(static_service)
         .layer(cors_layer)
+        .layer(middleware::from_fn(track_connections_middleware))
         .with_state(shared_state);
 
     // Start REST server with optional TLS
