@@ -16,7 +16,6 @@ agents/*.egg-info/
 node_modules/
 .mcp.json
 securellm-bridge
-.validate-logs/runtime/
-.validate-logs/bootstrap/
+.validate-logs/
 /result
 /result-*

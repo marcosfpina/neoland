@@ -2,9 +2,9 @@ name: ADR Validation & Enforcement
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, staging, dev]
   pull_request:
-    branches: [main, develop]
+    branches: [main, staging, dev]
 
 permissions:
   contents: read
