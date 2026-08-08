@@ -5,6 +5,8 @@
 //! its own process, so the env vars set here never leak across binaries.
 #![allow(dead_code)]
 
+pub mod dspy_stub;
+
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -107,9 +109,15 @@ fn setup_test_env() {
         // SAFETY: called before the server thread spawns, from the first test
         // that touches TestServer; test binaries are single-process.
         unsafe {
-            // Fail fast instead of calling a live DSPy pipeline.
-            std::env::set_var("NEOLAND_DSPY_URL", "http://127.0.0.1:9");
-            std::env::set_var("NEOLAND_PIPELINE_TIMEOUT_SECS", "2");
+            // Fail fast instead of calling a live DSPy pipeline. E2E binaries
+            // point NEOLAND_TEST_DSPY_URL at an in-test stub before booting.
+            let dspy = std::env::var("NEOLAND_TEST_DSPY_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:9".to_string());
+            std::env::set_var("NEOLAND_DSPY_URL", dspy);
+            // Fail-fast default; e2e binaries may pre-set a larger budget.
+            if std::env::var("NEOLAND_PIPELINE_TIMEOUT_SECS").is_err() {
+                std::env::set_var("NEOLAND_PIPELINE_TIMEOUT_SECS", "2");
+            }
             std::env::set_var("NEOLAND_NATS_ENABLED", "false");
             std::env::set_var(
                 "AUDIT_LOG_PATH",

@@ -90,6 +90,9 @@ jobs:
       - name: Session persistence e2e
         run: cargo test --test agent_session_test
 
+      - name: Agent pipeline e2e (DSPy stub + SSE + breakpoints)
+        run: cargo test --test agent_e2e_test
+
   tls-smoke:
     name: TLS/mTLS smoke (REST + gRPC)
     runs-on: ubuntu-latest
