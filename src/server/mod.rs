@@ -1938,6 +1938,18 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
     rustls::crypto::ring::default_provider().install_default().ok();
     let tls_config = crate::tls::TlsConfig::from_env()?;
 
+    // Graceful shutdown: SIGTERM/Ctrl+C drains both servers instead of cutting
+    // in-flight requests. If either server exits on its own, the other is shut
+    // down too (preserves the previous fail-fast semantics of tokio::select!).
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    {
+        let tx = shutdown_tx.clone();
+        tokio::spawn(async move {
+            crate::health::ShutdownHandler::new().wait_for_shutdown_signal().await;
+            let _ = tx.send(());
+        });
+    }
+
     // 1. Start gRPC Server (with gRPC-web support for browser clients)
     // tonic-web enables browsers to call gRPC endpoints via HTTP/1.1 + CORS.
     // For production, restrict origins via a reverse proxy (nginx/Caddy).
@@ -1951,11 +1963,14 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         }
         grpc_builder = grpc_builder.tls_config(grpc_tls)?;
     }
+    let mut grpc_shutdown = shutdown_tx.subscribe();
     let grpc_future = grpc_builder
         .accept_http1(true)
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(LlamaServiceServer::new(MyLlamaService { state: grpc_state }))
-        .serve(grpc_addr);
+        .serve_with_shutdown(grpc_addr, async move {
+            let _ = grpc_shutdown.recv().await;
+        });
 
     // 2. Start REST Server (Axum)
     // Protected routes with full security stack (Phase 1.4 + 4.2)
@@ -2047,20 +2062,55 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
         let rustls_config =
             axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(rustls_config));
         info!("✅ REST API rodando em https://{}", rest_addr);
-        Box::pin(axum_server::bind_rustls(rest_addr, rustls_config).serve(app.into_make_service()))
+        let tls_handle = axum_server::Handle::new();
+        {
+            let handle = tls_handle.clone();
+            let mut rx = shutdown_tx.subscribe();
+            tokio::spawn(async move {
+                let _ = rx.recv().await;
+                handle.graceful_shutdown(Some(std::time::Duration::from_secs(10)));
+            });
+        }
+        Box::pin(
+            axum_server::bind_rustls(rest_addr, rustls_config)
+                .handle(tls_handle)
+                .serve(app.into_make_service()),
+        )
     } else {
         info!("🔓 TLS not configured — use a reverse proxy (nginx/Caddy) for production");
         info!("✅ REST API rodando em http://{}", rest_addr);
         let listener = tokio::net::TcpListener::bind(rest_addr).await?;
-        Box::pin(async move { axum::serve(listener, app).await })
+        let mut rest_shutdown = shutdown_tx.subscribe();
+        Box::pin(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    let _ = rest_shutdown.recv().await;
+                })
+                .await
+        })
     };
     info!("✅ gRPC Service rodando em {}", grpc_addr);
 
-    // Run both servers concurrently
-    tokio::select! {
-        res = grpc_future => info!("gRPC Server exit: {:?}", res),
-        res = rest_future => info!("REST Server exit: {:?}", res),
-    }
+    // Run both servers concurrently. Each one triggers the shutdown signal on
+    // exit, so a crashed server drains the healthy one instead of leaving it
+    // running (fail-fast) — and a signal drains both before join! returns.
+    let grpc_exit_tx = shutdown_tx.clone();
+    let rest_exit_tx = shutdown_tx.clone();
+    let (grpc_res, rest_res) = tokio::join!(
+        async move {
+            let res = grpc_future.await;
+            let _ = grpc_exit_tx.send(());
+            res
+        },
+        async move {
+            let res = rest_future.await;
+            let _ = rest_exit_tx.send(());
+            res
+        }
+    );
+    info!("gRPC Server exit: {:?}", grpc_res);
+    info!("REST Server exit: {:?}", rest_res);
+    info!("Shutdown complete");
 
     Ok(())
 }
