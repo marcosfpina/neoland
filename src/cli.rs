@@ -111,6 +111,13 @@ pub enum Commands {
         server_url: String,
     },
 
+    /// Aplica as migrations do banco (embutidas de migrations/)
+    Migrate {
+        /// URL do Postgres (fallback: NEOLAND_DATABASE_URL, DATABASE_URL)
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+
     /// Gera certificados mTLS para desenvolvimento local
     GenCerts {
         /// Dias de validade dos certificados

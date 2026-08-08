@@ -1788,7 +1788,21 @@ pub async fn run_server(grpc_port: u16, rest_port: u16, web_dist_dir: &str) -> a
             Some(url) => {
                 use sqlx::postgres::PgPoolOptions;
                 match PgPoolOptions::new().max_connections(5).connect(&url).await {
-                    Ok(pool) => Some(pool),
+                    Ok(pool) => {
+                        // Opt-in: databases migrated by hand have no _sqlx_migrations
+                        // table, so running unconditionally could re-apply 001.
+                        let auto_migrate = std::env::var("NEOLAND_AUTO_MIGRATE")
+                            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                            .unwrap_or(false);
+                        if auto_migrate {
+                            sqlx::migrate!("./migrations")
+                                .run(&pool)
+                                .await
+                                .map_err(|e| anyhow::anyhow!("database migration failed: {e}"))?;
+                            info!("Database migrations applied (NEOLAND_AUTO_MIGRATE)");
+                        }
+                        Some(pool)
+                    },
                     Err(error) => {
                         tracing::warn!(%error, "Database connection failed — auth sessions and orchestrator disabled");
                         None

@@ -109,6 +109,25 @@ async fn main() {
             open_browser(&format!("{}/swagger-ui/", server_url.trim_end_matches('/')));
         },
 
+        Commands::Migrate { database_url } => {
+            let url = database_url
+                .or_else(|| std::env::var("NEOLAND_DATABASE_URL").ok())
+                .or_else(|| std::env::var("DATABASE_URL").ok());
+            let Some(url) = url else {
+                eprintln!(
+                    "❌ Banco não configurado — use --database-url, NEOLAND_DATABASE_URL ou DATABASE_URL"
+                );
+                std::process::exit(1);
+            };
+            match neoland::storage::run_migrations(&url).await {
+                Ok(()) => println!("✅ Migrations aplicadas"),
+                Err(e) => {
+                    eprintln!("❌ Falha ao aplicar migrations: {e}");
+                    std::process::exit(1);
+                },
+            }
+        },
+
         Commands::GenCerts { days, cn } => {
             let status = std::process::Command::new("bash")
                 .arg("scripts/gen-certs.sh")
