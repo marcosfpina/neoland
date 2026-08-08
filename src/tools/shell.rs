@@ -53,3 +53,69 @@ impl NativeTool for RunShellCommand {
         Ok(out)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // These tests document the CURRENT contract of the tool. Known gaps
+    // (tracked in the roadmap, not silently "fixed" here): no timeout and
+    // no allowlist — arbitrary bash behind auth + human breakpoint.
+
+    #[test]
+    fn metadata_is_stable() {
+        let tool = RunShellCommand;
+        assert_eq!(tool.name(), "run_shell_command");
+        assert!(!tool.description().is_empty());
+        let schema = tool.input_schema();
+        assert_eq!(schema["required"][0], "command");
+        assert_eq!(schema["properties"]["command"]["type"], "string");
+    }
+
+    #[tokio::test]
+    async fn executes_command_and_returns_stdout() {
+        let out = RunShellCommand
+            .execute(serde_json::json!({"command": "echo shell-tool-ok"}))
+            .await
+            .expect("echo must succeed");
+        assert!(out.contains("shell-tool-ok"));
+    }
+
+    #[tokio::test]
+    async fn stderr_is_appended_with_marker() {
+        let out = RunShellCommand
+            .execute(serde_json::json!({"command": "echo out; echo err >&2"}))
+            .await
+            .expect("command must succeed");
+        assert!(out.contains("out"));
+        assert!(out.contains("--- STDERR ---"));
+        assert!(out.contains("err"));
+    }
+
+    #[tokio::test]
+    async fn nonzero_exit_with_no_output_reports_status() {
+        let out = RunShellCommand
+            .execute(serde_json::json!({"command": "exit 3"}))
+            .await
+            .expect("execute returns Ok even on nonzero exit");
+        assert!(out.contains("exit status: 3"), "got: {out}");
+    }
+
+    #[tokio::test]
+    async fn missing_command_argument_is_an_error() {
+        let err = RunShellCommand
+            .execute(serde_json::json!({"cmd": "echo wrong-key"}))
+            .await
+            .expect_err("missing 'command' must error");
+        assert!(err.to_string().contains("Missing 'command'"));
+    }
+
+    #[tokio::test]
+    async fn non_string_command_is_an_error() {
+        let err = RunShellCommand
+            .execute(serde_json::json!({"command": 42}))
+            .await
+            .expect_err("non-string 'command' must error");
+        assert!(err.to_string().contains("Missing 'command'"));
+    }
+}
