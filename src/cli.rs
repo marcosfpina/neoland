@@ -118,6 +118,12 @@ pub enum Commands {
         database_url: Option<String>,
     },
 
+    /// Mostra, valida ou gera o arquivo de configuração (neoland.toml)
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
     /// Gera certificados mTLS para desenvolvimento local
     GenCerts {
         /// Dias de validade dos certificados
@@ -127,6 +133,26 @@ pub enum Commands {
         /// Common Name do servidor
         #[arg(long, default_value = "neoland.local")]
         cn: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigAction {
+    /// Mostra a config efetiva (arquivo + env NEOLAND_*), com segredos mascarados
+    Show {
+        /// Saída em JSON em vez de TOML
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Valida os arquivos candidatos e a config efetiva (exit 1 se houver problema)
+    Validate,
+
+    /// Gera ./neoland.toml com os defaults
+    Init {
+        /// Sobrescreve o arquivo se já existir
+        #[arg(long)]
+        force: bool,
     },
 }
 

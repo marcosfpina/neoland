@@ -282,8 +282,84 @@ impl Config {
         config
     }
 
+    /// Candidate config file locations, in load order (first existing wins).
+    pub fn candidate_paths() -> Vec<std::path::PathBuf> {
+        vec![std::path::PathBuf::from("neoland.toml"), dirs_candidate()]
+    }
+
+    /// Copy of the effective config with secret material masked — safe to print.
+    pub fn redacted(&self) -> Self {
+        fn mask(s: &str) -> String {
+            if s.is_empty() {
+                String::new()
+            } else {
+                "***".to_string()
+            }
+        }
+        let mut c = self.clone();
+        c.auth.jwt.secret = mask(&c.auth.jwt.secret);
+        c.auth.oauth.google_client_secret = c.auth.oauth.google_client_secret.as_deref().map(mask);
+        c.auth.oauth.github_client_secret = c.auth.oauth.github_client_secret.as_deref().map(mask);
+        c.auth.ldap.bind_password = c.auth.ldap.bind_password.as_deref().map(mask);
+        c.auth.oidc.client_secret = mask(&c.auth.oidc.client_secret);
+        if let Ok(mut url) = reqwest::Url::parse(&c.database.url) {
+            if url.password().is_some() && url.set_password(Some("***")).is_ok() {
+                c.database.url = url.to_string();
+            }
+        }
+        c
+    }
+
+    /// Semantic validation of the effective config. Empty vec = valid.
+    pub fn validate(&self) -> Vec<String> {
+        fn bad_url(name: &str, value: &str) -> Option<String> {
+            if value.is_empty() || reqwest::Url::parse(value).is_ok() {
+                None
+            } else {
+                Some(format!("{name}: URL inválida '{value}'"))
+            }
+        }
+
+        let mut problems = Vec::new();
+        if self.server.grpc_port == self.server.rest_port {
+            problems.push(format!(
+                "server.grpc_port e server.rest_port são a mesma porta ({})",
+                self.server.grpc_port
+            ));
+        }
+        let urls = [
+            ("client.server_url", self.client.server_url.as_str()),
+            ("client.neoland_gateway_url", self.client.neoland_gateway_url.as_str()),
+            ("agents.dspy_url", self.agents.dspy_url.as_str()),
+            ("vault.addr", self.vault.addr.as_str()),
+            ("database.url", self.database.url.as_str()),
+        ];
+        problems.extend(urls.iter().filter_map(|(name, value)| bad_url(name, value)));
+        if self.nats.enabled {
+            problems.extend(bad_url("nats.url", &self.nats.url));
+        }
+        if self.matrix.enabled {
+            problems.extend(bad_url("matrix.base_url", &self.matrix.base_url));
+        }
+        if self.auth.oidc.enabled {
+            problems.extend(bad_url("auth.oidc.issuer_url", &self.auth.oidc.issuer_url));
+        }
+        if self.mcp.enabled && self.mcp.binary.is_empty() {
+            problems.push("mcp.enabled=true mas mcp.binary está vazio".to_string());
+        }
+        if self.agents.pipeline_timeout_secs == 0 {
+            problems.push(
+                "agents.pipeline_timeout_secs = 0 — toda chamada de pipeline expira".to_string(),
+            );
+        }
+        if self.auth.jwt.secret.is_empty() {
+            problems.push("auth.jwt.secret vazio — tokens JWT não podem ser assinados".to_string());
+        }
+        problems
+    }
+
     fn load_from_file() -> Option<Self> {
-        let candidates = [std::path::PathBuf::from("neoland.toml"), dirs_candidate()];
+        let candidates = Self::candidate_paths();
 
         for path in &candidates {
             if path.exists() {
