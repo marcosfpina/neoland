@@ -55,6 +55,9 @@ pub mod llamachat {
     tonic::include_proto!("llamachat");
 }
 
+pub mod error;
+pub use error::ApiError;
+
 const DEFAULT_AUDIT_LOG_PATH: &str = "/var/log/neoland/audit.log";
 
 // REST Data Models (OpenAI compatible subset)
@@ -765,7 +768,7 @@ impl<S> axum::extract::FromRequestParts<S> for RequireUser
 where
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, Json<serde_json::Value>);
+    type Rejection = ApiError;
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
@@ -778,20 +781,16 @@ where
 fn require_role(
     parts: &axum::http::request::Parts,
     required: crate::auth::Role,
-) -> Result<crate::auth::ApiKey, (StatusCode, Json<serde_json::Value>)> {
-    let info = parts.extensions.get::<crate::auth::ApiKey>().cloned().ok_or((
-        StatusCode::UNAUTHORIZED,
-        Json(serde_json::json!({"error": "Authentication required"})),
-    ))?;
+) -> Result<crate::auth::ApiKey, ApiError> {
+    let info = parts
+        .extensions
+        .get::<crate::auth::ApiKey>()
+        .cloned()
+        .ok_or_else(ApiError::unauthorized)?;
     if info.role.has_permission(&required) {
         Ok(info)
     } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": format!("Requires {required:?} role or higher"),
-            })),
-        ))
+        Err(ApiError::forbidden(&required))
     }
 }
 
@@ -804,18 +803,17 @@ pub struct AgentPipelineDep(pub(crate) Arc<AgentOrchestrator>);
 
 #[axum::async_trait]
 impl axum::extract::FromRequestParts<Arc<AppState>> for AgentPipelineDep {
-    type Rejection = (StatusCode, Json<serde_json::Value>);
+    type Rejection = ApiError;
 
     async fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        state.agent_orchestrator.clone().map(Self).ok_or((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({
-                "error": "Agent pipeline not configured (DATABASE_URL required)"
-            })),
-        ))
+        state
+            .agent_orchestrator
+            .clone()
+            .map(Self)
+            .ok_or_else(ApiError::pipeline_unavailable)
     }
 }
 
@@ -1032,7 +1030,7 @@ pub(crate) async fn submit_agent_task(
     _auth: RequireUser,
     AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<AgentTaskBody>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let session_id = body.session_id.unwrap_or_else(uuid::Uuid::new_v4);
 
     let start_event = AuditEvent::new(AuditAction::AgentTaskStart)
@@ -1049,25 +1047,14 @@ pub(crate) async fn submit_agent_task(
                     serde_json::json!(format!("{:?}", result.tech_leader.decision).to_lowercase()),
                 );
             let _ = state.audit_logger.log(decision_event).await;
-            match serde_json::to_value(&result) {
-                Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-                Err(e) => {
-                    tracing::error!(error = %e, session_id = %session_id, "Failed to serialize agent task result");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to serialize result"})),
-                    )
-                        .into_response()
-                },
-            }
+            serde_json::to_value(&result).map(Json).map_err(|e| {
+                tracing::error!(error = %e, session_id = %session_id, "Failed to serialize agent task result");
+                ApiError::internal("Failed to serialize result")
+            })
         },
         Err(e) => {
             tracing::error!(error = %e, session_id = %session_id, "Agent task execution failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
+            Err(ApiError::internal(e.to_string()))
         },
     }
 }
@@ -1095,17 +1082,12 @@ async fn steer_agent_task(
     _auth: RequireUser,
     AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<AgentSteerBody>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     match orchestrator.steer_task(id, body.message).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"status": "Steering message delivered"})),
-        )
-            .into_response(),
+        Ok(_) => Ok(Json(serde_json::json!({"status": "Steering message delivered"}))),
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to deliver steering message");
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": e.to_string()})))
-                .into_response()
+            Err(ApiError::not_found(e.to_string()))
         },
     }
 }
@@ -1131,23 +1113,15 @@ pub(crate) async fn get_agent_session(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
     AgentPipelineDep(orchestrator): AgentPipelineDep,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     match orchestrator.get_session(id).await {
-        Ok(session) => match serde_json::to_value(&session) {
-            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-            Err(e) => {
-                tracing::error!(error = %e, session_id = %id, "Failed to serialize session");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Failed to serialize session"})),
-                )
-                    .into_response()
-            },
-        },
+        Ok(session) => serde_json::to_value(&session).map(Json).map_err(|e| {
+            tracing::error!(error = %e, session_id = %id, "Failed to serialize session");
+            ApiError::internal("Failed to serialize session")
+        }),
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session");
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Session not found"})))
-                .into_response()
+            Err(ApiError::not_found("Session not found"))
         },
     }
 }
@@ -1158,26 +1132,15 @@ async fn get_session_messages(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
     AgentPipelineDep(orchestrator): AgentPipelineDep,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     match orchestrator.get_session_messages(id).await {
-        Ok(messages) => match serde_json::to_value(&messages) {
-            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-            Err(e) => {
-                tracing::error!(error = %e, session_id = %id, "Failed to serialize session messages");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Failed to serialize messages"})),
-                )
-                    .into_response()
-            },
-        },
+        Ok(messages) => serde_json::to_value(&messages).map(Json).map_err(|e| {
+            tracing::error!(error = %e, session_id = %id, "Failed to serialize session messages");
+            ApiError::internal("Failed to serialize messages")
+        }),
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to retrieve session messages");
-            (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Session messages not found"})),
-            )
-                .into_response()
+            Err(ApiError::not_found("Session messages not found"))
         },
     }
 }
@@ -1190,16 +1153,12 @@ async fn set_session_name(
     _auth: RequireUser,
     AgentPipelineDep(orchestrator): AgentPipelineDep,
     Json(body): Json<SetNameBody>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     match orchestrator.set_session_name(id, &body.name).await {
-        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"status": "ok"}))).into_response(),
+        Ok(()) => Ok(Json(serde_json::json!({"status": "ok"}))),
         Err(e) => {
             tracing::warn!(error = %e, session_id = %id, "Failed to update session name");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
+            Err(ApiError::internal(e.to_string()))
         },
     }
 }
@@ -1229,24 +1188,13 @@ pub(crate) async fn list_agent_sessions(
     let limit = query.limit.unwrap_or(24).clamp(1, 100) as i64;
 
     match orchestrator.list_sessions(limit).await {
-        Ok(sessions) => match serde_json::to_value(&sessions) {
-            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to serialize session list");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Failed to serialize sessions"})),
-                )
-                    .into_response()
-            },
-        },
+        Ok(sessions) => serde_json::to_value(&sessions).map(Json).map_err(|e| {
+            tracing::error!(error = %e, "Failed to serialize session list");
+            ApiError::internal("Failed to serialize sessions")
+        }),
         Err(e) => {
             tracing::warn!(error = %e, "Failed to list recent sessions");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to list sessions"})),
-            )
-                .into_response()
+            Err(ApiError::internal("Failed to list sessions"))
         },
     }
 }
@@ -1297,8 +1245,11 @@ pub(crate) async fn agent_health_handler(State(state): State<Arc<AppState>>) -> 
 pub async fn list_agent_tools(
     State(_state): State<Arc<AppState>>,
     AgentPipelineDep(orch): AgentPipelineDep,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mcp = orch
+        .native_mcp
+        .as_ref()
+        .ok_or(ApiError::Bare(StatusCode::SERVICE_UNAVAILABLE))?;
 
     let tools = mcp.list_tools();
     Ok(Json(serde_json::json!({ "tools": tools })))
@@ -1323,12 +1274,15 @@ pub async fn call_agent_tool(
     _auth: RequireUser,
     AgentPipelineDep(orch): AgentPipelineDep,
     Json(payload): Json<ToolCallPayload>,
-) -> Result<Json<crate::mcp::types::CallToolResult>, StatusCode> {
-    let mcp = orch.native_mcp.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+) -> Result<Json<crate::mcp::types::CallToolResult>, ApiError> {
+    let mcp = orch
+        .native_mcp
+        .as_ref()
+        .ok_or(ApiError::Bare(StatusCode::SERVICE_UNAVAILABLE))?;
 
     match mcp.call_tool(payload.session_id, &payload.name, payload.arguments).await {
         Ok(res) => Ok(Json(res)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(_) => Err(ApiError::Bare(StatusCode::INTERNAL_SERVER_ERROR)),
     }
 }
 
@@ -1352,7 +1306,7 @@ pub async fn resolve_agent_breakpoint(
     _auth: RequireUser,
     AgentPipelineDep(orch): AgentPipelineDep,
     Json(payload): Json<BreakpointResolvePayload>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let resolution = match payload.resolution.as_str() {
         "approve" => BreakpointResolution::Approve,
         "steer" => BreakpointResolution::Steer(payload.instruction.unwrap_or_default()),
@@ -1361,8 +1315,8 @@ pub async fn resolve_agent_breakpoint(
 
     match orch.resolve_breakpoint(session_id, resolution).await {
         Ok(true) => Ok(Json(serde_json::json!({ "status": "resolved" }))),
-        Ok(false) => Err(StatusCode::NOT_FOUND),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(false) => Err(ApiError::Bare(StatusCode::NOT_FOUND)),
+        Err(_) => Err(ApiError::Bare(StatusCode::INTERNAL_SERVER_ERROR)),
     }
 }
 

@@ -700,3 +700,88 @@ async fn e2e_rbac_readonly_can_still_read() {
         resp.status()
     );
 }
+
+// =============================================================================
+// Error body contract (snapshot — the TUI parses these bodies literally,
+// so any refactor of the error path must keep them byte-identical)
+// =============================================================================
+
+#[tokio::test]
+async fn e2e_error_contract_401_missing_key_has_empty_body() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .post(format!("{base}/v1/agents/task"))
+        .json(&serde_json::json!({"task": "x"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/task");
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let body = resp.text().await.expect("read body");
+    assert_eq!(body, "", "auth_middleware 401 is a bare status with empty body");
+}
+
+#[tokio::test]
+async fn e2e_error_contract_401_invalid_key_has_empty_body() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .post(format!("{base}/v1/agents/task"))
+        .header("X-API-Key", "neoland_invalid_key_000")
+        .json(&serde_json::json!({"task": "x"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/task");
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let body = resp.text().await.expect("read body");
+    assert_eq!(body, "", "auth_middleware 401 is a bare status with empty body");
+}
+
+#[tokio::test]
+async fn e2e_error_contract_403_rbac_body() {
+    let base = ensure_server_ready().await;
+
+    let resp = http_client()
+        .post(format!("{base}/v1/agents/task"))
+        .header("X-API-Key", dev_keys::READONLY)
+        .json(&serde_json::json!({"task": "x"}))
+        .send()
+        .await
+        .expect("POST /v1/agents/task");
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    let body: Value = resp.json().await.expect("403 body must be JSON");
+    assert_eq!(
+        body,
+        serde_json::json!({"error": "Requires User role or higher"}),
+        "RBAC 403 body is parsed by clients — exact match required"
+    );
+}
+
+#[tokio::test]
+async fn e2e_error_contract_pipeline_503_or_session_404_body() {
+    let base = ensure_server_ready().await;
+
+    // Ambient-dependent: without DATABASE_URL the pipeline extractor answers
+    // 503; with a DB, an unknown session answers 404. Either way the body
+    // shape is part of the contract.
+    let resp = http_client()
+        .get(format!("{base}/v1/agents/session/00000000-0000-0000-0000-000000000000"))
+        .header("X-API-Key", dev_keys::READONLY)
+        .send()
+        .await
+        .expect("GET /v1/agents/session/:id");
+    match resp.status() {
+        StatusCode::SERVICE_UNAVAILABLE => {
+            let body: Value = resp.json().await.expect("503 body must be JSON");
+            assert_eq!(
+                body,
+                serde_json::json!({"error": "Agent pipeline not configured (DATABASE_URL required)"}),
+            );
+        },
+        StatusCode::NOT_FOUND => {
+            let body: Value = resp.json().await.expect("404 body must be JSON");
+            assert_eq!(body, serde_json::json!({"error": "Session not found"}));
+        },
+        other => panic!("expected 503 (no DB) or 404 (unknown session), got {other}"),
+    }
+}
