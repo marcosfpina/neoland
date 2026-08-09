@@ -70,6 +70,7 @@ mod bootstrap;
 mod grpc;
 mod middleware;
 mod rest;
+mod routes;
 mod state;
 
 pub use agents_api::*;
