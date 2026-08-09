@@ -379,6 +379,10 @@
           neoland-web = neolandWebPackage;
           neoland-full = neolandFullPackage;
           ibm-plex-mono = ibmPlexMono;
+        }
+        # Tauri desktop depende de webkitgtk, broken no x86_64-darwin —
+        # expor só no Linux para `nix flake check --all-systems` avaliar limpo.
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           neoland-desktop = neolandDesktopPackage;
         };
 
@@ -417,7 +421,6 @@
               wasm-bindgen-cli
               wasm-pack
               chromedriver
-              chromium
               cargo-wasi
               jq
               rustup
@@ -426,11 +429,17 @@
               expect # strict terminal E2E tests for the TUI
               # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
               stdenv.cc.cc.lib
-              glib
-              gtk3
-              webkitgtk_4_1
-              libsoup_3
-              cairo
+            ]
+            # GUI/browser stack (Tauri desktop + wasm-pack headless tests):
+            # Linux-only — chromium não existe e webkitgtk é broken no darwin,
+            # e `nix flake check --all-systems` avalia o devShell de todos os sistemas.
+            ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+              pkgs.chromium
+              pkgs.glib
+              pkgs.gtk3
+              pkgs.webkitgtk_4_1
+              pkgs.libsoup_3
+              pkgs.cairo
             ]
             ++ neolandCommandPackages;
 
