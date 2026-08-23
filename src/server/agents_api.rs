@@ -78,6 +78,21 @@ pub(crate) struct ListSessionsQuery {
 
 /// POST /v1/agents/session/:id/steer — send human intervention message to
 /// active task
+#[utoipa::path(
+    post,
+    path = "/v1/agents/session/{id}/steer",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(("id" = String, Path, description = "Session UUID", format = "uuid")),
+    request_body = SteerRequest,
+    responses(
+        (status = 200, description = "Steering message delivered", body = StatusResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Requires User role or higher", body = ErrorResponse),
+        (status = 404, description = "No active task for this session", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
 pub(crate) async fn steer_agent_task(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
@@ -130,6 +145,19 @@ pub(crate) async fn get_agent_session(
 
 /// GET /v1/agents/session/:id/messages — retrieve messages for a session.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
+#[utoipa::path(
+    get,
+    path = "/v1/agents/session/{id}/messages",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(("id" = String, Path, description = "Session UUID", format = "uuid")),
+    responses(
+        (status = 200, description = "Messages for the session", body = [SessionMessage]),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Session messages not found", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
 pub(crate) async fn get_session_messages(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
@@ -149,6 +177,21 @@ pub(crate) async fn get_session_messages(
 
 /// PATCH /v1/agents/session/:id/name — update session display name.
 /// Requires User+ role (enforced by the RequireUser extractor).
+#[utoipa::path(
+    patch,
+    path = "/v1/agents/session/{id}/name",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(("id" = String, Path, description = "Session UUID", format = "uuid")),
+    request_body = SetSessionNameRequest,
+    responses(
+        (status = 200, description = "Name updated", body = StatusResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Requires User role or higher", body = ErrorResponse),
+        (status = 500, description = "Update failed", body = ErrorResponse),
+        (status = 503, description = "Pipeline not configured", body = ErrorResponse),
+    )
+)]
 pub(crate) async fn set_session_name(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<uuid::Uuid>,
@@ -324,6 +367,21 @@ pub async fn resolve_agent_breakpoint(
 
 /// GET /v1/agents/events — global SSE stream of all agent pipeline events.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
+///
+/// Each SSE `data:` frame is one serialized `AgentEvent`, tagged by `type`:
+/// `pipeline_started`, `pipeline_done`, `steering_received`,
+/// `breakpoint_hit`, `pipeline_error`. Subscribe before submitting a task —
+/// the bus is a broadcast channel and does not replay to late subscribers.
+#[utoipa::path(
+    get,
+    path = "/v1/agents/events",
+    tag = "agents",
+    security(("api_key" = [])),
+    responses(
+        (status = 200, description = "SSE stream of agent pipeline events", content_type = "text/event-stream"),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub(crate) async fn agent_events_handler(
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
@@ -338,6 +396,17 @@ pub(crate) async fn agent_events_handler(
 
 /// GET /v1/agents/events/:session — SSE stream filtered to a specific session.
 /// Requires ReadOnly+ auth (enforced by auth_middleware).
+#[utoipa::path(
+    get,
+    path = "/v1/agents/events/{session}",
+    tag = "agents",
+    security(("api_key" = [])),
+    params(("session" = String, Path, description = "Session UUID", format = "uuid")),
+    responses(
+        (status = 200, description = "SSE stream filtered to one session", content_type = "text/event-stream"),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub(crate) async fn agent_events_session_handler(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<uuid::Uuid>,

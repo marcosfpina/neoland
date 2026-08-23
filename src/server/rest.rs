@@ -81,6 +81,15 @@ pub(crate) async fn health_handler(
 }
 
 /// Readiness check (Kubernetes readiness probe)
+#[utoipa::path(
+    get,
+    path = "/ready",
+    tag = "system",
+    responses(
+        (status = 200, description = "Service ready to accept traffic", body = ReadinessResponse),
+        (status = 503, description = "Service not ready", body = ReadinessResponse),
+    )
+)]
 pub(crate) async fn readiness_handler() -> (StatusCode, Json<health::ReadinessResponse>) {
     let response = health::perform_readiness_check().await;
     let status_code = if response.ready {
@@ -92,11 +101,37 @@ pub(crate) async fn readiness_handler() -> (StatusCode, Json<health::ReadinessRe
 }
 
 /// Liveness check (simple heartbeat)
+#[utoipa::path(
+    get,
+    path = "/live",
+    tag = "system",
+    responses(
+        (status = 200, description = "Process alive", body = LivenessResponse),
+    )
+)]
 pub(crate) async fn liveness_handler() -> Json<health::LivenessResponse> {
     let response = health::perform_liveness_check().await;
     Json(response)
 }
 
+/// POST /v1/chat/completions — OpenAI-compatible completion.
+///
+/// `stream` defaults to `true`: the response is an SSE stream of deltas.
+/// With `stream: false` a single JSON body is returned instead.
+#[utoipa::path(
+    post,
+    path = "/v1/chat/completions",
+    tag = "chat",
+    security(("api_key" = [])),
+    request_body = ChatRequest,
+    responses(
+        (status = 200, description = "Completion (JSON when stream=false, SSE stream otherwise)", body = ChatResponse),
+        (status = 400, description = "Validation failed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Requires User role or higher", body = ErrorResponse),
+        (status = 429, description = "Rate limit exceeded"),
+    )
+)]
 pub(crate) async fn rest_chat_handler(
     State(state): State<Arc<AppState>>,
     _auth: RequireUser,
