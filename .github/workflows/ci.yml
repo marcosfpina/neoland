@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main, develop]
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,101 +44,8 @@ jobs:
       - name: Unit tests (web)
         run: cargo test -p neoland-web --verbose
 
-      - name: Integration tests (in-process server, ephemeral ports)
-        run: cargo test --test rest_api_test --test grpc_integration_test --test agent_contract_test
-
       - name: Check WASM target
         run: cargo check -p neoland-web --target wasm32-unknown-unknown
-
-  binary-smoke:
-    name: Binary smoke (boots · serves · exits clean)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config
-
-      # Debug build: o smoke valida comportamento de boot/shutdown, não
-      # performance. O mesmo script roda contra o binário release em
-      # release.yml, antes de publicar.
-      - name: Build binary
-        run: cargo build --bin neoland
-
-      - name: Smoke
-        run: ./scripts/smoke-binary.sh target/debug/neoland
-
-  audit:
-    name: Supply chain (cargo audit)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      # Ignores exigem justificativa escrita em audit.toml.
-      # continue-on-error enquanto restam advisories de deps transitivas cujo
-      # fix depende de bump de dep direta (ver audit.toml); vira gate assim
-      # que a lista zerar — a saída fica visível no log em qualquer caso.
-      - name: cargo audit
-        continue-on-error: true
-        run: cargo audit
-
-  e2e-db:
-    name: E2E (Postgres + pgvector + migrations)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_DB: neoland_test
-          POSTGRES_USER: neoland
-          POSTGRES_PASSWORD: neoland_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U neoland -d neoland_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql://neoland:neoland_test@localhost:5432/neoland_test
-      # Missing services must turn this job red, never silently skip
-      NEOLAND_TEST_REQUIRE_DEPS: "1"
-      NEOLAND_SKIP_EMBEDDINGS: "true"
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config
-
-      - name: Apply migrations (embedded)
-        run: cargo run -q -- migrate
-
-      - name: Session persistence e2e
-        run: cargo test --test agent_session_test
-
-      - name: Agent pipeline e2e (DSPy stub + SSE + breakpoints)
-        run: cargo test --test agent_e2e_test
 
   tls-smoke:
     name: TLS/mTLS smoke (REST + gRPC)

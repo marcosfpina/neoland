@@ -415,29 +415,6 @@ pub mod utils {
     }
 }
 
-/// Resident memory of this process in bytes, read from /proc/self/statm.
-/// Linux-only (the only supported deployment target); None elsewhere.
-pub fn resident_memory_bytes() -> Option<f64> {
-    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
-    let resident_pages: f64 = statm.split_whitespace().nth(1)?.parse().ok()?;
-    // Page size is 4096 on every Linux target we ship to (x86_64/aarch64).
-    Some(resident_pages * 4096.0)
-}
-
-/// Spawns the background collector that keeps MEMORY_USAGE_BYTES fresh.
-/// Without it the gauge is registered but stays 0 forever.
-pub fn spawn_resource_collector() {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            if let Some(bytes) = resident_memory_bytes() {
-                MEMORY_USAGE_BYTES.set(bytes);
-            }
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

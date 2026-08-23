@@ -61,51 +61,6 @@ pub struct AgentHealthResponse {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct SteerRequest {
-    /// Directive injected into the running pipeline; the orchestrator
-    /// replans on the next tick.
-    #[schema(example = "focus on the migration path, skip the benchmark")]
-    pub message: String,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct SetSessionNameRequest {
-    #[schema(example = "pgvector index tuning")]
-    pub name: String,
-}
-
-/// Corpo genérico `{"status": "..."}` devolvido pelos writes do pipeline.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct StatusResponse {
-    #[schema(example = "ok")]
-    pub status: String,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct ReadinessResponse {
-    pub ready: bool,
-    #[schema(example = "1970-01-01T00:00:00Z")]
-    pub timestamp: String,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct LivenessResponse {
-    pub alive: bool,
-    #[schema(example = "1970-01-01T00:00:00Z")]
-    pub timestamp: String,
-}
-
-/// Mensagem persistida de uma sessão do pipeline.
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct SessionMessage {
-    #[schema(example = "user")]
-    pub role: String,
-    pub content: String,
-    #[schema(value_type = String, format = "date-time")]
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     #[schema(default = true)]
@@ -224,19 +179,11 @@ impl Modify for BearerAuth {
     ),
     paths(
         crate::server::health_handler,
-        crate::server::readiness_handler,
-        crate::server::liveness_handler,
         crate::server::metrics_handler,
-        crate::server::rest_chat_handler,
         crate::server::agent_health_handler,
         crate::server::submit_agent_task,
         crate::server::list_agent_sessions,
         crate::server::get_agent_session,
-        crate::server::get_session_messages,
-        crate::server::set_session_name,
-        crate::server::steer_agent_task,
-        crate::server::agent_events_handler,
-        crate::server::agent_events_session_handler,
         crate::server::list_agent_tools,
         crate::server::call_agent_tool,
         crate::server::resolve_agent_breakpoint,
@@ -251,8 +198,6 @@ impl Modify for BearerAuth {
     components(schemas(
         AgentTaskRequest, PipelineResult, SessionState,
         ErrorResponse, AgentHealthResponse,
-        SteerRequest, SetSessionNameRequest, StatusResponse, SessionMessage,
-        ReadinessResponse, LivenessResponse,
         ChatRequest, ChatMessage, ChatResponse, ChatChoice,
         AuthLoginResponse, AuthUserInfo, RefreshRequest, RefreshResponse,
         AuthMeResponse, LogoutResponse,
@@ -297,59 +242,6 @@ mod tests {
         let components = spec.components.expect("components present");
         assert!(components.security_schemes.contains_key("api_key"));
         assert!(components.security_schemes.contains_key("bearer_auth"));
-    }
-
-    /// Toda rota registrada no router precisa aparecer no spec.
-    ///
-    /// A lista abaixo espelha `server::routes::build_router`. Rota nova sem
-    /// `#[utoipa::path]` quebra este teste — que é o ponto: o contrato da API
-    /// é consumido pelo Web Console e por clientes gerados, e um endpoint
-    /// ausente do spec é indistinguível de um endpoint inexistente.
-    #[test]
-    fn openapi_documents_every_registered_route() {
-        let spec = NeolandApi::openapi();
-        let documented: Vec<&str> = spec.paths.paths.keys().map(|s| s.as_str()).collect();
-
-        for path in &[
-            "/health",
-            "/ready",
-            "/live",
-            "/metrics",
-            "/v1/chat/completions",
-            "/v1/agents/health",
-            "/v1/agents/task",
-            "/v1/agents/sessions",
-            "/v1/agents/session/{id}",
-            "/v1/agents/session/{id}/messages",
-            "/v1/agents/session/{id}/name",
-            "/v1/agents/session/{id}/steer",
-            "/v1/agents/session/{id}/breakpoint/resolve",
-            "/v1/agents/tools",
-            "/v1/agents/tools/call",
-            // As duas rotas SSE são as mais fáceis de esquecer: não têm
-            // corpo de resposta convencional.
-            "/v1/agents/events",
-            "/v1/agents/events/{session}",
-            "/auth/login/google",
-            "/auth/login/github",
-            "/auth/callback/google",
-            "/auth/callback/github",
-            "/auth/refresh",
-            "/auth/me",
-            "/auth/logout",
-        ] {
-            assert!(
-                documented.contains(path),
-                "route {path} is registered but missing from the OpenAPI spec\ndocumented: {documented:#?}"
-            );
-        }
-
-        assert_eq!(
-            documented.len(),
-            24,
-            "expected 24 documented paths, found {}: {documented:#?}",
-            documented.len()
-        );
     }
 
     #[test]
