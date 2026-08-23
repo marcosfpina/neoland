@@ -21,7 +21,6 @@ pub struct Config {
     pub mcp: McpConfig,
     pub matrix: MatrixConfig,
     pub auth: AuthConfig,
-    pub shell_tool: ShellToolConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,31 +161,6 @@ impl Default for McpConfig {
     }
 }
 
-/// Limites do `RunShellCommand` (native tool do MCP interno).
-///
-/// A tool executa bash arbitrário atrás de auth User+ e de um breakpoint
-/// humano. Estes dois limites cobrem o que a aprovação humana não cobre:
-/// um comando aprovado que nunca termina, e (opcionalmente) restringir
-/// quais binários podem ser invocados.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ShellToolConfig {
-    /// Tempo máximo de execução. Estourado, o processo é morto
-    /// (`kill_on_drop`) e a tool devolve erro em vez de segurar o handler.
-    pub timeout_secs: u64,
-    /// Binários permitidos. **Vazia = sem restrição** (comportamento
-    /// histórico preservado). Não-vazia ativa o modo restrito, que também
-    /// rejeita encadeamento de shell — sem isso a lista seria contornável
-    /// com `permitido; proibido`.
-    pub allowlist: Vec<String>,
-}
-
-impl Default for ShellToolConfig {
-    fn default() -> Self {
-        Self { timeout_secs: 30, allowlist: Vec::new() }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MatrixConfig {
@@ -308,84 +282,8 @@ impl Config {
         config
     }
 
-    /// Candidate config file locations, in load order (first existing wins).
-    pub fn candidate_paths() -> Vec<std::path::PathBuf> {
-        vec![std::path::PathBuf::from("neoland.toml"), dirs_candidate()]
-    }
-
-    /// Copy of the effective config with secret material masked — safe to print.
-    pub fn redacted(&self) -> Self {
-        fn mask(s: &str) -> String {
-            if s.is_empty() {
-                String::new()
-            } else {
-                "***".to_string()
-            }
-        }
-        let mut c = self.clone();
-        c.auth.jwt.secret = mask(&c.auth.jwt.secret);
-        c.auth.oauth.google_client_secret = c.auth.oauth.google_client_secret.as_deref().map(mask);
-        c.auth.oauth.github_client_secret = c.auth.oauth.github_client_secret.as_deref().map(mask);
-        c.auth.ldap.bind_password = c.auth.ldap.bind_password.as_deref().map(mask);
-        c.auth.oidc.client_secret = mask(&c.auth.oidc.client_secret);
-        if let Ok(mut url) = reqwest::Url::parse(&c.database.url) {
-            if url.password().is_some() && url.set_password(Some("***")).is_ok() {
-                c.database.url = url.to_string();
-            }
-        }
-        c
-    }
-
-    /// Semantic validation of the effective config. Empty vec = valid.
-    pub fn validate(&self) -> Vec<String> {
-        fn bad_url(name: &str, value: &str) -> Option<String> {
-            if value.is_empty() || reqwest::Url::parse(value).is_ok() {
-                None
-            } else {
-                Some(format!("{name}: URL inválida '{value}'"))
-            }
-        }
-
-        let mut problems = Vec::new();
-        if self.server.grpc_port == self.server.rest_port {
-            problems.push(format!(
-                "server.grpc_port e server.rest_port são a mesma porta ({})",
-                self.server.grpc_port
-            ));
-        }
-        let urls = [
-            ("client.server_url", self.client.server_url.as_str()),
-            ("client.neoland_gateway_url", self.client.neoland_gateway_url.as_str()),
-            ("agents.dspy_url", self.agents.dspy_url.as_str()),
-            ("vault.addr", self.vault.addr.as_str()),
-            ("database.url", self.database.url.as_str()),
-        ];
-        problems.extend(urls.iter().filter_map(|(name, value)| bad_url(name, value)));
-        if self.nats.enabled {
-            problems.extend(bad_url("nats.url", &self.nats.url));
-        }
-        if self.matrix.enabled {
-            problems.extend(bad_url("matrix.base_url", &self.matrix.base_url));
-        }
-        if self.auth.oidc.enabled {
-            problems.extend(bad_url("auth.oidc.issuer_url", &self.auth.oidc.issuer_url));
-        }
-        if self.mcp.enabled && self.mcp.binary.is_empty() {
-            problems.push("mcp.enabled=true mas mcp.binary está vazio".to_string());
-        }
-        if self.agents.pipeline_timeout_secs == 0 {
-            problems.push(
-                "agents.pipeline_timeout_secs = 0 — toda chamada de pipeline expira".to_string(),
-            );
-        }
-        if self.auth.jwt.secret.is_empty() {
-            problems.push("auth.jwt.secret vazio — tokens JWT não podem ser assinados".to_string());
-        }
-        problems
-    }
-
     fn load_from_file() -> Option<Self> {
-        let candidates = Self::candidate_paths();
+        let candidates = [std::path::PathBuf::from("neoland.toml"), dirs_candidate()];
 
         for path in &candidates {
             if path.exists() {
@@ -510,15 +408,6 @@ impl Config {
                 "0" | "false" | "no" | "off" => self.mcp.enabled = false,
                 _ => {},
             }
-        }
-        if let Some(v) = get_env("NEOLAND_SHELL_TIMEOUT_SECS") {
-            if let Ok(secs) = v.parse::<u64>() {
-                self.shell_tool.timeout_secs = secs;
-            }
-        }
-        if let Some(v) = get_env("NEOLAND_SHELL_ALLOWLIST") {
-            self.shell_tool.allowlist =
-                v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         }
         if let Some(v) = get_env("NEOLAND_MATRIX_URL") {
             self.matrix.base_url = v;

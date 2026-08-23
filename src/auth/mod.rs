@@ -10,15 +10,6 @@
 //!
 //! See ADR-011 for detailed architecture decisions.
 
-/// Well-known development API keys, seeded by [`AuthManager::new`].
-/// Single source of truth for tests — never use these in production
-/// (`NEOLAND_REQUIRE_VAULT_KEYS=1` rejects them at startup).
-pub mod dev_keys {
-    pub const ADMIN: &str = "neoland_admin_dev_key_change_in_production";
-    pub const USER: &str = "neoland_user_dev_key_change_in_production";
-    pub const READONLY: &str = "neoland_readonly_dev_key_change_in_production";
-}
-
 // ── Enterprise auth (v0.0.1) ──────────────────────────────────────────────
 pub mod jwt;
 pub mod middleware;
@@ -94,31 +85,33 @@ impl AuthManager {
     pub fn new() -> Self {
         let mut keys = HashMap::new();
 
-        // Default keys (should be loaded from secrets management in production)
+        // Default admin key (should be loaded from secrets management in production)
         keys.insert(
-            dev_keys::ADMIN.to_string(),
+            "neoland_admin_dev_key_change_in_production".to_string(),
             ApiKey {
-                key: dev_keys::ADMIN.to_string(),
+                key: "neoland_admin_dev_key_change_in_production".to_string(),
                 role: Role::Admin,
                 user_id: "admin".to_string(),
                 description: "Development admin key".to_string(),
             },
         );
 
+        // Default user key
         keys.insert(
-            dev_keys::USER.to_string(),
+            "neoland_user_dev_key_change_in_production".to_string(),
             ApiKey {
-                key: dev_keys::USER.to_string(),
+                key: "neoland_user_dev_key_change_in_production".to_string(),
                 role: Role::User,
                 user_id: "user".to_string(),
                 description: "Development user key".to_string(),
             },
         );
 
+        // Default read-only key
         keys.insert(
-            dev_keys::READONLY.to_string(),
+            "neoland_readonly_dev_key_change_in_production".to_string(),
             ApiKey {
-                key: dev_keys::READONLY.to_string(),
+                key: "neoland_readonly_dev_key_change_in_production".to_string(),
                 role: Role::ReadOnly,
                 user_id: "readonly".to_string(),
                 description: "Development read-only key".to_string(),
