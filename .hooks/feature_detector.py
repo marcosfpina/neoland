@@ -4,7 +4,6 @@
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -31,12 +30,6 @@ INTEGRATION_EVIDENCE = [
     r"^adr/(proposed|accepted)/",
 ]
 
-# Tipos de commit (conventional commits) que não introduzem comportamento
-# novo — limpeza, refactor sem mudança semântica, docs, testes, infra.
-# Não faz sentido exigir evidência de integração deles (ex.: remover código
-# morto em src/server/ não tem o que testar). feat/fix continuam exigindo.
-NON_FEATURE_TYPES = {"chore", "refactor", "docs", "test", "tests", "style", "ci", "build", "revert"}
-
 
 def has_integration_evidence(files: list[str]) -> bool:
     return any(
@@ -46,25 +39,10 @@ def has_integration_evidence(files: list[str]) -> bool:
     )
 
 
-def commit_subject(commit: str) -> str:
-    try:
-        return subprocess.run(
-            ["git", "log", "-1", "--format=%s", commit],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return ""
-
-
-def is_non_feature_commit(subject: str) -> bool:
-    match = re.match(r"^(\w+)[(!:]", subject)
-    return bool(match) and match.group(1).lower() in NON_FEATURE_TYPES
-
-
 def detect(commit: str, files: list[str], min_confidence: float) -> list[dict]:
     detected = []
     seen_features: set[str] = set()
-    evidence = has_integration_evidence(files) or is_non_feature_commit(commit_subject(commit))
+    evidence = has_integration_evidence(files)
 
     for path in files:
         for pattern, feature, description in FEATURE_PATTERNS:

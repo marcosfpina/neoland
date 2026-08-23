@@ -371,7 +371,7 @@ async fn test_resource_exhaustion_attacks() {
     let billion_laughs = json!({
         "messages": [{
             "role": "user",
-            "content": vec!["lol"; 100000].join("")
+            "content": format!("{}", vec!["lol"; 100000].join(""))
         }]
     });
 

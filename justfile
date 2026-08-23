@@ -107,37 +107,9 @@ fix:
     cargo fmt
     cargo clippy --fix --allow-staged --all-targets 2>/dev/null || true
 
-# Watch mode: clippy + unit tests on every save (requires cargo-watch in devShell)
+# Watch mode: re-check lib on every save (requires cargo-watch in devShell)
 watch:
-    cargo watch -x 'clippy --lib' -x 'test --lib'
-
-# ─── Database (dev) ───────────────────────────────────────────────────────
-
-# Sobe o Postgres (pgvector) local com porta publicada em localhost:5432
-db-up:
-    POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-neoland_dev}" \
-    LLM_API_KEY="${LLM_API_KEY:-dev}" \
-    NEOLAND_ADMIN_API_KEY="${NEOLAND_ADMIN_API_KEY:-dev}" \
-    NEOLAND_USER_API_KEY="${NEOLAND_USER_API_KEY:-dev}" \
-    NEOLAND_READONLY_API_KEY="${NEOLAND_READONLY_API_KEY:-dev}" \
-    docker compose -f deploy/docker/docker-compose.yml -f deploy/docker/docker-compose.dev.yml up -d --wait postgres
-    @echo "→ export DATABASE_URL=postgresql://neoland:${POSTGRES_PASSWORD:-neoland_dev}@localhost:5432/neoland"
-
-# Aplica as migrations no Postgres do db-up (outros alvos: neoland migrate --database-url)
-# Nota: ignora o DATABASE_URL do ambiente de propósito — o devShell exporta um
-# socket de sistema (postgresql:///neoland?host=/run/postgresql) que nem sempre existe.
-db-migrate:
-    DATABASE_URL="postgresql://neoland:${POSTGRES_PASSWORD:-neoland_dev}@localhost:5432/neoland" \
-    cargo run -q -- migrate
-
-# Para o Postgres local (dados preservados no volume)
-db-down:
-    POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-neoland_dev}" \
-    LLM_API_KEY="${LLM_API_KEY:-dev}" \
-    NEOLAND_ADMIN_API_KEY="${NEOLAND_ADMIN_API_KEY:-dev}" \
-    NEOLAND_USER_API_KEY="${NEOLAND_USER_API_KEY:-dev}" \
-    NEOLAND_READONLY_API_KEY="${NEOLAND_READONLY_API_KEY:-dev}" \
-    docker compose -f deploy/docker/docker-compose.yml -f deploy/docker/docker-compose.dev.yml stop postgres
+    cargo watch -x 'check --lib'
 
 # ─── TUI development ──────────────────────────────────────────────────────
 

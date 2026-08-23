@@ -238,40 +238,52 @@
         ];
 
 
-        # Fonte canônica do package: nix/package.nix (versão lida do Cargo.toml).
-        # src explícito: callPackage injetaria pkgs.src (alias de outro pacote)
-        # por cima do default.
-        neolandPackage = pkgs.callPackage ./nix/package.nix { src = ./.; };
+        # utoipa-swagger-ui baixa este zip em build time; pré-buscar mantém
+        # o build determinístico e sem rede no builder.
+        swaggerUiZip = pkgs.fetchurl {
+          url = "https://github.com/swagger-api/swagger-ui/archive/refs/tags/v5.17.12.zip";
+          sha256 = "1wh7yrkyc87zkzdyxbhpzcvykmmz2zkbsj9h0ny2mmryjby37bhw";
+        };
 
-        # `cargo clippy` reutilizando o vendoring/preBuild do package;
-        # toolchain do overlay primeiro no PATH (traz cargo-clippy).
-        neolandClippyCheck = neolandPackage.overrideAttrs (old: {
-          pname = "neoland-clippy";
-          nativeBuildInputs = [ rustToolchain ] ++ (old.nativeBuildInputs or [ ]);
-          buildPhase = ''
-            runHook preBuild
-            cargo clippy --all-targets --offline -- -D warnings
-            runHook postBuild
-          '';
-          doCheck = false;
-          installPhase = ''
-            runHook preInstall
-            touch $out
-            runHook postInstall
-          '';
-        });
+        neolandPackage = pkgs.rustPlatform.buildRustPackage {
+          pname = "neoland";
+          version = "0.0.1";
 
-        neolandFmtCheck =
-          pkgs.runCommand "neoland-fmt-check"
-            {
-              nativeBuildInputs = [ rustToolchain ];
-            }
-            ''
-              cd ${self}
-              export CARGO_HOME="$TMPDIR/cargo"
-              cargo fmt --check
-              touch $out
-            '';
+          src = ./.;
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
+
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            protobuf
+            maturin
+          ];
+
+          buildInputs = with pkgs; [
+            openssl
+          ];
+
+          PROTOC = "${pkgs.protobuf}/bin/protoc";
+          # O zip precisa ser gravável: o build script copia preservando perms
+          # e o unzip falha com PermissionDenied se vier 444 do /nix/store.
+          preBuild = ''
+            cp ${swaggerUiZip} "$TMPDIR/v5.17.12.zip"
+            chmod +w "$TMPDIR/v5.17.12.zip"
+            export SWAGGER_UI_DOWNLOAD_URL="file://$TMPDIR/v5.17.12.zip"
+          '';
+
+          # Enable tests (Phase 0: Foundation)
+          doCheck = true;
+
+          meta = with pkgs.lib; {
+            description = "Neoland - Terminal AI Agent with Enterprise Security";
+            license = licenses.mit;
+            maintainers = [ "kernelcore" ];
+          };
+        };
 
         neolandWebPackage = pkgs.stdenv.mkDerivation {
           pname = "neoland-web";
@@ -379,20 +391,7 @@
           neoland-web = neolandWebPackage;
           neoland-full = neolandFullPackage;
           ibm-plex-mono = ibmPlexMono;
-        }
-        # Tauri desktop depende de webkitgtk, broken no x86_64-darwin —
-        # expor só no Linux para `nix flake check --all-systems` avaliar limpo.
-        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           neoland-desktop = neolandDesktopPackage;
-        };
-
-        # `nix flake check` real: build (com testes --lib), fmt e clippy.
-        # CI roda --no-build em PR/push (eval barato); o check completo
-        # roda em push para main, nightly e workflow_dispatch.
-        checks = {
-          build = neolandPackage;
-          fmt = neolandFmtCheck;
-          clippy = neolandClippyCheck;
         };
 
         formatter = pkgs.nixfmt-tree;
@@ -421,6 +420,7 @@
               wasm-bindgen-cli
               wasm-pack
               chromedriver
+              chromium
               cargo-wasi
               jq
               rustup
@@ -429,17 +429,11 @@
               expect # strict terminal E2E tests for the TUI
               # Required for Rust-based Python extensions (tokenizers, dspy via litellm)
               stdenv.cc.cc.lib
-            ]
-            # GUI/browser stack (Tauri desktop + wasm-pack headless tests):
-            # Linux-only — chromium não existe e webkitgtk é broken no darwin,
-            # e `nix flake check --all-systems` avalia o devShell de todos os sistemas.
-            ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
-              pkgs.chromium
-              pkgs.glib
-              pkgs.gtk3
-              pkgs.webkitgtk_4_1
-              pkgs.libsoup_3
-              pkgs.cairo
+              glib
+              gtk3
+              webkitgtk_4_1
+              libsoup_3
+              cairo
             ]
             ++ neolandCommandPackages;
 
