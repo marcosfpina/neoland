@@ -370,7 +370,7 @@ Nix flake provides:
 
 ## License
 
-Proprietary — Internal Research Project
+Apache 2.0
 
 **Maintained by**: VoidNxSEC Team  
 **Last validated**: 2026-08-02 · PR #10 release gate passed Rust, Python contracts,
