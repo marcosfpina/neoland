@@ -238,6 +238,14 @@ impl AuditLogger {
         Ok(Self { log_path, alert_handler: Arc::new(RwLock::new(None)) })
     }
 
+    /// Verifies the audit log file is still writable without emitting an event.
+    /// Used by the /health endpoint: disk full, lost permissions or a removed
+    /// directory surface here instead of on the next real audit write.
+    pub fn probe_writable(&self) -> Result<()> {
+        OpenOptions::new().create(true).append(true).open(&self.log_path)?;
+        Ok(())
+    }
+
     /// Set alert handler for suspicious activity
     pub async fn set_alert_handler(&self, handler: Box<dyn AlertHandler + Send + Sync>) {
         let mut guard = self.alert_handler.write().await;

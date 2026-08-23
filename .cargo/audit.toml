@@ -1,0 +1,18 @@
+# cargo-audit configuration
+#
+# Advisories ignoradas exigem justificativa escrita. "Ignorar" aqui significa
+# "analisado e não aplicável a este binário" — nunca "incômodo".
+
+[advisories]
+ignore = [
+  # RUSTSEC-2023-0071 — Marvin Attack (timing sidechannel) no crate `rsa`.
+  #
+  # Não aplicável: `rsa` entra no Cargo.lock apenas via `sqlx-mysql`, e o
+  # neoland habilita somente a feature `postgres` do sqlx. O crate está no
+  # lockfile mas nunca é compilado no binário — o cargo-audit lê o lock
+  # inteiro, sem considerar resolução de features.
+  #
+  # Verificar com: cargo tree -i rsa  (retorna "nothing to print")
+  # Reavaliar se algum dia habilitarmos a feature `mysql` do sqlx.
+  "RUSTSEC-2023-0071",
+]
