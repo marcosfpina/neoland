@@ -21,6 +21,7 @@ pub struct Config {
     pub mcp: McpConfig,
     pub matrix: MatrixConfig,
     pub auth: AuthConfig,
+    pub shell_tool: ShellToolConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +159,31 @@ pub struct McpConfig {
 impl Default for McpConfig {
     fn default() -> Self {
         Self { binary: "securellm-mcp".to_string(), enabled: false }
+    }
+}
+
+/// Limites do `RunShellCommand` (native tool do MCP interno).
+///
+/// A tool executa bash arbitrário atrás de auth User+ e de um breakpoint
+/// humano. Estes dois limites cobrem o que a aprovação humana não cobre:
+/// um comando aprovado que nunca termina, e (opcionalmente) restringir
+/// quais binários podem ser invocados.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShellToolConfig {
+    /// Tempo máximo de execução. Estourado, o processo é morto
+    /// (`kill_on_drop`) e a tool devolve erro em vez de segurar o handler.
+    pub timeout_secs: u64,
+    /// Binários permitidos. **Vazia = sem restrição** (comportamento
+    /// histórico preservado). Não-vazia ativa o modo restrito, que também
+    /// rejeita encadeamento de shell — sem isso a lista seria contornável
+    /// com `permitido; proibido`.
+    pub allowlist: Vec<String>,
+}
+
+impl Default for ShellToolConfig {
+    fn default() -> Self {
+        Self { timeout_secs: 30, allowlist: Vec::new() }
     }
 }
 
@@ -484,6 +510,15 @@ impl Config {
                 "0" | "false" | "no" | "off" => self.mcp.enabled = false,
                 _ => {},
             }
+        }
+        if let Some(v) = get_env("NEOLAND_SHELL_TIMEOUT_SECS") {
+            if let Ok(secs) = v.parse::<u64>() {
+                self.shell_tool.timeout_secs = secs;
+            }
+        }
+        if let Some(v) = get_env("NEOLAND_SHELL_ALLOWLIST") {
+            self.shell_tool.allowlist =
+                v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         }
         if let Some(v) = get_env("NEOLAND_MATRIX_URL") {
             self.matrix.base_url = v;

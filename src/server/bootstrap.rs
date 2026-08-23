@@ -215,8 +215,9 @@ async fn try_init_agent_pipeline(
                 Ok(orch) => {
                     // Initialize Native MCP Server and Background Task
                     let (bp_tx, mut bp_rx) = tokio::sync::mpsc::channel(100);
-                    let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> =
-                        vec![Box::new(crate::tools::shell::RunShellCommand)];
+                    let tools: Vec<Box<dyn crate::mcp::server::NativeTool>> = vec![Box::new(
+                        crate::tools::shell::RunShellCommand::new(cfg.shell_tool.clone()),
+                    )];
                     let native_mcp = NativeMcpServer::new(tools, bp_tx);
 
                     // We will attach the task listener later, for now we just attach
