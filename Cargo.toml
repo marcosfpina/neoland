@@ -45,7 +45,7 @@ vaultrs = "0.7"
 async-trait = "0.1"
 
 # Observability & Metrics (Phase 4.1)
-prometheus = "0.13"
+prometheus = "0.14"
 lazy_static = "1.4"
 opentelemetry = { version = "0.27", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27", features = ["http-proto", "grpc-tonic", "trace"] }
@@ -80,7 +80,7 @@ tonic-web = "0.12"
 prost = "0.13"
 tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 axum-extra = { version = "0.9", features = ["cookie"] }
