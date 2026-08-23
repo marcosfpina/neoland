@@ -2,12 +2,9 @@ name: Nix Evaluation
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main, develop]
   pull_request:
-    branches: [main, staging, dev]
-  workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * *" # nightly — flake check completo (build + fmt + clippy)
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,7 +12,7 @@ concurrency:
 
 jobs:
   flake-check:
-    name: Nix flake check (eval)
+    name: Nix flake check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -31,32 +28,8 @@ jobs:
           auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           age-key: ${{ secrets.SOPS_AGE_KEY }}
 
-      # --no-build: avalia todos os outputs (packages + checks) sem
-      # construir. Os builds dos checks rodam no job flake-check-full.
       - name: Flake check
-        run: nix flake check --no-build --show-trace
-
-  flake-check-full:
-    name: Nix flake check (full)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: cachix/install-nix-action@v31
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            sandbox = false
-
-      - uses: ./.github/actions/cachix-setup
-        with:
-          auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          age-key: ${{ secrets.SOPS_AGE_KEY }}
-
-      - name: Flake check (build + fmt + clippy)
-        run: nix flake check --option sandbox false --show-trace
+        run: nix flake check --show-trace
 
   build-web:
     name: Nix build neoland-web
