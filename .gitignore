@@ -3,7 +3,12 @@ target/
 *.db
 .env
 .direnv/
-.cargo/
+# Conteúdo do .cargo/ é local (config.toml com path overrides), exceto a
+# política de supply-chain: ignores de advisory exigem justificativa
+# revisável, então audit.toml é versionado.
+# (Ignorar o diretório em si impediria a exceção — o git não entra nele.)
+.cargo/*
+!.cargo/audit.toml
 secrets/*.env
 !secrets/*.sops.env
 secrets/.decrypted/

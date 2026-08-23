@@ -50,6 +50,29 @@ jobs:
       - name: Check WASM target
         run: cargo check -p neoland-web --target wasm32-unknown-unknown
 
+  audit:
+    name: Supply chain (cargo audit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      # Ignores exigem justificativa escrita em audit.toml.
+      # continue-on-error enquanto restam advisories de deps transitivas cujo
+      # fix depende de bump de dep direta (ver audit.toml); vira gate assim
+      # que a lista zerar — a saída fica visível no log em qualquer caso.
+      - name: cargo audit
+        continue-on-error: true
+        run: cargo audit
+
   e2e-db:
     name: E2E (Postgres + pgvector + migrations)
     runs-on: ubuntu-latest
