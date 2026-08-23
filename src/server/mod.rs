@@ -52,6 +52,13 @@ use crate::{
 };
 
 pub mod llamachat {
+    // Código gerado pelo tonic a partir de proto/. O clippy 1.97+ acusa
+    // `result_large_err` em cada método do serviço (tonic::Status tem 176
+    // bytes) e sugere boxear o Status — decisão do tonic, não nossa, e o
+    // arquivo é regenerado a cada build. Silenciar aqui mantém o lint ativo
+    // para o código que escrevemos.
+    #![allow(clippy::result_large_err)]
+
     tonic::include_proto!("llamachat");
 }
 
