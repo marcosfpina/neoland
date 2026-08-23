@@ -60,6 +60,12 @@ jobs:
       - name: Build release binary
         run: cargo build --release --bin neoland
 
+      # O artefato publicado precisa ter sido executado ao menos uma vez.
+      # Sobe o binário fora da árvore, checa /health, /live, /metrics e
+      # /openapi.json, e exige saída limpa em SIGTERM.
+      - name: Smoke test the artifact
+        run: ./scripts/smoke-binary.sh target/release/neoland
+
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
@@ -168,6 +174,16 @@ jobs:
           cd artifacts
           tar czf ../neoland.tar.gz neoland web/
 
+      # Sem checksum publicado não há como o consumidor verificar o que
+      # baixou. SHA256SUMS cobre os dois artefatos anexados à release.
+      - name: Generate checksums
+        run: |
+          sha256sum neoland.tar.gz > SHA256SUMS
+          sha256sum artifacts/closure/neoland-full-closure.nar.gz \
+            | sed 's|artifacts/closure/||' >> SHA256SUMS
+          echo "── SHA256SUMS ──"
+          cat SHA256SUMS
+
       - name: Extract tag name
         id: tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -205,3 +221,4 @@ jobs:
           files: |
             neoland.tar.gz
             artifacts/closure/neoland-full-closure.nar.gz
+            SHA256SUMS

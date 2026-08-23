@@ -50,6 +50,30 @@ jobs:
       - name: Check WASM target
         run: cargo check -p neoland-web --target wasm32-unknown-unknown
 
+  binary-smoke:
+    name: Binary smoke (boots · serves · exits clean)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends protobuf-compiler libssl-dev pkg-config
+
+      # Debug build: o smoke valida comportamento de boot/shutdown, não
+      # performance. O mesmo script roda contra o binário release em
+      # release.yml, antes de publicar.
+      - name: Build binary
+        run: cargo build --bin neoland
+
+      - name: Smoke
+        run: ./scripts/smoke-binary.sh target/debug/neoland
+
   audit:
     name: Supply chain (cargo audit)
     runs-on: ubuntu-latest

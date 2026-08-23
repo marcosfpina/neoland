@@ -13,6 +13,12 @@ use llamachat::{
 use tokio_stream::StreamExt;
 
 pub mod llamachat {
+    // Mesmo motivo do módulo em src/server/mod.rs: o cliente gerado pelo
+    // tonic devolve Result<_, tonic::Status> (176 bytes) e o clippy 1.97+
+    // acusa result_large_err em cada método. Código gerado, regenerado a
+    // cada build — nada a corrigir aqui.
+    #![allow(clippy::result_large_err)]
+
     tonic::include_proto!("llamachat");
 }
 
