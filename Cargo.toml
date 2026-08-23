@@ -29,7 +29,6 @@ anyhow = "1.0"
 futures = "0.3"
 
 reqwest = { version = "0.12", features = ["json", "blocking", "stream", "multipart", "cookies"] }
-async-channel = "2.3"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 lru = "0.12"
 
@@ -46,7 +45,7 @@ vaultrs = "0.7"
 async-trait = "0.1"
 
 # Observability & Metrics (Phase 4.1)
-prometheus = "0.13"
+prometheus = "0.14"
 lazy_static = "1.4"
 opentelemetry = { version = "0.27", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27", features = ["http-proto", "grpc-tonic", "trace"] }
@@ -54,7 +53,7 @@ opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
 tracing-opentelemetry = "0.28"
 
 # Persistent Storage (Phase 4.7)
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
 pgvector = { version = "=0.4.1", features = ["sqlx"] }  # 0.4.2 requer sqlx 0.9; ficamos no sqlx 0.8
 
 # IPC (Ciclo 1 — Fase A)
@@ -62,7 +61,6 @@ memmap2 = "0.9"
 
 # NATS event bus (Ciclo 1 — Fase B)
 spectre-events = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548dd5652394b93b4404bf62cfb2624ab3e68" }
-spectre-core = { git = "https://github.com/VoidNxSEC/spectre.git", rev = "7f9548dd5652394b93b4404bf62cfb2624ab3e68" }
 async-nats = "0.46"
 thiserror = "1.0"
 
@@ -82,7 +80,7 @@ tonic-web = "0.12"
 prost = "0.13"
 tokio = { version = "1.40", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 axum = { version = "0.7", features = ["macros"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 axum-extra = { version = "0.9", features = ["cookie"] }
@@ -102,8 +100,6 @@ hf-hub = "0.4"
 # For local development, override with path in .cargo/config.toml.
 securellm-core = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
 securellm-providers = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
-securellm-security = { git = "https://github.com/VoidNxSEC/securellm-bridge.git", rev = "1135bdc13f0ec9127576ef6518949f91b26c0ff6" }
-intelagent-core = { git = "https://github.com/marcosfpina/IntelAgent.git", rev = "4b340000a5f09e491264aead6d7a4a41166e421f" }
 
 
 [build-dependencies]

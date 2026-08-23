@@ -53,6 +53,12 @@ async fn main() {
     // Match subcommands
     match cli.command {
         Commands::Server { grpc_port, rest_port, web_dist } => {
+            // Precedência: flag CLI > env (NEOLAND_*) > neoland.toml > default.
+            // Config::load() já aplica env sobre TOML; a flag só entra se passada.
+            let config = Config::load();
+            let grpc_port = grpc_port.unwrap_or(config.server.grpc_port);
+            let rest_port = rest_port.unwrap_or(config.server.rest_port);
+            let web_dist = web_dist.unwrap_or_else(|| config.server.web_dist_dir.clone());
             if let Err(e) = server::run_server(grpc_port, rest_port, &web_dist).await {
                 eprintln!("❌ Server error: {}", e);
                 std::process::exit(1);
@@ -107,6 +113,79 @@ async fn main() {
 
         Commands::Docs { server_url } => {
             open_browser(&format!("{}/swagger-ui/", server_url.trim_end_matches('/')));
+        },
+
+        Commands::Migrate { database_url } => {
+            let url = database_url
+                .or_else(|| std::env::var("NEOLAND_DATABASE_URL").ok())
+                .or_else(|| std::env::var("DATABASE_URL").ok());
+            let Some(url) = url else {
+                eprintln!(
+                    "❌ Banco não configurado — use --database-url, NEOLAND_DATABASE_URL ou DATABASE_URL"
+                );
+                std::process::exit(1);
+            };
+            match neoland::storage::run_migrations(&url).await {
+                Ok(()) => println!("✅ Migrations aplicadas"),
+                Err(e) => {
+                    eprintln!("❌ Falha ao aplicar migrations: {e}");
+                    std::process::exit(1);
+                },
+            }
+        },
+
+        Commands::Config { action } => match action {
+            neoland::cli::ConfigAction::Show { json } => {
+                let cfg = Config::load().redacted();
+                let rendered = if json {
+                    serde_json::to_string_pretty(&cfg).expect("config serializes to JSON")
+                } else {
+                    toml::to_string_pretty(&cfg).expect("config serializes to TOML")
+                };
+                println!("{rendered}");
+            },
+            neoland::cli::ConfigAction::Validate => {
+                let mut failed = false;
+                for path in Config::candidate_paths() {
+                    if !path.exists() {
+                        continue;
+                    }
+                    let parse = std::fs::read_to_string(&path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|c| toml::from_str::<Config>(&c).map_err(|e| e.to_string()));
+                    match parse {
+                        Ok(_) => println!("✅ {} — parse OK", path.display()),
+                        Err(e) => {
+                            failed = true;
+                            println!("❌ {} — {e}", path.display());
+                        },
+                    }
+                }
+                let problems = Config::load().validate();
+                for p in &problems {
+                    println!("⚠️  {p}");
+                }
+                if problems.is_empty() && !failed {
+                    println!("✅ Config efetiva válida");
+                } else {
+                    std::process::exit(1);
+                }
+            },
+            neoland::cli::ConfigAction::Init { force } => {
+                let path = std::path::Path::new("neoland.toml");
+                if path.exists() && !force {
+                    eprintln!("❌ neoland.toml já existe (use --force para sobrescrever)");
+                    std::process::exit(1);
+                }
+                let body =
+                    toml::to_string_pretty(&Config::default()).expect("default config serializes");
+                let header = "# Neoland — configuração\n# Precedência: flag CLI > env NEOLAND_* > este arquivo > defaults\n# Referência completa de variáveis de ambiente: .env.example\n\n";
+                if let Err(e) = std::fs::write(path, format!("{header}{body}")) {
+                    eprintln!("❌ Falha ao escrever neoland.toml: {e}");
+                    std::process::exit(1);
+                }
+                println!("✅ neoland.toml gerado");
+            },
         },
 
         Commands::GenCerts { days, cn } => {

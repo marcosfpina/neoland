@@ -6,6 +6,8 @@
 //! Run with:
 //!   DATABASE_URL=postgres://... cargo test agent_session -- --test-threads=1
 
+mod common;
+
 use neoland::agents::session::SessionManager;
 use uuid::Uuid;
 
@@ -26,7 +28,7 @@ async fn pool() -> Option<sqlx::PgPool> {
 #[tokio::test]
 async fn test_session_get_or_create_initializes_new_session() {
     let Some(pool) = pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -44,7 +46,7 @@ async fn test_session_get_or_create_initializes_new_session() {
 #[tokio::test]
 async fn test_session_get_or_create_is_idempotent() {
     let Some(pool) = pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -64,7 +66,7 @@ async fn test_session_get_or_create_is_idempotent() {
 #[tokio::test]
 async fn test_session_update_increments_task_count() {
     let Some(pool) = pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -94,7 +96,7 @@ async fn test_session_update_increments_task_count() {
 #[tokio::test]
 async fn test_session_update_accumulates_task_count() {
     let Some(pool) = pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 
@@ -117,7 +119,7 @@ async fn test_session_update_accumulates_task_count() {
 #[tokio::test]
 async fn test_sessions_are_isolated_by_session_id() {
     let Some(pool) = pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set or unreachable");
+        common::skip_or_fail("PostgreSQL", "set DATABASE_URL / just db-up");
         return;
     };
 

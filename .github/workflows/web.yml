@@ -2,14 +2,14 @@ name: Web Console
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, staging, dev]
     paths:
       - "web/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [main, staging, dev]
     paths:
       - "web/**"
       - "Cargo.toml"
