@@ -31,10 +31,17 @@ Para adicionar uma nova especialidade ao Neoland, siga estes passos:
 3.  **Adicione Referências:** Coloque guias técnicos em `references/` para dar profundidade ao conhecimento do agente.
 4.  **Codifique Ferramentas:** Se houver automações úteis, coloque-as em `scripts/`.
 
-## 📂 Categorias Atuais
+## 📂 Categorias Atuais (RAG Skills — `skills/`)
 
 *   **`Linux_Server_Master`:** Especialistas em NixOS, caches remotos e otimização de hardware.
 *   **`security-architect`:** Conhecimento profundo em segurança ofensiva e defensiva.
 *   **`nix-expert`:** Domínio total de Nix Flakes, linguagens Nix e reprodutibilidade.
 *   **`ux-agents`:** Foco em design de interfaces modernas e experiência do usuário em terminal.
 *   **`neoland-coding`:** Diretrizes internas para o desenvolvimento do próprio projeto Neoland.
+
+## 🤖 Agent Skills (Zed — `.agents/skills/`)
+
+Skills que o agente Zed carrega automaticamente conforme o contexto da conversa:
+
+*   **`neoland-master`:** Oráculo do projeto — arquitetura completa, stack, roadmap, release strategy, operações, posicionamento.
+*   **`neoland-ops`:** Playbook operacional — convenções, rituais diários, ciclo de vida de tasks, padrões de commit, code review, documentação.

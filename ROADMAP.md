@@ -1,8 +1,8 @@
 # Neoland — Release Roadmap
 
 **Versão atual**: v0.0.1  
-**Atualizado em**: 2026-08-02  
-**Fase**: release candidate — fechamento de prontidão para v0.1.0
+**Atualizado em**: 2026-08-23
+**Fase**: prototype — fechamento dos contratos de execução antes do Alpha
 
 Este documento é a fonte de verdade para direção e gates de release. Itens de
 implementação descobertos durante o trabalho pertencem ao
@@ -18,6 +18,12 @@ backlog local; aqui ficam apenas marcos, evidências e bloqueios de lançamento.
 - Contagens, desempenho e smokes devem informar comando, ambiente, data e revisão.
 - Documentos históricos devem ser identificados como snapshots; não podem ser
   usados como evidência do estado atual.
+- O contrato normativo de execução, evidência e entrega é o
+  [`ADR-023`](docs/ADR/ADR-023-execution-evidence-and-release-delivery-contract.md).
+  Checks com stubs, dependências desabilitadas, skips obrigatórios ou
+  `continue-on-error` não comprovam E2E nem autorizam promoção de release.
+- Até os requisitos de Alpha do ADR-023 passarem na mesma revisão, o estado
+  canônico do produto é **Prototype**.
 
 ## Estado atual
 
@@ -69,6 +75,8 @@ backlog local; aqui ficam apenas marcos, evidências e bloqueios de lançamento.
 O release só pode ser tagueado quando todos os itens abaixo tiverem evidência da
 mesma revisão:
 
+- [ ] Contrato ADR-023 aplicado: taxonomia de evidência correta, manifesto da
+  revisão exata e nenhum gate obrigatório mascarado.
 - [x] `cargo fmt --check` (2026-08-02).
 - [x] `cargo clippy --all-targets -- -D warnings` (2026-08-02).
 - [x] `cargo test --workspace --lib` — 301 core + 16 web passaram; 18 ignorados (2026-08-02).

@@ -4,6 +4,12 @@
 > The active ADR vault lives in [`docs/ADR/`](ADR/). The current runtime
 > topology is tracked in [`roadmaps/neoland-llm-runtime-roadmap.md`](roadmaps/neoland-llm-runtime-roadmap.md).
 
+## Active Normative Contracts
+
+- [`ADR-023: Execution Evidence and Release Delivery Contract`](ADR/ADR-023-execution-evidence-and-release-delivery-contract.md)
+  defines the evidence taxonomy, runtime profiles, E2E boundary, release gates,
+  artifact identity, and product maturity claims.
+
 ## ADR-001: Arquitetura de 3 Camadas para LLM Inference
 
 **Data**: 2026-01-18  
